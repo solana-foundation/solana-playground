@@ -76,7 +76,7 @@ connects in the dialog, `current` when the wallet chip makes it the current wall
 `fund_wallet_connect_started` `{ wallet: string }` when the wallet chip asks a wallet to connect;
 `fund_wallet_connect_failed` `{ wallet: string, reason: "rejected" | "network" | "unconfirmed" | "unknown" }`
 when that connect does not happen (`rejected` is the user's no); `fund_wallet_disconnected` `{ wallet: string }`
-when the chip disconnects the current wallet; `fund_sent` `{ cluster: "mainnet-beta" | "devnet" | "testnet" | "localnet" | "playnet" }` (the Playground's cluster) when a
+when the chip disconnects the current wallet; `fund_sent` `{ cluster: "mainnet" | "devnet" | "testnet" | "localnet" | "playnet" }` (the Playground's cluster) when a
 transfer is confirmed; and
 `fund_failed` `{ stage: "connect" | "send", reason: "rejected" | "network" | "unconfirmed" | "unknown" }` when connecting or sending fails. The wallet chip SHALL emit
 `fund_airdrop_requested` `{ via: "wallet-chip" }` when its popover asks the
@@ -99,6 +99,11 @@ carries an address or an amount.
 
 - **WHEN** the chip's ask fails with the faucet's 429
 - **THEN** `fund_airdrop_requested` and then `fund_airdrop_refused` with `reason: "rate-limited"` are emitted once each
+
+#### Scenario: A transfer on Mainnet is counted as mainnet (manual)
+
+- **WHEN** a transfer is confirmed on Mainnet
+- **THEN** `fund_sent` is emitted once with `cluster: "mainnet"`, not `"mainnet-beta"`
 
 #### Scenario: A declined signature is counted (manual)
 

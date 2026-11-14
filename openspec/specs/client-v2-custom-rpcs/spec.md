@@ -175,7 +175,7 @@ The list of saved RPCs (`aria-label="Custom RPCs"`) SHALL show each RPC's name a
 
 ### Requirement: A network chip is stored as its key
 
-The settings SHALL store the connection endpoint as the picked chip's key (`mainnet-beta`, `devnet`, `testnet`,
+The settings SHALL store the connection endpoint as the picked chip's key (`mainnet`, `devnet`, `testnet`,
 `localnet`, `surfpool`), and as a URL only for a custom RPC. A stored key SHALL read back as the URL its chip opens
 on the next load, so a platform RPC URL, its API key included, is never written to `localStorage`. The Mainnet,
 Devnet and Testnet chips SHALL open the URL that `REACT_APP_MAINNET_RPC_URL`, `REACT_APP_DEVNET_RPC_URL` and

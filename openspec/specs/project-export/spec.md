@@ -125,7 +125,7 @@ The shim SHALL connect to the URL in the environment variable
 Playground was on when the project was exported
 (`https://api.devnet.solana.com`, `https://api.testnet.solana.com` or
 `https://api.mainnet-beta.solana.com`; a local validator keeps its URL, and
-playnet or an unknown cluster falls back to devnet). The zip and the dialog
+an unknown cluster falls back to devnet). The zip and the dialog
 SHALL never hold the URL the Playground used for a public cluster: a
 platform or custom RPC URL can carry a key. `pg.wallet` SHALL be the
 keypair in the file named by `SOLANA_KEYPAIR`, and without it

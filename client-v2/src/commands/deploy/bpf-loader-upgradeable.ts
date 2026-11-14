@@ -5,7 +5,6 @@ import { rateLimitOf } from "@/shared/lib/rpc-rate-limit";
 import {
   PgCommon,
   PgConnection,
-  PgPlaynet,
   PgTx,
   PgWallet,
   PgWeb3,
@@ -84,10 +83,7 @@ const paceFor = (maxPerSecond: number) => (startPerSecond: number) => {
 
 /** A connection to the same RPC on which web3.js does not retry a 429 itself, so the pace sees the first one */
 const withoutRetryOnRateLimit = (connection: PgWeb3.Connection) =>
-  // Playnet answers in the page and never rate-limits; its connection is overridden, so it is kept
-  PgPlaynet.isUrlPlaynet(connection.rpcEndpoint)
-    ? connection
-    : getUnretriedConnectionFor(connection.commitment)(connection.rpcEndpoint);
+  getUnretriedConnectionFor(connection.commitment)(connection.rpcEndpoint);
 
 /** Sleeps `ms`, ending early and quietly once `abortController` aborts, as a stopped load returns */
 const pauseWith =

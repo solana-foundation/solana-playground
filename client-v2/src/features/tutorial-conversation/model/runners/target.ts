@@ -96,7 +96,7 @@ if (import.meta.vitest) {
       state.now = {
         workspace: DEVNET.workspace,
         endpoint: TEST_ENDPOINT.MAINNET_BETA,
-        cluster: "mainnet-beta",
+        cluster: "mainnet",
       };
       expect(() => guard.ensure()).toThrow("changed during the deploy");
     });

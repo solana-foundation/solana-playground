@@ -11,13 +11,6 @@ vi.mock("./settings", () => ({
   PgSettings: { connection: { endpoint: "http://localhost:8899" } },
 }));
 
-// Playnet pulls in the WASM packages; only its URL check is read here
-vi.mock("./playnet", () => ({
-  OverridableConnection: class {},
-  // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- Endpoint.PLAYNET's placeholder, matched by name and never requested
-  PgPlaynet: { isUrlPlaynet: (url: string) => url === "http://playnet" },
-}));
-
 describe("PgConnection.getCluster", () => {
   afterEach(() => {
     vi.restoreAllMocks();

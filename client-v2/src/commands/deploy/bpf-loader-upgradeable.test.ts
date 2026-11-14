@@ -39,7 +39,6 @@ vi.mock("../../utils", () => {
       getReadBufferConnection: <T>(connection: T) => connection,
       getSendTxPerSecond: () => undefined,
     },
-    PgPlaynet: { isUrlPlaynet: () => false },
     PgTx: {
       send: vi.fn(async () => "sig"),
       simulate: vi.fn(async () => ({ unitsConsumed: 1 })),

@@ -11,7 +11,7 @@ where mainnet is picked, and says plainly that mainnet has no faucet.
 
 ### Requirement: No faucet on mainnet
 
-Where the cluster has no faucet (mainnet-beta, or a custom URL whose cluster
+Where the cluster has no faucet (mainnet, or a custom URL whose cluster
 offers none), the wallet menu SHALL show a disabled "This network has no
 faucet." where Airdrop would be, and the `airdrop` command SHALL fail with
 the same line. Until the cluster is known the menu SHALL show neither, and
@@ -20,12 +20,12 @@ faucet.
 
 #### Scenario: Wallet menu on mainnet (manual)
 
-- **WHEN** the endpoint is mainnet-beta and the user opens the wallet menu
+- **WHEN** the endpoint is mainnet and the user opens the wallet menu
 - **THEN** "This network has no faucet." shows, disabled, and no Airdrop
 
 #### Scenario: Terminal airdrop on mainnet (manual)
 
-- **WHEN** the endpoint is mainnet-beta and the user runs `airdrop`
+- **WHEN** the endpoint is mainnet and the user runs `airdrop`
 - **THEN** the terminal prints "This network has no faucet."
 
 ### Requirement: Settings offers five networks
@@ -42,8 +42,7 @@ Beta" or carry "(Platform)". While Mainnet is picked, the line "Not available
 for deploys", led by an amber status dot, SHALL show under the chips and
 describe the group; Devnet shows
 no line, nor do Testnet, Localnet and Surfpool. An endpoint no chip names (a
-custom URL not saved, Playnet) SHALL leave no chip checked and keep its
-address.
+custom URL not saved) SHALL leave no chip checked and keep its address.
 
 #### Scenario: Mainnet picked in Settings
 
@@ -67,15 +66,16 @@ address.
 
 #### Scenario: A stored public pick opens on its chip (manual)
 
-- **WHEN** a profile stored the public Mainnet Beta pick before this change
-  and the deployment configures a platform mainnet RPC
+- **WHEN** a profile stored the public mainnet pick under its old key
+  `mainnet-beta` before this change, and the deployment configures a platform
+  mainnet RPC
 - **THEN** Settings opens with "Mainnet" checked and the connection uses the
   platform RPC
 
 ### Requirement: Deploys to mainnet are refused
 
 When the `deploy` command starts while the connection's cluster, read from
-its endpoint, is mainnet-beta, it SHALL refuse before asking about a wallet
+its endpoint, is mainnet, it SHALL refuse before asking about a wallet
 and before sending any transaction, printing one terminal line that says
 deploys to mainnet are not available in the beta and to deploy from the
 user's own machine with the Solana CLI or Anchor. This SHALL hold for every
@@ -91,7 +91,7 @@ cluster the command SHALL deploy as before.
 
 #### Scenario: Terminal deploy on mainnet
 
-- **WHEN** the endpoint is mainnet-beta and the user runs `deploy`
+- **WHEN** the endpoint is mainnet and the user runs `deploy`
 - **THEN** the terminal prints the refusal line and no transaction is sent
 
 #### Scenario: Custom RPC on mainnet (manual)
@@ -119,7 +119,7 @@ cluster the command SHALL deploy as before.
 
 ### Requirement: The Deploy stage points mainnet to the user's machine
 
-While the connected cluster is mainnet-beta, the Flow's Deploy stage SHALL
+While the connected cluster is mainnet, the Flow's Deploy stage SHALL
 say "Deploys to mainnet are not available in the beta." as its line, and its
 pill SHALL read "Deploy from your machine" and open the "Deploy from your
 machine" dialog with Mainnet picked, built or not. It SHALL show no "Who
@@ -142,30 +142,38 @@ mainnet, the summary's Network row SHALL keep Change.
 ### Requirement: Anchor IDL writes to mainnet are refused
 
 When the `anchor` command runs an `idl` subcommand that sends a transaction
-while the endpoint the CLI sends to is mainnet-beta, it SHALL refuse before
-any transaction, printing one terminal line that says writing an IDL to
-mainnet is not available in the beta and to run `anchor idl` from the user's
-own machine. Every `idl` subcommand except `fetch`, `authority` and `help`
-SHALL count as a write, including one a later CLI adds; `-h` and `--help`
-only print and SHALL run on any network. The cluster SHALL be read from the
-endpoint, a custom RPC by its genesis hash, with the check the `deploy`
-command uses; an endpoint that does not answer which network it serves SHALL
-be refused, and one whose genesis hash names no known cluster SHALL run. An
-endpoint changed between that read and the CLI's start SHALL be refused.
-While an `idl` write runs, a network switch the user asks for, in Settings or
-from the Deploy stage, SHALL be refused with a toast saying an anchor idl
-command is running. On every other cluster every `idl` subcommand SHALL run
-as before.
+while the endpoint it sends to is mainnet, it SHALL refuse before any
+transaction, printing one terminal line that says writing an IDL to mainnet is
+not available in the beta and to run `anchor idl` from the user's own machine.
+`init`, `upgrade`, `close`, `create-buffer`, `set-buffer-authority`, and
+`write-buffer` are the `idl` subcommands that send a transaction; every other
+subcommand, and `-h` and `--help`, SHALL run on any network. The cluster SHALL
+be read from the endpoint, a custom RPC by its genesis hash, with the check
+the `deploy` command uses; an endpoint that does not answer which network it
+serves SHALL be refused, and one whose genesis hash names no known cluster
+SHALL run. An endpoint changed between that read and the subcommand's first
+send SHALL be refused. While such a subcommand runs, a network switch the user
+asks for, in Settings or from the Deploy stage, SHALL be refused with a toast
+saying an anchor idl command is running. On every other cluster the
+subcommands SHALL run as `client-v2-program-idl` requires.
 
 #### Scenario: IDL init on mainnet (manual)
 
-- **WHEN** the endpoint is mainnet-beta and the user runs `anchor idl init`
+- **WHEN** the endpoint is mainnet and the user runs `anchor idl init`
+- **THEN** the terminal prints the refusal line and no transaction is sent
+
+#### Scenario: IDL close on mainnet (manual)
+
+- **WHEN** the endpoint is mainnet and the user runs
+  `anchor idl close <PROGRAM_ID>`
 - **THEN** the terminal prints the refusal line and no transaction is sent
 
 #### Scenario: IDL fetch on mainnet (manual)
 
-- **WHEN** the endpoint is mainnet-beta and the user runs `anchor idl fetch`
-- **THEN** no refusal line is printed and the CLI runs
+- **WHEN** the endpoint is mainnet and the user runs
+  `anchor idl fetch <PROGRAM_ID>`
+- **THEN** the terminal prints the program's published IDL, or the line for a
+  program without one, and not the mainnet refusal
 
 #### Scenario: Network switch during an IDL write (manual)
 
@@ -176,4 +184,4 @@ as before.
 #### Scenario: IDL write on devnet (manual)
 
 - **WHEN** the endpoint is devnet and the user runs `anchor idl init`
-- **THEN** no refusal line is printed and the CLI runs
+- **THEN** no refusal line is printed and the upload runs

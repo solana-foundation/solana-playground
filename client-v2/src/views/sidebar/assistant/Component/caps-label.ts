@@ -90,7 +90,10 @@ if (import.meta.vitest) {
       ["AB- : x", "AB- : x"],
       ["see NOTE: x", "see NOTE: x"],
       ["1A: x", "1A: x"],
-      ["AB(x): y", "AB(x): y"],
+      ["A (x): y", "A (x): y"],
+      ["ABC(x): y", "ABC(x): y"],
+      // A `)` cached for an earlier label is searched for again past it
+      ["AB (x) y\rCD (z): w", "AB (x) y\r**CD (z):** w"],
     ])("emphasises the labels of %j", (description, expected) => {
       expect(emphasiseLabels(description)).toBe(expected);
     });

@@ -57,6 +57,8 @@ export type CommandParam<
    * unless it was asked for its help. Read on the top-level command only.
    */
   needsConnection?: true;
+  /** The line `<name> --version` and `<name> -V` print, offline too. Read on the top-level command only */
+  version?: string;
 } & (WithSubcommands<S> | WithHandle<A, O, R>);
 
 /** What a command that needs a connection ends with offline (Spec 13) */
@@ -390,6 +392,15 @@ export class PgCommandManager {
           }
         }
         throw new TerminalLineError(answer.line);
+      }
+
+      // As clap answers it: only directly after the command's name, and nothing runs
+      const [, flag, ...rest] = tokens;
+      const isVersionLine =
+        rest.length === 0 && (flag === "--version" || flag === "-V");
+      if (topCmd.version !== undefined && isVersionLine) {
+        await PgTerminal.println(topCmd.version);
+        return;
       }
 
       // Before the start event and the pre-checks: no wallet question first,

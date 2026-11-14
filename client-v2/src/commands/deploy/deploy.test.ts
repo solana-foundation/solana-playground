@@ -317,7 +317,7 @@ describe("commands/deploy", () => {
   // HOO-2728: the network can move to mainnet while the pre-checks' wallet
   // question waits, so the run reads its own connection again before a send
   it("refuses before any send when its connection is on mainnet", async () => {
-    env.cluster = "mainnet-beta";
+    env.cluster = "mainnet";
     env.balance = 100e9;
 
     const failure = await runDeploy();

@@ -15,7 +15,7 @@ solana_sdk::declare_id!("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
 /// Accounts expected by this instruction:
 ///
 ///   0. ..0+N. `[signer]` Expected signers; if zero provided, instruction will be processed as a
-///     normal, unsigned spl-memo
+///      normal, unsigned spl-memo
 ///
 pub fn build_memo(memo: &[u8], signer_pubkeys: &[&Pubkey]) -> Instruction {
     Instruction {

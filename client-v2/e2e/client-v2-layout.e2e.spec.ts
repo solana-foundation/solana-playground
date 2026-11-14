@@ -718,7 +718,7 @@ test.describe("on a phone", () => {
     const network = settings.getByRole("radiogroup", { name: "Network" });
     await expect(network.getByRole("radio", { checked: true })).toBeFocused();
     // Mainnet's requests are refused, so CI never reaches it
-    await page.route(`${Endpoint.MAINNET_BETA}/**`, (route) =>
+    await page.route(`${Endpoint.MAINNET}/**`, (route) =>
       route.abort("connectionrefused")
     );
     await network.getByRole("radio", { name: "Mainnet" }).click();
@@ -1944,21 +1944,6 @@ test("the wallet asks about the validator when localnet does not answer", async 
       { exact: true }
     )
   ).toBeVisible({ timeout: 15_000 });
-});
-
-// Playnet answers only once it has started in the page; a check made before
-// that must be made again then, not 10 s later
-test("playnet is not down while it starts", async ({ seededPage: page }) => {
-  await reloadOn(page, "playnet");
-  await expect(clusterRow(page)).toBeVisible({ timeout: 15_000 });
-  // Read without retrying: a label that is down for a while and then
-  // recovers must fail here, not be waited out
-  for (let i = 0; i < 12; i++) {
-    expect(await clusterRow(page).getAttribute("aria-label")).toBe(
-      "Change cluster, currently playnet"
-    );
-    await page.waitForTimeout(500);
-  }
 });
 
 // The tab row's Wallet button carries a 400 px picture; the design system's

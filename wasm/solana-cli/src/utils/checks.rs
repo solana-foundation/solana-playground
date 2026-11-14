@@ -1,5 +1,5 @@
+use solana_client_wasm::ClientResult;
 use solana_client_wasm::WasmClient;
-use solana_client_wasm::{ClientError, ClientResult};
 use solana_sdk::{
     commitment_config::CommitmentConfig, message::Message, native_token::lamports_to_sol,
     pubkey::Pubkey,
@@ -91,8 +91,7 @@ pub async fn check_account_for_spend_and_fee_with_commitment(
         balance + fee,
         commitment,
     )
-    .await
-    .map_err(Into::<ClientError>::into)?
+    .await?
     {
         if balance > 0 {
             return Err(CliError::InsufficientFundsForSpendAndFee(

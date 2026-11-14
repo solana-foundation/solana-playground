@@ -26,6 +26,7 @@ export const EVENT_PREFIXES = {
   overlays: "overlay",
   persistence: "sync",
   "program-build": "build",
+  "program-idl": "idl",
   "program-interact": "interact",
   "program-keypair": "keypair",
   "project-export": "export",

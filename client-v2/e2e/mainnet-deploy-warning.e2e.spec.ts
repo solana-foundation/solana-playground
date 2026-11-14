@@ -24,7 +24,7 @@ const BLOCKED = "Deploys to mainnet are not available in the beta.";
  * endpoint's URL, not from an answer.
  */
 const reloadOn = async (page: Page, option: string) => {
-  await page.route(`${Endpoint.MAINNET_BETA}/**`, (route) =>
+  await page.route(`${Endpoint.MAINNET}/**`, (route) =>
     route.abort("connectionrefused")
   );
   await page.evaluate((picked) => {
@@ -63,7 +63,7 @@ const openDeploy = async (page: Page) => {
 test("mainnet-deploy-warning: Deploy stage on mainnet", async ({
   seededPage: page,
 }) => {
-  await reloadOn(page, "mainnet-beta");
+  await reloadOn(page, "mainnet");
   await build(page);
   const panel = await openDeploy(page);
 
@@ -84,7 +84,7 @@ test("mainnet-deploy-warning: Deploy stage on mainnet", async ({
 test("mainnet-deploy-warning: Terminal deploy on mainnet", async ({
   seededPage: page,
 }) => {
-  await reloadOn(page, "mainnet-beta");
+  await reloadOn(page, "mainnet");
   const drawer = consoleTrigger(page);
   if ((await drawer.getAttribute("aria-expanded")) !== "true") {
     await drawer.click();
@@ -115,7 +115,7 @@ test("mainnet-deploy-warning: Deploy stage on devnet", async ({
 test("mainnet-deploy-warning: Mainnet picked in Settings", async ({
   seededPage: page,
 }) => {
-  await page.route(`${Endpoint.MAINNET_BETA}/**`, (route) =>
+  await page.route(`${Endpoint.MAINNET}/**`, (route) =>
     route.abort("connectionrefused")
   );
   await build(page);

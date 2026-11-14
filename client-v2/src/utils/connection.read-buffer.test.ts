@@ -1,5 +1,4 @@
-// A file of its own: it mocks `./playnet`, whose wasm packages vite cannot load in a test, and `./settings`, which
-// needs the build's globals
+// A file of its own: it mocks `./settings`, which needs the build's globals
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Endpoint } from "@/entities/cluster/model/endpoint";
@@ -12,16 +11,6 @@ vi.mock("./settings", async () => ({
     },
     onDidChangeConnectionEndpoint: () => ({ dispose: () => undefined }),
     onDidChangeConnectionCommitment: () => ({ dispose: () => undefined }),
-  },
-}));
-
-vi.mock("./playnet", () => ({
-  PgPlaynet: {
-    // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- Endpoint.PLAYNET's placeholder, matched by name and never requested
-    isUrlPlaynet: (url: string) => url === "http://playnet",
-    onDidInit: () => ({ dispose: () => undefined }),
-    init: () => undefined,
-    destroy: () => undefined,
   },
 }));
 
@@ -51,9 +40,9 @@ describe("utils/connection", () => {
       endpoint: Endpoint.DEVNET,
     },
     {
-      cluster: "mainnet-beta",
+      cluster: "mainnet",
       variable: "REACT_APP_MAINNET_READ_BUFFER_RPC_URL",
-      endpoint: Endpoint.MAINNET_BETA,
+      endpoint: Endpoint.MAINNET,
     },
   ])(
     "reads $cluster buffers through its read-buffer RPC, at the selected commitment",
@@ -79,12 +68,6 @@ describe("utils/connection", () => {
       label: "the cluster's read-buffer RPC is empty",
       env: { REACT_APP_DEVNET_READ_BUFFER_RPC_URL: "" },
       endpoint: Endpoint.DEVNET,
-    },
-    {
-      label: "the endpoint is Playnet",
-      env: { REACT_APP_DEVNET_READ_BUFFER_RPC_URL: READ_BUFFER },
-      // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- Endpoint.PLAYNET's placeholder, matched by name and never requested
-      endpoint: "http://playnet",
     },
     {
       label: "a custom endpoint is not the selected one",
@@ -169,7 +152,7 @@ describe("utils/connection", () => {
     },
     {
       variable: "REACT_APP_MAINNET_SEND_TX_PER_SECOND",
-      endpoint: Endpoint.MAINNET_BETA,
+      endpoint: Endpoint.MAINNET,
       value: "0.5",
       perSecond: 0.5,
     },
@@ -202,20 +185,14 @@ describe("utils/connection", () => {
   });
 
   it.each([
-    {
-      label: "the endpoint is Playnet",
-      value: "5",
-      // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- Endpoint.PLAYNET's placeholder, matched by name and never requested
-      endpoint: "http://playnet",
-    },
+    { label: "the cluster is Localnet", endpoint: Endpoint.LOCALNET },
     {
       label: "a custom endpoint is not the selected one",
-      value: "5",
       endpoint: "https://custom.test",
     },
-  ])("caps no sends when $label", async ({ value, endpoint }) => {
+  ])("caps no sends when $label", async ({ endpoint }) => {
     const { PgConnection, connectionTo } = await pgConnectionWith({
-      REACT_APP_DEVNET_SEND_TX_PER_SECOND: value,
+      REACT_APP_DEVNET_SEND_TX_PER_SECOND: "5",
     });
 
     expect(

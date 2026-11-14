@@ -9,13 +9,8 @@ import { Endpoint } from "./endpoint";
 
 export { Endpoint };
 
-/** Solana public clusters, "localnet" or "playnet" */
-export type Cluster =
-  | "devnet"
-  | "testnet"
-  | "mainnet-beta"
-  | "localnet"
-  | "playnet";
+/** Solana public clusters or "localnet" */
+export type Cluster = "devnet" | "testnet" | "mainnet" | "localnet";
 
 /**
  * What a connection endpoint of ours is stored under: its cluster, or
@@ -24,7 +19,7 @@ export type Cluster =
 export type ClusterKey = Cluster | "surfpool";
 
 /** The clusters the env configures */
-type EnvCluster = "devnet" | "testnet" | "mainnet-beta";
+type EnvCluster = "devnet" | "testnet" | "mainnet";
 
 /** What the env sets for one cluster, spelled as `client-env` reads it */
 interface ClusterEnv {
@@ -37,13 +32,11 @@ interface ClusterEnv {
 export interface ClusterInfo {
   key: ClusterKey;
   cluster: Cluster;
-  /** A proper noun: "Mainnet" for `mainnet-beta`, which URLs, CLI flags and telemetry keep */
+  /** A proper noun: "Mainnet" for `mainnet` */
   name: string;
   publicUrl: string;
   /** What a connection uses: the platform RPC the env sets, else `publicUrl` */
   url: string;
-  /** Whether Settings offers it as a network chip */
-  isOffered: boolean;
   /** The cluster's native RPC, which airdrops and buffer reads go through; `undefined` uses the selected endpoint */
   nativeRpcUrl: string | undefined;
   /** The most `sendTransaction` calls per second a deploy sends; `undefined` caps nothing */
@@ -61,14 +54,13 @@ const perSecondOf = (value: string | undefined) => {
   return Number.isFinite(perSecond) && perSecond > 0 ? perSecond : undefined;
 };
 
-/** One of our endpoints with no send cap: Localnet, Surfpool and Playnet run on the person's machine or in the browser */
+/** One of our endpoints with no send cap: Localnet and Surfpool run on the person's machine */
 const infoOf = (
-  [key, cluster, name, publicUrl, isOffered]: readonly [
+  [key, cluster, name, publicUrl]: readonly [
     ClusterKey,
     Cluster,
     string,
-    Endpoint,
-    boolean
+    Endpoint
   ],
   env: ClusterEnv
 ): ClusterInfo => ({
@@ -78,7 +70,6 @@ const infoOf = (
   publicUrl,
   // `||` not `??`: sourcing an env file leaves unfilled keys as "", which is not nullish and would win
   url: env.rpcUrl || publicUrl,
-  isOffered,
   nativeRpcUrl: env.nativeRpcUrl || undefined,
   sendTxPerSecond: undefined,
 });
@@ -97,75 +88,69 @@ const envInfoOf = (
  * Every endpoint of ours on what `env` sets, in the order Settings offers the
  * chips: Mainnet, Devnet, Testnet, Localnet, Surfpool. The public RPCs
  * rate-limit a shared app, so they are only the fallback of a platform one,
- * never offered beside it. Playnet is not offered; code paths set it.
+ * never offered beside it.
  */
 export const clustersFor = (
   env: Partial<Record<EnvCluster, ClusterEnv>>
 ): Clusters => ({
-  "mainnet-beta": envInfoOf(
-    ["mainnet-beta", "mainnet-beta", "Mainnet", Endpoint.MAINNET_BETA, true],
-    env["mainnet-beta"] ?? {}
+  mainnet: envInfoOf(
+    ["mainnet", "mainnet", "Mainnet", Endpoint.MAINNET],
+    env.mainnet ?? {}
   ),
   devnet: envInfoOf(
-    ["devnet", "devnet", "Devnet", Endpoint.DEVNET, true],
+    ["devnet", "devnet", "Devnet", Endpoint.DEVNET],
     env.devnet ?? {}
   ),
   testnet: envInfoOf(
-    ["testnet", "testnet", "Testnet", Endpoint.TESTNET, true],
+    ["testnet", "testnet", "Testnet", Endpoint.TESTNET],
     env.testnet ?? {}
   ),
-  localnet: infoOf(
-    ["localnet", "localnet", "Localnet", Endpoint.LOCALNET, true],
-    {}
-  ),
-  surfpool: infoOf(
-    ["surfpool", "localnet", "Surfpool", Endpoint.SURFPOOL, true],
-    {}
-  ),
-  playnet: infoOf(
-    ["playnet", "playnet", "Playnet", Endpoint.PLAYNET, false],
-    {}
-  ),
+  localnet: infoOf(["localnet", "localnet", "Localnet", Endpoint.LOCALNET], {}),
+  surfpool: infoOf(["surfpool", "localnet", "Surfpool", Endpoint.SURFPOOL], {}),
 });
 
-/** The env's key for each cluster it configures: `mainnet` names `mainnet-beta` here alone */
-const ENV_KEYS = {
-  devnet: "devnet",
-  testnet: "testnet",
-  "mainnet-beta": "mainnet",
-} as const;
-
-const envOf = (cluster: EnvCluster): ClusterEnv => {
-  const key = ENV_KEYS[cluster];
-  return {
-    rpcUrl: PLATFORM_RPC_URLS[key],
-    nativeRpcUrl: NATIVE_RPC_URLS[key],
-    sendTxPerSecond: SEND_TX_PER_SECOND[key],
-  };
-};
+const envOf = (cluster: EnvCluster): ClusterEnv => ({
+  rpcUrl: PLATFORM_RPC_URLS[cluster],
+  nativeRpcUrl: NATIVE_RPC_URLS[cluster],
+  sendTxPerSecond: SEND_TX_PER_SECOND[cluster],
+});
 
 /** Every endpoint of ours on what this build's env sets */
 export const CLUSTERS = clustersFor({
   devnet: envOf("devnet"),
   testnet: envOf("testnet"),
-  "mainnet-beta": envOf("mainnet-beta"),
+  mainnet: envOf("mainnet"),
 });
 
-/** The network chips Settings offers, in its order */
+/** The network chips Settings offers, in chip order: every endpoint of ours */
 export const offeredOf = (clusters: Clusters): ReadonlyArray<ClusterInfo> =>
-  Object.values(clusters).filter((c) => c.isOffered);
+  Object.values(clusters);
 
 const MONIKERS: ReadonlySet<string> = new Set<Cluster>([
   "devnet",
   "testnet",
-  "mainnet-beta",
+  "mainnet",
   "localnet",
-  "playnet",
 ]);
 
 /** Whether `value` is one of our clusters' monikers; `surfpool` is a key, not a cluster */
 export const isCluster = (value: string): value is Cluster =>
   MONIKERS.has(value);
+
+/** Monikers a stored record may hold from before a cluster was renamed, under the current one */
+const RENAMED_MONIKERS: Readonly<Record<string, Cluster>> = {
+  "mainnet-beta": "mainnet",
+};
+
+/** A moniker read from storage under its current name: Solana renamed `mainnet-beta` to `mainnet` */
+export const currentMonikerOf = (moniker: string): string =>
+  Object.hasOwn(RENAMED_MONIKERS, moniker)
+    ? RENAMED_MONIKERS[moniker]
+    : moniker;
+
+/** The stored keys a renamed cluster's {@link ClusterSelection} may still hold */
+export const renamedKeysOf = (key: ClusterKey): ReadonlyArray<string> =>
+  Object.keys(RENAMED_MONIKERS).filter((old) => RENAMED_MONIKERS[old] === key);
 
 /**
  * A cluster's name as a person reads it. An unknown moniker comes back as it
@@ -211,7 +196,7 @@ if (import.meta.vitest) {
 
     it("offers Mainnet, Devnet, Testnet, Localnet and Surfpool, the remote ones on the public URLs when nothing is configured", () => {
       expect(offered(clustersFor({}))).toEqual([
-        ["mainnet-beta", Endpoint.MAINNET_BETA],
+        ["mainnet", Endpoint.MAINNET],
         ["devnet", Endpoint.DEVNET],
         ["testnet", Endpoint.TESTNET],
         ["localnet", Endpoint.LOCALNET],
@@ -225,7 +210,7 @@ if (import.meta.vitest) {
       // eslint-disable-next-line no-restricted-syntax -- the value under test
       [Endpoint.TESTNET, "https://api.testnet.solana.com"],
       // eslint-disable-next-line no-restricted-syntax -- the value under test
-      [Endpoint.MAINNET_BETA, "https://api.mainnet-beta.solana.com"],
+      [Endpoint.MAINNET, "https://api.mainnet-beta.solana.com"],
     ])("holds the public RPC %s", (endpoint, url) => {
       expect(endpoint).toBe(url);
     });
@@ -244,12 +229,12 @@ if (import.meta.vitest) {
     it("points each remote chip at the platform URL the env configures", () => {
       const clusters = clustersFor({
         devnet: { rpcUrl: "https://devnet.example.com" },
-        "mainnet-beta": { rpcUrl: "https://mainnet.example.com" },
+        mainnet: { rpcUrl: "https://mainnet.example.com" },
         testnet: { rpcUrl: "https://testnet.example.com" },
       });
 
       expect(offered(clusters).slice(0, 3)).toEqual([
-        ["mainnet-beta", "https://mainnet.example.com"],
+        ["mainnet", "https://mainnet.example.com"],
         ["devnet", "https://devnet.example.com"],
         ["testnet", "https://testnet.example.com"],
       ]);
@@ -266,10 +251,9 @@ if (import.meta.vitest) {
 
     it.each([
       ["devnet", "Devnet"],
-      ["mainnet-beta", "Mainnet"],
+      ["mainnet", "Mainnet"],
       ["testnet", "Testnet"],
       ["localnet", "Localnet"],
-      ["playnet", "Playnet"],
       ["unknown", "unknown"],
       ["Surfpool", "Surfpool"],
     ])("names %s as %s", (cluster, name) => {
@@ -283,6 +267,13 @@ if (import.meta.vitest) {
 
     it("names no cluster for an inherited property name", () => {
       expect(clusterName("toString")).toBe("toString");
+    });
+
+    it.each([
+      ["mainnet-beta", "mainnet"],
+      ["toString", "toString"],
+    ])("reads the stored moniker %s as %s", (stored, current) => {
+      expect(currentMonikerOf(stored)).toBe(current);
     });
 
     describe("findClusterWith", () => {
@@ -303,8 +294,8 @@ if (import.meta.vitest) {
         },
         {
           label: "a public URL with a trailing slash",
-          endpoint: `${Endpoint.MAINNET_BETA}/`,
-          cluster: "mainnet-beta",
+          endpoint: `${Endpoint.MAINNET}/`,
+          cluster: "mainnet",
         },
         {
           label: "Surfpool's URL",

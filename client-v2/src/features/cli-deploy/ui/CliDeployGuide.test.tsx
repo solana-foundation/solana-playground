@@ -311,7 +311,7 @@ describe("features/cli-deploy/ui/CliDeployGuide", () => {
     );
 
     expect(idlLines()).toEqual([
-      `${PMP} ${PROGRAM_ID} hello_anchor.json --rpc ${Endpoint.MAINNET_BETA}`,
+      `${PMP} ${PROGRAM_ID} hello_anchor.json --rpc ${Endpoint.MAINNET}`,
     ]);
   });
 

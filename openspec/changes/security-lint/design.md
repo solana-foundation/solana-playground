@@ -71,29 +71,31 @@ holds.
 | Source | Rules | Level | Files |
 | --- | --- | --- | --- |
 | `eslint-plugin-no-unsanitized` | `method`, `property` | error | `src`, `api`, `e2e` |
-| `@microsoft/eslint-plugin-sdl` | `no-postmessage-star-origin`, `no-document-domain`, `no-document-write`, `no-insecure-url` (loopback hosts and sdl's XML namespaces excepted) | error | `src`, `api`, `e2e` |
+| `@microsoft/eslint-plugin-sdl` | `no-postmessage-star-origin`, `no-document-domain`, `no-document-write`, `no-insecure-url` (sdl's blocklist, `http:`, `ws:`, `ftp:` and `telnet:`; excepted are an `http:` or `ws:` loopback address and sdl's default exceptions except its unanchored `localhost` one) | error | `src`, `api`, `e2e` |
 | `eslint-plugin-security` | `recommended`, without `detect-object-injection` | warn | `src`, `api` |
 
-`sdl` rules are enabled one by one, not through its `recommended` config, which pulls in every framework config of
-sdl's and would repeat rules Decision 1 already sets. `sdl/no-inner-html` is left off because `no-unsanitized`
+`sdl` rules are enabled one by one, not through its `recommended` config, which pulls in all of its framework configs
+and would repeat rules Decision 1 already sets. `sdl/no-inner-html` is left off because `no-unsanitized`
 covers the same sinks. `detect-object-injection` reports nearly every computed member access and is off.
-`no-unsanitized/method` skips `import()` only in `**/*.test.mjs` and five of the `create.*` factories, listed in
+`no-unsanitized/method` skips `import()` only in `**/*.test.mjs` and the `create.*` factories listed in
 `eslint.config.mjs`, which import their own folder's modules by name.
 `scripts/` is excluded from `security/*`: it is build tooling that reads paths and spawns processes by design.
 Every new warning is fixed or disabled on the line with a reason, and `--max-warnings` does not rise. Errors the
 new rules raise are fixed in the same PR, or disabled on the line with the reason. A fixture of probe values, such as
-`src/test-utils/endpoints.mjs`, disables the rule on each line that holds a probe, not over a block.
+`src/test-utils/endpoints.mjs`, disables the rule on each line that holds a probe, not over a block: a block disable
+would also hide a later line that is not a probe.
 
 ### 5. A separate `security.yml`
 
 The scanners run in `.github/workflows/security.yml`, not in `ci.yml`, so `security-events: write` is granted to
-that workflow alone. Triggers match `ci.yml`: `pull_request` and `push` to `master`.
+that workflow alone. Triggers match `ci.yml`: `pull_request`, `push` to `master` and `workflow_dispatch`.
 
 - zizmor runs through `zizmorcore/zizmor-action`, hadolint through `hadolint/hadolint-action`, each pinned to a
   commit SHA.
-- The tool's exit status fails the job on every run. The SARIF upload (`github/codeql-action/upload-sarif`) runs
-  only when the token can write: on `push`, and on a `pull_request` whose head repository is this repository. A PR
-  from the fork therefore shows findings in the job log, and Code scanning shows the state of `master`.
+- The tool's exit status fails the job on every run. The SARIF upload runs on every event except a `pull_request`
+  from a fork, whose token cannot write: `push`, `workflow_dispatch`, and a `pull_request` whose head repository is
+  this repository. zizmor uploads through `zizmor-action` itself, hadolint through
+  `github/codeql-action/upload-sarif`. A PR from a fork therefore shows findings in the job log only.
 - hadolint reads `client-v2/Dockerfile` and `docker/server-unstable.Dockerfile` by path, with `failure-threshold:
   warning`.
 

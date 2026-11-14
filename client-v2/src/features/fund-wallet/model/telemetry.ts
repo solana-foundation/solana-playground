@@ -3,12 +3,7 @@ import { createTracker } from "@/shared/lib/telemetry";
 import type { FailureReason } from "./fund";
 
 /** The Playground's cluster, as `PgConnection.cluster` names it */
-export type FundCluster =
-  | "mainnet-beta"
-  | "devnet"
-  | "testnet"
-  | "localnet"
-  | "playnet";
+export type FundCluster = "mainnet" | "devnet" | "testnet" | "localnet";
 
 /** The control that opened the Fund dialog */
 export type FundFrom =

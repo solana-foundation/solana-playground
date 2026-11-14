@@ -1,4 +1,4 @@
-FROM rust:1.75
+FROM rust:1.95
 
 WORKDIR /wasm
 

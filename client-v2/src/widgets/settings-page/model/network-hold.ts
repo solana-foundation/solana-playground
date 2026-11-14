@@ -6,7 +6,7 @@ type Global = Pick<typeof PgGlobal, "deployState" | "isIdlWriting">;
  * What holds the network where it is: a deploy that runs or waits paused,
  * since its later transactions would go to the new network while its buffer
  * stays on the old one, or an `anchor idl` write, whose later transactions
- * would go to a network its mainnet check never saw
+ * go to the network it started on, not to the one a switch selects
  */
 export const networkHeldBy = ({ deployState, isIdlWriting }: Global) => {
   if (deployState === "loading" || deployState === "paused") return "deploy";

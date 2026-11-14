@@ -31,7 +31,7 @@ env:
   USE_WASM_STUBS: ${{ inputs.use-wasm-stubs && 'true' || '' }}
 
 jobs:
-  # Builds the six `wasm/*/pkg` packages compiled from Rust and hands them to
+  # Builds the `wasm/*/pkg` packages compiled from Rust and hands them to
   # the other jobs as an artifact. The built packages are cached under the
   # key Vercel's install uses (`wasm_source_key` in `vercel-install.sh`), so a
   # change that leaves `wasm/` alone skips the build; on a miss, the cargo

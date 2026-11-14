@@ -78,10 +78,9 @@ if (import.meta.vitest) {
   describe("constants/connection", () => {
     it("networkInSentence lowercases the cluster mid-sentence, other names as they are", () => {
       expect(networkInSentence("devnet")).toBe("devnet");
-      expect(networkInSentence("mainnet-beta")).toBe("mainnet");
+      expect(networkInSentence("mainnet")).toBe("mainnet");
       expect(networkInSentence("testnet")).toBe("testnet");
       expect(networkInSentence("localnet")).toBe("localnet");
-      expect(networkInSentence("playnet")).toBe("playnet");
       expect(networkInSentence("Surfpool")).toBe("Surfpool");
       expect(networkInSentence(undefined)).toBeUndefined();
     });

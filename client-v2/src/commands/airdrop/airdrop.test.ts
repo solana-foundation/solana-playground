@@ -69,7 +69,7 @@ const runOn = (
 describe("airdrop", () => {
   it("says the network has no faucet on mainnet", async () => {
     // eslint-disable-next-line unicorn/no-null -- `PgConnection.cluster` and `getAirdropAmountOn()` are `null` before the cluster is read or where there is no faucet
-    const failure = await runOn("mainnet-beta", null).catch((e: unknown) => e);
+    const failure = await runOn("mainnet", null).catch((e: unknown) => e);
     expect((failure as Error).message).toBe(NO_FAUCET);
     // Failed before the airdrop started: not a refusal, so no faucet steps
     expect(isAirdropRefused(failure)).toBe(false);
@@ -154,13 +154,10 @@ describe("airdrop", () => {
   });
 
   // The local faucet is the user's own validator (Localnet, Surfpool)
-  it.each(["localnet", "playnet"])(
-    "airdrops on %s without a sign-in",
-    async (cluster) => {
-      await expect(checkOn(cluster)).resolves.toBeUndefined();
-      expect(checkSignedIn).not.toHaveBeenCalled();
-    }
-  );
+  it("airdrops on localnet without a sign-in", async () => {
+    await expect(checkOn("localnet")).resolves.toBeUndefined();
+    expect(checkSignedIn).not.toHaveBeenCalled();
+  });
 
   it.each(["devnet", "testnet"])("asks to sign in on %s", async (cluster) => {
     await expect(checkOn(cluster)).rejects.toThrow("Sign in with GitHub");
