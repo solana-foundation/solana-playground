@@ -11,7 +11,7 @@ export const cliClusterOf = (
   cluster: string | undefined
 ): CliCluster | undefined => {
   if (cluster === "devnet") return "devnet";
-  if (cluster === "mainnet-beta") return "mainnet";
+  if (cluster === "mainnet") return "mainnet";
   if (cluster === "testnet") return "testnet";
   return undefined;
 };
@@ -56,7 +56,7 @@ export const deployCommands = (p: {
  * not be the cluster step 3 deployed to.
  */
 const RPC_URL: Record<CliCluster, string> = {
-  mainnet: Endpoint.MAINNET_BETA,
+  mainnet: Endpoint.MAINNET,
   devnet: Endpoint.DEVNET,
   testnet: Endpoint.TESTNET,
 };
@@ -185,7 +185,7 @@ if (import.meta.vitest) {
           programId: id,
         })[0].lines
       ).toEqual([
-        `npx @solana-program/program-metadata@latest write idl ${id} hello.json --rpc ${Endpoint.MAINNET_BETA}`,
+        `npx @solana-program/program-metadata@latest write idl ${id} hello.json --rpc ${Endpoint.MAINNET}`,
       ]);
     });
 
@@ -213,9 +213,9 @@ if (import.meta.vitest) {
       expect(lines.every((l) => l.includes(" <program-id> "))).toBe(true);
     });
 
-    it("maps only devnet and mainnet-beta to a guide cluster", () => {
+    it("maps only devnet and mainnet to a guide cluster", () => {
       expect(cliClusterOf("devnet")).toBe("devnet");
-      expect(cliClusterOf("mainnet-beta")).toBe("mainnet");
+      expect(cliClusterOf("mainnet")).toBe("mainnet");
       expect(cliClusterOf("localnet")).toBeUndefined();
       expect(cliClusterOf(undefined)).toBeUndefined();
     });

@@ -1,4 +1,4 @@
-import { ANCHOR_VERSION, SOLANA_VERSION } from "./versions";
+import { ANCHOR_VERSION, SOLANA_VERSION } from "@/shared/config/build-server";
 
 export type IdlBuildMethod = "docker" | "local";
 

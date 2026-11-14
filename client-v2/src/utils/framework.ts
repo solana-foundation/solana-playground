@@ -1152,6 +1152,7 @@ if (import.meta.vitest) {
         ["target/deploy/p.so", true],
         ["src/target/mod.rs", false],
         ["programs/p/src/a/target/b.rs", false],
+        ["src/a/target/src/b.rs", false],
         // `.+` before the `/` needs a character
         ["src//target/b.rs", true],
         // `^` is the path's start, not a line's
@@ -1166,7 +1167,7 @@ if (import.meta.vitest) {
         "scans a long path of src/ segments in linear time",
         { timeout: 1000 },
         () => {
-          expect(hasTargetUnderSrc("src/".repeat(50_000))).toBe(false);
+          expect(hasTargetUnderSrc("src/".repeat(200_000))).toBe(false);
         }
       );
     });

@@ -138,6 +138,10 @@ Expect: exit code 0; `ls wasm/*/pkg/*_bg.wasm` lists a compiled module for each 
 
 ### B-2. client: CI parity
 
+Not runnable until `client/` is removed (solana-foundation/solana-playground#126): `client/package.json` names
+`../wasm/anchor-cli/pkg`, which this fork deleted, so `yarn --cwd client setup` fails at the install. A failure here is
+not a regression.
+
 Mirrors the `build` job in [reusable-checks.yml](../.github/workflows/reusable-checks.yml).
 
 ```sh
@@ -158,7 +162,7 @@ Mirrors the `checks` and `build` jobs in [reusable-client-v2.yml](../.github/wor
 
 Precondition: B-7. `yarn --cwd client-v2 setup:with-stubs` (`USE_WASM_STUBS=true`) mirrors
 [client-v2-with-stubs.yml](../.github/workflows/client-v2-with-stubs.yml) instead: the stubs skip the Rust build but
-disable Rust intellisense and the `solana`, `anchor`, `spl-token`, and `sugar` terminal commands, so S-3, C-6, and the
+disable Rust intellisense and the `solana`, `spl-token`, and `sugar` terminal commands, so S-3, C-6, and the
 `check-build` line need B-7.
 
 ```sh
@@ -289,6 +293,9 @@ and `POST /new` from Share, which the server answers with 404. Nothing calls the
 
 ### C-1. client starts
 
+Not runnable until `client/` is removed (solana-foundation/solana-playground#126), for the reason B-2 gives. A
+failure here is not a regression; C-6 runs on a C-4 session instead.
+
 Precondition: B-1 done; nothing listens on port 8080.
 
 ```sh
@@ -362,8 +369,8 @@ Precondition: a C-1 or C-4 session on the real packages. For client-v2,
 [reusable-client-v2.yml](../.github/workflows/reusable-client-v2.yml) runs it when `client-v2.yml` calls that workflow;
 `client-v2-with-stubs.yml` excludes the tag.
 
-Steps: connect the Playground Wallet, then run in the terminal `solana config get`, `spl-token --help`,
-`anchor --help`, and `sugar --help`.
+Steps: connect the Playground Wallet, then run in the terminal `solana config get`, `spl-token --help`, and
+`sugar --help`.
 
 Expect:
 
@@ -769,10 +776,10 @@ Expect: `404` for `/unstable/build`; anything but `404` for `/build`, which prov
 
 ### R-4. the deployment carries no stub
 
-A stub in production makes the `solana`, `anchor`, `spl-token`, and `sugar` commands throw, and leaves Rust
+A stub in production makes the `solana`, `spl-token`, and `sugar` commands throw, and leaves Rust
 intellisense empty. The requirement is "A deployment never carries a wasm stub" in
 `openspec/specs/client-v2-build/spec.md`. The Vercel build already fails on a bundle that carries a stub or lacks the wasm-bindgen module of
-any of the six packages (`REAL_WASM_MARKERS` in `client-v2/scripts/wasm-stubs.mjs`; `node scripts/wasm-stubs.mjs check-build build` in the `buildCommand` of
+any of the five packages (`REAL_WASM_MARKERS` in `client-v2/scripts/wasm-stubs.mjs`; `node scripts/wasm-stubs.mjs check-build build` in the `buildCommand` of
 [vercel.json](../client-v2/vercel.json)), and CI runs the same check after its production build, in
 [reusable-client-v2.yml](../.github/workflows/reusable-client-v2.yml); this case checks what was deployed. For a protected preview, add
 `-H "x-vercel-protection-bypass: $VERCEL_BYPASS"` to each `curl` (S-6).
@@ -782,7 +789,7 @@ base=<deployment URL>
 curl -s "$base/asset-manifest.json" | jq -r '.files[] | select(endswith(".js"))' > <run folder>/chunks.txt
 while read -r f; do curl -s -o "<run folder>/$(basename "$f")" "$base$f"; done < <run folder>/chunks.txt
 grep -l 'local dev stub' <run folder>/*.js
-grep -o -h -e anchor_cli_wasm_bg -e rust_analyzer_wasm_bg -e seahorse_compile_wasm_bg -e solana_cli_wasm_bg -e spl_token_cli_wasm_bg -e sugar_cli_wasm_bg <run folder>/*.js | sort -u
+grep -o -h -e rust_analyzer_wasm_bg -e seahorse_compile_wasm_bg -e solana_cli_wasm_bg -e spl_token_cli_wasm_bg -e sugar_cli_wasm_bg <run folder>/*.js | sort -u
 grep -l 'solana_cli_wasm_bg' <run folder>/*.js
 grep -o '"[0-9a-f]\{20\}"' <run folder>/<the chunk the previous grep listed>
 curl -s -o /dev/null -w '%{http_code} %{content_type} %{size_download}\n' "$base/<that hash>.module.wasm"
@@ -790,7 +797,7 @@ curl -s -o /dev/null -w '%{http_code} %{content_type} %{size_download}\n' "$base
 
 Expect:
 
-- [ ] the first `grep` prints nothing; the second prints all six names; the third lists one chunk, which names one
+- [ ] the first `grep` prints nothing; the second prints all five names; the third lists one chunk, which names one
       hash.
 - [ ] the last `curl` prints `200 application/wasm` and a size of megabytes. On 2026-10-19,
       `solana-playground-teal.vercel.app` served chunk `790` and `/cb0f9cf8e4161ad3396e.module.wasm`, 3,058,467 bytes.

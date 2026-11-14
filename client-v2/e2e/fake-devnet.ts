@@ -7,6 +7,7 @@ import {
 } from "@solana/web3.js";
 
 import { Endpoint } from "../src/entities/cluster/model/endpoint";
+import { GENESIS_HASHES } from "../src/entities/cluster/model/genesis-hashes";
 import { HELLO_NAME, HELLO_WORLD } from "./fake-build-server";
 
 /**
@@ -634,7 +635,7 @@ export const fakeDevnet = async (page: Page): Promise<FakeDevnet> => {
       case "getVersion":
         return { result: { "solana-core": "2.1.0", "feature-set": 1 } };
       case "getGenesisHash":
-        return { result: "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG" };
+        return { result: GENESIS_HASHES.devnet };
       case "getHealth":
         return { result: "ok" };
       case "getEpochInfo": {

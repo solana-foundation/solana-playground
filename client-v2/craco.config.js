@@ -319,7 +319,7 @@ module.exports = {
         new CircularDependencyPlugin({
           // TODO: Avoid excluding so many or be more specific
           exclude:
-            /node_modules|connection|explorer|playnet|sugar|terminal|Instruction/,
+            /node_modules|connection|explorer|sugar|terminal|Instruction/,
           // Include all src folder
           include: /src/,
           // Add errors to webpack instead of warnings

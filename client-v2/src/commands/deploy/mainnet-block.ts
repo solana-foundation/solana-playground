@@ -20,7 +20,7 @@ export const MAINNET_DEPLOY_WAY_OUT =
 export const MAINNET_DEPLOY_BLOCKED = `${MAINNET_DEPLOY_BLOCKED_LINE} Deploy from your own machine with the Solana CLI or Anchor: Deploy stage › Deploy from your machine.`;
 
 /**
- * The refusal of a deploy to mainnet-beta: a rule of the beta, not a failed
+ * The refusal of a deploy to mainnet: a rule of the beta, not a failed
  * deploy, so the stage sends no `deploy_failed` for it
  */
 export class MainnetDeployRefusedError extends TerminalLineError {
@@ -37,7 +37,7 @@ export class MainnetDeployRefusedError extends TerminalLineError {
  * `anchor idl` writes. `null` (not read yet) does not block.
  */
 export const isDeployBlocked = (cluster: string | null) =>
-  cluster === "mainnet-beta";
+  cluster === "mainnet";
 
 /**
  * The `deploy` command's refusal when the endpoint did not say which network
@@ -56,9 +56,9 @@ export const IDL_NETWORK_UNREAD =
   "Could not read which network the endpoint serves, so nothing was sent. Check the RPC in Settings › Network and try again.";
 
 /**
- * The `anchor idl` writes' refusal when the endpoint changed between the
- * network read and the CLI's start: the network read is not the one it
- * would send to
+ * The refusal of every `anchor idl` subcommand that sends, when the endpoint
+ * changed between the network read and the subcommand's start: the network
+ * selected is no longer the one that was read
  */
 export const IDL_NETWORK_CHANGED =
   "The network changed while the command started, so nothing was sent. Run it again.";
@@ -71,7 +71,7 @@ export const IDL_NETWORK_CHANGED =
 export interface MainnetRefusal {
   /** Names the send in the log of an unread network */
   readonly send: string;
-  /** The error thrown on mainnet-beta */
+  /** The error thrown on mainnet */
   readonly blocked: () => TerminalLineError;
   /** The line when the endpoint did not say which network it serves */
   readonly unread: string;

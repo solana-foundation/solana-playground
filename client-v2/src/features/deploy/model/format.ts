@@ -20,7 +20,7 @@ export const shortKey = (key: string): string =>
   key.length <= 12 ? key : `${key.slice(0, 4)}…${key.slice(-4)}`;
 
 /**
- * The network's standalone label, capitalised ("Mainnet" for mainnet-beta),
+ * The network's standalone label, capitalised ("Mainnet" for mainnet),
  * "the network" while unknown; mid-sentence prose uses `networkInSentence`
  */
 export const networkName = (cluster: string | null): string =>
@@ -41,8 +41,8 @@ if (import.meta.vitest) {
       expect(shortKey("short")).toBe("short");
     });
 
-    it("networkName names the cluster capitalised, Mainnet for mainnet-beta", () => {
-      expect(networkName("mainnet-beta")).toBe("Mainnet");
+    it("networkName names the cluster capitalised, Mainnet for mainnet", () => {
+      expect(networkName("mainnet")).toBe("Mainnet");
       expect(networkName("devnet")).toBe("Devnet");
       // eslint-disable-next-line unicorn/no-null -- the cluster is `null` until read
       expect(networkName(null)).toBe("the network");

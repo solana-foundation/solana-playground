@@ -100,7 +100,7 @@ vi.mock("@/commands/deploy/check-not-mainnet", async () => {
   return {
     checkNotMainnet: async () => {
       mocks.duringNetworkRead?.();
-      if (mocks.endpointCluster === "mainnet-beta") {
+      if (mocks.endpointCluster === "mainnet") {
         throw new MainnetDeployRefusedError();
       }
       if (mocks.endpointCluster === "unread") {
@@ -854,7 +854,7 @@ describe("Deploy stage", () => {
   // HOO-2728: the stage shows the CLI guide on mainnet, but the network can
   // move there before the press is read; the refusal comes before the wallet
   it("refuses a mainnet deploy before creating a wallet, and counts no failure", async () => {
-    mocks.endpointCluster = "mainnet-beta";
+    mocks.endpointCluster = "mainnet";
     render(<Deploy onChangeNetwork={() => {}} />);
 
     await pressDeploy();

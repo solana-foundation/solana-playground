@@ -158,7 +158,7 @@ describe("realBridge.quoteDeploy", () => {
 
   it.each([
     ["devnet", "devnet"],
-    ["mainnet-beta", "mainnet"],
+    ["mainnet", "mainnet"],
     [undefined, undefined],
   ])("names %s as %s", async (cluster, network) => {
     mocks.cluster = cluster;

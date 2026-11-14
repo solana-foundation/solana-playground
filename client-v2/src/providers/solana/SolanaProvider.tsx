@@ -10,7 +10,7 @@ import { PgConnection, PgWallet } from "../../utils";
 
 /** ConnectorKit's cluster ids by the Playground's; the rest sign without a hint */
 const SIGNING_CLUSTER_IDS: Partial<Record<string, SigningCluster["id"]>> = {
-  "mainnet-beta": "solana:mainnet",
+  mainnet: "solana:mainnet",
   devnet: "solana:devnet",
   testnet: "solana:testnet",
 };

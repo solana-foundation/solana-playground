@@ -153,7 +153,7 @@ const deployLabel = (p: BaseDeployProps, redeploy: boolean) => {
 
 /**
  * The cluster in the deploy button's label and the stage's prose, lowercase
- * mid-sentence: "mainnet" for mainnet-beta; "the network" until the endpoint
+ * mid-sentence: "mainnet" for mainnet; "the network" until the endpoint
  * has been read
  */
 const deployNetwork = (p: BaseDeployProps) =>
@@ -162,7 +162,7 @@ const deployNetwork = (p: BaseDeployProps) =>
 /**
  * Who pays, before a deploy. With no wallet current, the deploy makes the
  * Playground wallet. Free SOL is promised on devnet only, the network Spec 03's
- * line names; testnet, localnet and playnet airdrop too, but the line stays
+ * line names; testnet and localnet airdrop too, but the line stays
  * silent there, and so it does while the cluster is unknown.
  */
 const payerLine = (p: BaseDeployProps) => {
