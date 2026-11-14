@@ -446,9 +446,10 @@ const project = [
   },
   {
     files: ["src/shared/lib/ids.ts", "src/shared/lib/ids.test.mts"],
+    // ids.ts is the uuid module, so its uuid selectors stay off; the cluster-address selectors still apply
     rules: {
       "no-restricted-imports": "off",
-      "no-restricted-syntax": "off",
+      "no-restricted-syntax": ["error", ...CLUSTER_URL_SELECTORS],
     },
   },
   {
@@ -590,7 +591,7 @@ const project = [
   },
 ];
 
-// sdl's own localhost default is unanchored (`http://localhost.evil.test` passes), so only its XML namespaces stay
+// sdl's default exceptions except its unanchored localhost one, which lets `http://localhost.evil.test` pass
 const INSECURE_URL_EXCEPTIONS = [
   ...sdl.rules["no-insecure-url"].defaultExceptions
     .map(({ source }) => source)
@@ -598,7 +599,7 @@ const INSECURE_URL_EXCEPTIONS = [
   String.raw`^(http|ws)://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?([/?#]|$)`,
 ];
 
-/** Security rules; sdl's are named one by one, since its recommended pulls in every framework config of sdl's */
+/** Security rules; sdl's are named one by one, since its recommended config pulls in all of its framework configs */
 const securityChecks = [
   {
     files: ["src/**", "api/**", "e2e/**"],

@@ -153,7 +153,7 @@ if (import.meta.vitest) {
       "parses a heading with a long run of inner spaces in linear time",
       { timeout: 1000 },
       () => {
-        const line = `## a${" ".repeat(60_000)}b`;
+        const line = `## a${" ".repeat(100_000)}b`;
         expect(sectionsOf(line)).toHaveLength(1);
       }
     );
