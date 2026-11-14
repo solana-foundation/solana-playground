@@ -207,7 +207,8 @@ left alone after that.
 
 - **WHEN** the user presses Add program in a project with no program
 - **THEN** `src/lib.rs` is created, the Write, Build, Deploy and Interact
-  tabs appear, and the "Client project" label and Run go
+  tabs appear, the "Client project" label and Run go, and
+  `client_project_program_added` is sent
 
 #### Scenario: A project with a program
 
