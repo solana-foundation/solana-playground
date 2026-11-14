@@ -9,7 +9,7 @@ import {
 
 import { clusterOf } from "../src/commands/anchor/__fixtures__/cluster";
 import { ANCHOR_VERSION } from "../src/shared/config/build-server";
-import { expect, json, LONG, test } from "./fixtures";
+import { expect, json, LONG, openFiles, test } from "./fixtures";
 import {
   BASE58,
   type Cluster,
@@ -308,6 +308,8 @@ test.describe("client-v2-program-idl", () => {
       `anchor idl fetch ${PROGRAM} --out idl/fetched.json`
     );
 
+    // The default window shows the tree as a dropdown, closed until "Files"
+    await openFiles(page);
     const tree = page.locator("#root-dir");
     const file = tree.getByText("fetched.json", { exact: true });
     if (!(await file.isVisible())) {
