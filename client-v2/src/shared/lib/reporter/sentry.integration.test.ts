@@ -1,6 +1,16 @@
 // Runs the real SDK over a recording transport, so the envelope is what Sentry would receive
 import * as Sentry from "@sentry/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  type MockInstance,
+  vi,
+} from "vitest";
 
 import { requireFor } from "../../../test-utils/require-for";
 import {
@@ -122,20 +132,18 @@ describe("reporter.sendFeedback", () => {
   });
 });
 
-// Ahead of "reporter scrub": Sentry wraps the `fetch` it finds once per module, so the spy must be there first
-describe("trace headers", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-    // The fetch and transaction breadcrumbs would reach the next describe's events
-    Sentry.getIsolationScope().clearBreadcrumbs();
+// Ahead of "reporter scrub": Sentry wraps the `fetch` it finds once per module, so the spy must be there first and stay
+describe("fetch spans", () => {
+  let fetchSpy: MockInstance<typeof fetch>;
+
+  beforeAll(() => {
+    fetchSpy = vi.spyOn(globalThis, "fetch");
   });
 
-  it("should add neither sentry-trace nor baggage to a same-origin or a cross-origin fetch in a sampled span", async () => {
+  beforeEach(async () => {
     await Sentry.close();
     envelopes.length = 0;
-    const fetchSpy = vi
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(async () => new Response("{}"));
+    fetchSpy.mockImplementation(async () => new Response("{}"));
     const options = sentryOptions({ dsn: DSN, tracesSampleRate: 1 });
     Sentry.init({
       dsn: options.dsn,
@@ -143,6 +151,8 @@ describe("trace headers", () => {
       tracePropagationTargets: options.tracePropagationTargets,
       traceLifecycle: options.traceLifecycle,
       integrations: options.integrations,
+      beforeSendTransaction: options.beforeSendTransaction,
+      beforeSendSpan: options.beforeSendSpan,
       transport: () => ({
         send: async (envelope) => {
           envelopes.push(envelope);
@@ -151,7 +161,50 @@ describe("trace headers", () => {
         flush: async () => true,
       }),
     });
+  });
 
+  afterEach(() => {
+    // The fetch and transaction breadcrumbs would reach the next describe's events
+    Sentry.getIsolationScope().clearBreadcrumbs();
+  });
+
+  afterAll(() => {
+    fetchSpy.mockRestore();
+  });
+
+  const httpSpansOf = () =>
+    envelopes
+      .map((envelope) => itemsOf(envelope)[0])
+      .filter(([header]) => header.type === "transaction")
+      .flatMap(
+        ([, event]) =>
+          (
+            event as unknown as {
+              spans?: { op?: string; data?: Record<string, unknown> }[];
+            }
+          ).spans ?? []
+      )
+      .filter((span) => span.op === "http.client");
+
+  it("should redact a bare token query term and a token fragment in a fetch span's attributes", async () => {
+    const TOKEN = "abc123def456ghi789";
+
+    await Sentry.startNewTrace(() =>
+      Sentry.startSpan({ name: "/", op: "pageload" }, async () => {
+        await fetch(`https://rpc.example.test/?${TOKEN}#${TOKEN}`);
+      })
+    );
+    await Sentry.flush();
+
+    const [span] = httpSpansOf();
+    expect(span.data).toMatchObject({
+      "url.query": "[redacted]",
+      "url.fragment": "[redacted]",
+    });
+    expect(JSON.stringify(envelopes)).not.toContain(TOKEN);
+  });
+
+  it("should add neither sentry-trace nor baggage to a same-origin or a cross-origin fetch in a sampled span", async () => {
     await Sentry.startNewTrace(() =>
       Sentry.startSpan({ name: "/", op: "pageload" }, async () => {
         await fetch("/api/sync");
@@ -170,13 +223,7 @@ describe("trace headers", () => {
       expect(headers.has("baggage")).toBe(false);
     }
     // Both requests became spans, so Sentry's fetch wrapper ran over the spy
-    const [transaction] = envelopes
-      .map((envelope) => itemsOf(envelope)[0])
-      .filter(([header]) => header.type === "transaction")
-      .map(([, event]) => event as unknown as { spans?: { op?: string }[] });
-    expect(
-      transaction.spans?.filter((span) => span.op === "http.client")
-    ).toHaveLength(2);
+    expect(httpSpansOf()).toHaveLength(2);
   });
 });
 
@@ -342,6 +389,77 @@ describe("reporter scrub", () => {
     expect(sent).toContain("/share?k=[redacted]");
     expect(sent).toContain("button#k-[redacted]");
     expect(JSON.stringify(envelopes)).not.toContain(KEY);
+  });
+
+  describe("a span the scrub cannot walk", () => {
+    const hostile = {
+      get boom(): string {
+        throw new TypeError(`getter ${KEY}`);
+      },
+    } as unknown as string;
+
+    beforeEach(async () => {
+      await Sentry.close();
+      envelopes.length = 0;
+      const options = sentryOptions({ dsn: DSN, tracesSampleRate: 1 });
+      Sentry.init({
+        dsn: options.dsn,
+        tracesSampleRate: options.tracesSampleRate,
+        traceLifecycle: options.traceLifecycle,
+        beforeSendTransaction: options.beforeSendTransaction,
+        beforeSendSpan: options.beforeSendSpan,
+        // Sentry's normalising would turn the getter into text before the scrub sees it
+        normalizeDepth: 0,
+        defaultIntegrations: false,
+        transport: recording,
+      });
+    });
+
+    const transactionsOf = () =>
+      envelopes
+        .map((envelope) => itemsOf(envelope)[0])
+        .filter(([header]) => header.type === "transaction")
+        .map(([, event]) => event as unknown as ScrubbedTransaction);
+
+    it("should send nothing when it is the root span", async () => {
+      Sentry.startNewTrace(() =>
+        Sentry.startSpan(
+          { name: "/", op: "pageload", attributes: { hostile } },
+          () => {
+            Sentry.startSpan({ name: "child", op: "ui.render" }, () => {});
+          }
+        )
+      );
+      await Sentry.flush();
+
+      expect(transactionsOf()).toEqual([]);
+    });
+
+    it("should send the transaction with that child span marked as withheld", async () => {
+      Sentry.startNewTrace(() =>
+        Sentry.startSpan({ name: "/", op: "pageload" }, () => {
+          Sentry.startSpan(
+            {
+              name: `GET /x?k=${KEY}`,
+              op: "http.client",
+              attributes: { hostile },
+            },
+            () => {}
+          );
+        })
+      );
+      await Sentry.flush();
+
+      const [transaction] = transactionsOf();
+      expect(transaction.transaction).toBe("/");
+      expect(transaction.spans).toEqual([
+        expect.objectContaining({
+          description: "Span withheld: scrubbing it failed",
+          data: { "scrub.withheld": true },
+        }),
+      ]);
+      expect(JSON.stringify(envelopes)).not.toContain(KEY);
+    });
   });
 
   /** Stands in for the user's test printing through mocha to this window's console */

@@ -30,16 +30,28 @@ Each task depends on the one before it; nothing runs in parallel.
   `redact` masks `https://[2001:db8::1]/v2/abc123def456ghi789` and `https://rpc.example.com/rpc(v1)/abc123def456ghi789`,
   and keeps the `)` of `(see https://x.test/a)` outside the URL; the parser gives 1 with a warning for `"0x1"` and
   `"1e-1"`; `yarn run check` passes. Depends on 1.2. HOO-2905.
-- [ ] 1.4 Check the change on a preview before the merge: label the PR `preview`, set `SENTRY_PREVIEW_ENABLED=true`
+- [x] 1.4 Apply the review of `9d4ce3a40` as design.md, Decisions 2 and 5, describe: the URL masker keeps the file
+  name of the app's content-hashed assets (`static/js/main.3f2a1b4c.js`); `redact` masks the `url.query` and
+  `url.fragment` span attributes; `isTokenLike` ignores characters outside its alphabet at the end of a part; a span
+  `scrubSpan` cannot walk keeps its numeric `measurements` and carries `scrub.withheld`, and `scrubTransaction` drops
+  a transaction whose root span carries it; one table in `sample-rate.test.mjs` tests `SAMPLE_RATE`; the
+  `observabilityEnv` and `scrubSpan` comments and design.md's Limit and Risks match the code. Verify: a `scrubEvent`
+  test keeps `https://<host>/static/js/main.3f2a1b4c.js` in a frame and a debug image and masks a token in its place;
+  through the real client, a fetch span arrives with a bare token query term and a token fragment redacted, a
+  transaction whose root span cannot be scrubbed is not sent, and one whose child span cannot be scrubbed is sent with
+  that span marked; `redact` masks the last segment before `,`, `;`, `:`, `!`, `]` and `*`; `SAMPLE_RATE` accepts
+  `0`, `1`, `.5` and `1.0` and rejects `1.5`, `-1`, `0x1` and `1e-1`; `yarn run check` passes. Depends on 1.3.
+  HOO-2905.
+- [ ] 1.5 Check the change on a preview before the merge: label the PR `preview`, set `SENTRY_PREVIEW_ENABLED=true`
   for it with the rate unset, and walk the manual scenarios of both delta specs. Verify: the `pageload` transaction
   shows in Sentry with LCP and CLS, the Web Vitals dashboard of project `solana-playground` shows the preview's
   environment, the PR lists each scenario with its result, and the PR states the preview's transaction count after
   one day in Sentry's usage stats, with production's projected monthly volume against the quota. If the dashboard
   stays empty while the transaction is in Discover, stop and update this change for stream mode (design.md, Risks).
-  Depends on 1.3. HOO-2905.
+  Depends on 1.4. HOO-2905.
 
 ## Workflow follow-up
 
 - After the merge, watch Sentry's usage stats for a week; if production's volume runs past the quota, set
   `REACT_APP_SENTRY_TRACES_SAMPLE_RATE` lower in Vercel and redeploy.
-- Archive the change in this PR once 1.4 is ticked (agreed 2026-11-14).
+- Archive the change in this PR once 1.5 is ticked (agreed 2026-11-14).

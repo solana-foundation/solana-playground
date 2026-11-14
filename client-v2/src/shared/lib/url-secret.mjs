@@ -12,15 +12,24 @@ const KEY_NAME = /key|token|secret|auth|pass|sig|credential/i;
  * (letters, digits, `-`, `_`, `.`, `~`, `+`, `=`, `%`, so JWTs and base64
  * too), with a digit, or 24 or more in mixed case. A long slug with a digit
  * counts as well: on screen, hiding a word is cheaper than showing a key, and
- * in a build, failing on a slug is cheaper than publishing a key.
+ * in a build, failing on a slug is cheaper than publishing a key. Characters
+ * outside that set at the end are not counted, so `<key>*` reads as `<key>`.
  *
  * @param {string} value one part of a URL, as written in it (not decoded)
  * @returns {boolean}
  */
-export const isTokenLike = (value) =>
-  /^[\w.~+=%-]{16,}$/.test(value) &&
-  (/\d/.test(value) ||
-    (value.length >= 24 && /[a-z]/.test(value) && /[A-Z]/.test(value)));
+export const isTokenLike = (value) => {
+  const token = value.replace(/[^\w.~+=%-]+$/, "");
+  return (
+    /^[\w.~+=%-]{16,}$/.test(token) &&
+    (/\d/.test(token) ||
+      (token.length >= 24 && /[a-z]/.test(token) && /[A-Z]/.test(token)))
+  );
+};
+
+/** CRA's content-hashed build output (`static/js/main.3f2a1b4c.js`): a stack frame needs the name to find its source map */
+const APP_ASSET =
+  /\/static\/(?:js|css|media)\/[\w-]+\.[0-9a-f]{8,32}(?:\.chunk)?\.[a-z0-9]+$/;
 
 /**
  * A URL's query as written, split into its terms: `[name, value]` for
@@ -77,7 +86,8 @@ export const isSecretQueryTerm = (name, value) =>
 /**
  * `url` with each secret replaced by `mask`: a user name or password, a host
  * label, path segment, bare query term or fragment that reads as a token, and
- * the value of a secret query term. Built from the parsed parts split by hand,
+ * the value of a secret query term. The file name of a path {@link APP_ASSET}
+ * matches stays. Built from the parsed parts split by hand,
  * so names keep their spelling and `mask` is never percent-encoded; a value
  * that does not parse is `mask` whole.
  *
@@ -105,7 +115,11 @@ export const maskUrlWith = (mask) => (url) => {
   const host =
     parsed.hostname.split(".").map(maskToken).join(".") +
     (parsed.port ? `:${parsed.port}` : "");
-  const path = parsed.pathname.split("/").map(maskToken).join("/");
+  const segments = parsed.pathname.split("/");
+  const assetAt = APP_ASSET.test(parsed.pathname) ? segments.length - 1 : -1;
+  const path = segments
+    .map((segment, i) => (i === assetAt ? segment : maskToken(segment)))
+    .join("/");
   const query = parsed.search
     ? "?" +
       queryTermsOf(parsed.search)

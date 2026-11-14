@@ -32,10 +32,11 @@ transaction that cannot be scrubbed SHALL NOT be sent.
 ### Requirement: URLs in reports carry no credentials
 
 In every URL inside an error event, a breadcrumb, a transaction or a span the
-browser sends to Sentry, a user name or password, a token-like host label, path
-segment or fragment, and the value of a secret query term SHALL be replaced
-with `[redacted]`, by the rule that masks a custom RPC URL on screen. The rest
-of the URL SHALL stay, so the provider and the route remain readable.
+browser sends to Sentry, and in a span's `url.query` and `url.fragment`, a user
+name or password, a token-like host label, path segment or fragment, and the
+value of a secret query term SHALL be replaced with `[redacted]`, by the rule
+that masks a custom RPC URL on screen. The rest of the URL SHALL stay, the
+app's own content-hashed file names included.
 
 #### Scenario: A provider key in the path (manual)
 
@@ -48,6 +49,13 @@ of the URL SHALL stay, so the provider and the route remain readable.
 - **WHEN** a reported error carries a fetch breadcrumb for
   `https://devnet.helius-rpc.com/?api-key=abc`
 - **THEN** the breadcrumb shows `https://devnet.helius-rpc.com/?api-key=[redacted]`
+
+#### Scenario: The app's own bundle in a stack frame (manual)
+
+- **WHEN** a production build reports an error thrown in
+  `https://playground.solana.com/static/js/main.<hash>.js`
+- **THEN** the event's stack frames show that URL unchanged and resolve against
+  the uploaded source maps
 
 #### Scenario: A URL with nothing secret in it (manual)
 

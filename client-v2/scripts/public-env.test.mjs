@@ -302,14 +302,10 @@ const OUT_OF_RANGE = [
   "REACT_APP_SENTRY_TRACES_SAMPLE_RATE is not a decimal from 0 to 1",
 ];
 
+// `src/shared/lib/sample-rate.test.mjs` holds the pattern's table; these rows show the check applies it
 for (const [value, expected] of [
-  ["0", []],
   ["0.25", []],
-  ["1", []],
-  [".5", []],
   ["1.5", OUT_OF_RANGE],
-  ["-1", OUT_OF_RANGE],
-  ["abc", OUT_OF_RANGE],
 ]) {
   test(`checks a traces sample rate of "${value}" against 0 to 1`, () => {
     assert.deepEqual(
