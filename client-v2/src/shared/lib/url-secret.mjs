@@ -1,7 +1,8 @@
 // @ts-check
 // What in a URL reads as a credential: `maskRpcUrl` (entities/cluster) masks
-// it on screen, and `scripts/public-env.mjs` fails a production build that
-// would publish it. `.mjs` so the build script can import it from Node.
+// it on screen, `reporter/scrub.ts` masks it in reports to Sentry, and
+// `scripts/public-env.mjs` fails a production build that would publish it.
+// `.mjs` so the build script can import it from Node.
 
 /** A query name a provider puts a key under (`api-key`, `apiKey`, `access_token`…) */
 const KEY_NAME = /key|token|secret|auth|pass|sig|credential/i;
@@ -72,3 +73,54 @@ export const isSecretQueryTerm = (name, value) =>
       (KEY_NAME.test(name) ||
         KEY_NAME.test(percentDecoded(name)) ||
         isTokenLike(value));
+
+/**
+ * `url` with each secret replaced by `mask`: a user name or password, a host
+ * label, path segment, bare query term or fragment that reads as a token, and
+ * the value of a secret query term. Built from the parsed parts split by hand,
+ * so names keep their spelling and `mask` is never percent-encoded; a value
+ * that does not parse is `mask` whole.
+ *
+ * @param {string} mask what stands for each secret
+ * @returns {(url: string) => { text: string, masked: boolean }} the text, and whether anything was masked
+ */
+export const maskUrlWith = (mask) => (url) => {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    // Not a URL: any part of it may be the key, so none of it is kept
+    return { text: mask, masked: true };
+  }
+  let masked = false;
+  const maskOne = () => {
+    masked = true;
+    return mask;
+  };
+  /** @param {string} part */
+  const maskToken = (part) => (isTokenLike(part) ? maskOne() : part);
+
+  // A username and a password, either or both, show as one mask
+  const auth = parsed.username || parsed.password ? `${maskOne()}@` : "";
+  const host =
+    parsed.hostname.split(".").map(maskToken).join(".") +
+    (parsed.port ? `:${parsed.port}` : "");
+  const path = parsed.pathname.split("/").map(maskToken).join("/");
+  const query = parsed.search
+    ? "?" +
+      queryTermsOf(parsed.search)
+        .map(([name, value]) => {
+          if (value === undefined) return maskToken(name);
+          return `${name}=${
+            isSecretQueryTerm(name, value) ? maskOne() : value
+          }`;
+        })
+        .join("&")
+    : "";
+  const fragment = parsed.hash ? `#${maskToken(parsed.hash.slice(1))}` : "";
+
+  return {
+    text: `${parsed.protocol}//${auth}${host}${path}${query}${fragment}`,
+    masked,
+  };
+};

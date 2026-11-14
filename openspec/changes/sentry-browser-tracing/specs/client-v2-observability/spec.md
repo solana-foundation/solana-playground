@@ -37,10 +37,7 @@ load, before its children first render.
 With a DSN, the browser SHALL trace each page load and navigation with the
 probability `REACT_APP_SENTRY_TRACES_SAMPLE_RATE` gives, and a traced page load
 SHALL reach Sentry as a transaction carrying the Web Vitals the browser
-measured. An unset or empty variable SHALL mean 1. A production build SHALL
-fail when the variable holds a value that is not a decimal number, and a number
-outside 0 to 1 SHALL mean 1 and print one console warning that names the
-variable and the value.
+measured. An unset or empty variable SHALL mean 1.
 
 #### Scenario: The rate is unset (manual)
 
@@ -56,25 +53,43 @@ variable and the value.
 - **THEN** no transaction reaches Sentry, and an error reported meanwhile still
   does
 
-#### Scenario: The rate is invalid
+### Requirement: An invalid trace rate fails the production build
 
-- **WHEN** the variable is `"1.5"` or `"-1"`
-- **THEN** Sentry is initialised with a sample rate of 1, and the console shows
-  one warning naming `REACT_APP_SENTRY_TRACES_SAMPLE_RATE` and the value
+A production build SHALL fail, naming `REACT_APP_SENTRY_TRACES_SAMPLE_RATE`,
+when the variable holds anything other than a decimal from 0 to 1. A build that
+skips that check SHALL read such a value as 1 and print one console warning
+that names the variable and the value.
 
-#### Scenario: The rate is not a number
+#### Scenario: The rate is out of range (manual)
+
+- **WHEN** a production build runs with the variable set to `"1.5"`, `"10"` or
+  `"-1"`
+- **THEN** the build fails and names `REACT_APP_SENTRY_TRACES_SAMPLE_RATE`
+
+#### Scenario: The rate is not a number (manual)
 
 - **WHEN** a production build runs with the variable set to `"abc"`
 - **THEN** the build fails and names `REACT_APP_SENTRY_TRACES_SAMPLE_RATE`
 
-### Requirement: Trace headers stay on the page's own origin
+#### Scenario: An invalid rate in a development build (manual)
 
-The browser SHALL add the `sentry-trace` and `baggage` headers only to requests
-to the page's own origin. A request to the build server, an RPC endpoint or any
-other origin SHALL carry neither header.
+- **WHEN** `yarn dev` runs with the variable set to `"1.5"`
+- **THEN** Sentry is initialised with a sample rate of 1, and the console shows
+  one warning naming `REACT_APP_SENTRY_TRACES_SAMPLE_RATE` and the value
+
+### Requirement: The browser sends no trace headers
+
+The browser SHALL add neither the `sentry-trace` nor the `baggage` header to
+any request, to the page's own origin included, so the API functions sample by
+`SENTRY_TRACES_SAMPLE_RATE` alone, whatever the browser's rate.
+
+#### Scenario: A same-origin API request on a traced page load (manual)
+
+- **WHEN** a traced page load calls `/api/sync`
+- **THEN** the request carries neither `sentry-trace` nor `baggage`
 
 #### Scenario: A build request on a traced page load (manual)
 
 - **WHEN** a traced page load sends a build request to the build server
-- **THEN** the request carries neither `sentry-trace` nor `baggage`, and its
-  CORS preflight, if any, asks for no header it did not ask for before
+- **THEN** the request carries neither header, and its CORS preflight, if any,
+  asks for no header it did not ask for before

@@ -4,7 +4,7 @@ export interface ReporterConfig {
   dsn: string;
   release?: string;
   environment?: string;
-  /** The share of page loads and navigations traced, from 0 to 1 */
+  /** The share of page loads and navigations traced, from 0 to 1; the browser's alone, since the API functions keep their own rate */
   tracesSampleRate: number;
 }
 
