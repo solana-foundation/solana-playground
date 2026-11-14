@@ -109,13 +109,8 @@ if (import.meta.vitest) {
       { value: "", rate: 1, warnings: 0 },
       { value: " ", rate: 1, warnings: 0 },
       { value: "0", rate: 0, warnings: 0 },
-      { value: "0.25", rate: 0.25, warnings: 0 },
-      { value: "1", rate: 1, warnings: 0 },
-      { value: "abc", rate: 1, warnings: 1 },
+      // `sample-rate.test.mjs` holds the pattern's table; one invalid value reaches the warning
       { value: "1.5", rate: 1, warnings: 1 },
-      { value: "-1", rate: 1, warnings: 1 },
-      { value: "0x1", rate: 1, warnings: 1 },
-      { value: "1e-1", rate: 1, warnings: 1 },
     ])(
       "parseTracesSampleRate reads $value as $rate with $warnings warnings",
       ({ value, rate, warnings }) => {

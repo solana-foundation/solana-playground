@@ -3,7 +3,12 @@
 // reporter passes these rules to Sentry as `beforeBreadcrumb`, `beforeSend`,
 // `beforeSendTransaction` and `beforeSendSpan` (`sentryOptions` in `reporter/sentry.ts`).
 
-import { maskUrlWith } from "../url-secret.mjs";
+import {
+  isSecretQueryTerm,
+  isTokenLike,
+  maskUrlWith,
+  queryTermsOf,
+} from "../url-secret.mjs";
 
 const REDACTED = "[redacted]";
 
@@ -112,6 +117,34 @@ const redactText = (text: string) =>
     maskUrlsIn(text)
   );
 
+/** A URL's query, without its `?`, with each secret term's value masked, as {@link maskUrlWith} masks it in a URL */
+const maskQuery = (query: string) =>
+  queryTermsOf(`?${query}`)
+    .map(([name, value]) => {
+      const isSecret = isSecretQueryTerm(name, value);
+      if (value === undefined) return isSecret ? REDACTED : name;
+      return `${name}=${isSecret ? REDACTED : value}`;
+    })
+    .join("&");
+
+/**
+ * Span attributes that hold one part of a URL without the `?` or `#` the URL
+ * rule finds it by: Sentry's fetch instrumentation copies them from the URL.
+ */
+const URL_PART_RULES = new Map<string, (text: string) => string>([
+  ["url.query", maskQuery],
+  ["url.fragment", (fragment) => (isTokenLike(fragment) ? REDACTED : fragment)],
+]);
+
+/** `item` under `key` with its secrets redacted, by the URL rule for a URL part {@link URL_PART_RULES} names */
+const redactEntryWith =
+  (walk: (value: unknown) => unknown) => (key: string, item: unknown) => {
+    const rule = URL_PART_RULES.get(key);
+    return typeof item === "string" && rule !== undefined
+      ? redactText(rule(item))
+      : walk(item);
+  };
+
 const isByte = (value: unknown) =>
   typeof value === "number" &&
   Number.isInteger(value) &&
@@ -166,10 +199,11 @@ const walkWith =
     // One level down, so a `toJSON` that returns a fresh object each time still ends
     if (data !== value) return walkBelow(data);
     if (Array.isArray(value)) return value.map((item) => walkBelow(item));
+    const redactEntry = redactEntryWith(walkBelow);
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [
         redactText(key),
-        walkBelow(item),
+        redactEntry(key, item),
       ])
     );
   };
@@ -304,19 +338,30 @@ export const scrubEvent = <E extends ScrubbableEvent>(event: E): E => {
   }
 };
 
+/** The `data` key {@link scrubSpan} sets on a span it could not walk */
+const WITHHELD = "scrub.withheld";
+
+interface WithRootSpan {
+  contexts?: { trace?: { data?: Record<string, unknown> } };
+}
+
+/** Whether `beforeSendSpan` withheld the root span, which Sentry merges back into the transaction */
+const isRootWithheld = (event: object) =>
+  (event as WithRootSpan).contexts?.trace?.data?.[WITHHELD] === true;
+
 /**
  * A transaction scrubbed as {@link scrubEvent} scrubs an error, its spans
- * included, or `null` to drop it when the walk throws: a withheld stand-in
- * would carry no measurement and still cost quota.
+ * included, or `null` to drop it when the walk throws or its root span was
+ * withheld: a stand-in would carry no name or measurement and still cost quota.
  */
 export const scrubTransaction = <E extends object>(event: E): E | null => {
   try {
-    return scrubbedOf(event);
+    if (!isRootWithheld(event)) return scrubbedOf(event);
   } catch {
     // Not logged: importing the logger would close a cycle (logger, providers/sentry, reporter, scrub); Sentry's client reports count the drop as `before_send` for category `transaction`
-    // eslint-disable-next-line unicorn/no-null -- Sentry's `beforeSendTransaction` drops a transaction only on `null`
-    return null;
   }
+  // eslint-disable-next-line unicorn/no-null -- Sentry's `beforeSendTransaction` drops a transaction only on `null`
+  return null;
 };
 
 /**
@@ -338,13 +383,31 @@ interface ScrubbableSpan {
   status?: string;
   start_timestamp?: number;
   timestamp?: number;
+  measurements?: unknown;
 }
 
+/** The measurements whose value is a number: a Web Vital keeps its value when the rest of its span is withheld */
+const numericMeasurementsOf = (measurements: unknown) => {
+  if (typeof measurements !== "object" || measurements === null) {
+    return undefined;
+  }
+  return Object.fromEntries(
+    Object.entries(measurements).flatMap(([name, measurement]) => {
+      const { value, unit } = (measurement ?? {}) as {
+        value?: unknown;
+        unit?: unknown;
+      };
+      return typeof value === "number"
+        ? [[redactText(name), { value, unit: textOf(unit) }]]
+        : [];
+    })
+  );
+};
+
 /**
- * A span with every value in it redacted: `beforeSendSpan` sees the
- * standalone INP span that {@link scrubTransaction} never does. Sentry cannot
- * drop a span there, so one the walk cannot finish keeps only its ids, op,
- * status and timing.
+ * A span with every value redacted, run by `beforeSendSpan` on each span of a transaction, root
+ * included, before {@link scrubTransaction}, and on the standalone INP span. One the walk cannot
+ * finish keeps ids, op, status, timing and numeric measurements, marked {@link WITHHELD}.
  */
 export const scrubSpan = <S extends ScrubbableSpan>(span: S): S => {
   try {
@@ -359,7 +422,9 @@ export const scrubSpan = <S extends ScrubbableSpan>(span: S): S => {
       status: attempt(() => textOf(span.status)),
       start_timestamp: attempt(() => span.start_timestamp),
       timestamp: attempt(() => span.timestamp),
-      data: {},
+      measurements: attempt(() => numericMeasurementsOf(span.measurements)),
+      description: "Span withheld: scrubbing it failed",
+      data: { [WITHHELD]: true },
     } as unknown as S;
   }
 };
@@ -642,6 +707,22 @@ if (import.meta.vitest) {
         expect(redact(text)).toBe(shown);
       });
 
+      // Each mark ends the sentence, not the URL; a row fails if its mark leaves the trim lists
+      it.each([",", ";", ":", "!", "]"])(
+        "should mask the last segment of a URL followed by %s and keep the mark",
+        (mark) => {
+          expect(
+            redact(`see https://x.test/a/abc123def456ghi789${mark} then`)
+          ).toBe(`see https://x.test/a/[redacted]${mark} then`);
+        }
+      );
+
+      it("should mask the last segment of a URL that ends in a character a key is not written in", () => {
+        expect(redact("see https://x.test/a/abc123def456ghi789* then")).toBe(
+          "see https://x.test/a/[redacted] then"
+        );
+      });
+
       it("should leave numbers, booleans and null as they are", () => {
         // eslint-disable-next-line unicorn/no-null -- a Sentry event carries `null` values, and they pass through
         const nothing = null;
@@ -775,6 +856,48 @@ if (import.meta.vitest) {
         });
       });
 
+      it("should keep the app's own bundle names in frames and debug images, and mask a token in their place", () => {
+        const BUNDLE = "https://playground.test/static/js/main.3f2a1b4c.js";
+        const TOKEN = "https://playground.test/static/js/abc123def456ghi789.js";
+
+        expect(
+          scrubEvent({
+            exception: {
+              values: [
+                {
+                  type: "Error",
+                  stacktrace: {
+                    frames: [
+                      { filename: BUNDLE, abs_path: BUNDLE },
+                      { filename: TOKEN, abs_path: TOKEN },
+                    ],
+                  },
+                },
+              ],
+            },
+            debug_meta: { images: [{ type: "sourcemap", code_file: BUNDLE }] },
+          })
+        ).toEqual({
+          exception: {
+            values: [
+              {
+                type: "Error",
+                stacktrace: {
+                  frames: [
+                    { filename: BUNDLE, abs_path: BUNDLE },
+                    {
+                      filename: "https://playground.test/static/js/[redacted]",
+                      abs_path: "https://playground.test/static/js/[redacted]",
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+          debug_meta: { images: [{ type: "sourcemap", code_file: BUNDLE }] },
+        });
+      });
+
       it("should leave an event with nothing to scrub as it is", () => {
         expect(scrubEvent({ message: "push rejected" })).toEqual({
           message: "push rejected",
@@ -884,7 +1007,7 @@ if (import.meta.vitest) {
     });
 
     describe("scrubSpan", () => {
-      it("should keep only the ids, op, status and timing of a span it cannot walk", () => {
+      it("should keep only the ids, op, status, timing and numeric measurements of a span it cannot walk, marked", () => {
         const hostile = {
           get boom(): string {
             throw new TypeError(`getter ${KEY}`);
@@ -902,6 +1025,10 @@ if (import.meta.vitest) {
             timestamp: 2,
             description: `button#k-${KEY}`,
             data: { hostile },
+            measurements: {
+              inp: { value: 120, unit: "millisecond" },
+              note: { value: `k-${KEY}` },
+            },
           })
         ).toEqual({
           span_id: "s1",
@@ -911,7 +1038,9 @@ if (import.meta.vitest) {
           status: "ok",
           start_timestamp: 1,
           timestamp: 2,
-          data: {},
+          measurements: { inp: { value: 120, unit: "millisecond" } },
+          description: "Span withheld: scrubbing it failed",
+          data: { "scrub.withheld": true },
         });
       });
     });
