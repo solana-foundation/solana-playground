@@ -455,8 +455,10 @@ production without this command ([Deploying production](#deploying-production)).
    - **The functions.** Traces lists `GET /api/sync` spans from the requests of check 2: every API function sends a
      span per request while `SENTRY_TRACES_SAMPLE_RATE` is unset.
    - **Page loads.** While `REACT_APP_SENTRY_TRACES_SAMPLE_RATE` is unset or `1`, Traces lists a `pageload`
-     transaction from the page loads of checks 4 to 6, with LCP and CLS among its measurements, and the Web Vitals
-     dashboard shows environment `production`. At a lower rate a page load may go untraced, so this check does not
+     transaction from the page loads of checks 4 to 6, with LCP and CLS among its measurements. Pending task 1.6 of
+     [`sentry-browser-tracing`](../../openspec/changes/sentry-browser-tracing/design.md#risks--trade-offs), which checks
+     whether the Web Vitals dashboard reads these transactions at all: the dashboard shows environment `production`.
+     Until that task is ticked, an empty dashboard is not a deploy fault. At a lower rate a page load may go untraced, so this check does not
      apply. The browser sends no trace headers, so the `GET /api/sync` spans of the functions check follow
      `SENTRY_TRACES_SAMPLE_RATE` alone.
 9. With RPC URLs set: Settings › Network offers Mainnet, Devnet and Testnet on your provider's URLs, and a program

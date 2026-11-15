@@ -6,6 +6,7 @@
 import {
   isSecretQueryTerm,
   isTokenLike,
+  maskHostWith,
   maskUrlWith,
   queryTermsOf,
 } from "../url-secret.mjs";
@@ -127,11 +128,15 @@ const maskQuery = (query: string) =>
     })
     .join("&");
 
+const maskHost = maskHostWith(REDACTED);
+
 /**
- * Span attributes that hold one part of a URL without the `?` or `#` the URL
- * rule finds it by: Sentry's fetch instrumentation copies them from the URL.
+ * Span attributes that hold one part of a URL without the `http(s)://`, `?` or
+ * `#` the URL rule finds it by: Sentry's fetch instrumentation copies them from the URL.
  */
 const URL_PART_RULES = new Map<string, (text: string) => string>([
+  ["server.address", maskHost],
+  ["url.domain", maskHost],
   ["url.query", maskQuery],
   ["url.fragment", (fragment) => (isTokenLike(fragment) ? REDACTED : fragment)],
 ]);
@@ -341,27 +346,19 @@ export const scrubEvent = <E extends ScrubbableEvent>(event: E): E => {
 /** The `data` key {@link scrubSpan} sets on a span it could not walk */
 const WITHHELD = "scrub.withheld";
 
-interface WithRootSpan {
-  contexts?: { trace?: { data?: Record<string, unknown> } };
-}
-
-/** Whether `beforeSendSpan` withheld the root span, which Sentry merges back into the transaction */
-const isRootWithheld = (event: object) =>
-  (event as WithRootSpan).contexts?.trace?.data?.[WITHHELD] === true;
-
 /**
  * A transaction scrubbed as {@link scrubEvent} scrubs an error, its spans
- * included, or `null` to drop it when the walk throws or its root span was
- * withheld: a stand-in would carry no name or measurement and still cost quota.
+ * included, or `null` to drop it when the walk throws. One whose root span
+ * {@link scrubSpan} withheld is sent: it keeps its numeric measurements, marked {@link WITHHELD}.
  */
 export const scrubTransaction = <E extends object>(event: E): E | null => {
   try {
-    if (!isRootWithheld(event)) return scrubbedOf(event);
+    return scrubbedOf(event);
   } catch {
     // Not logged: importing the logger would close a cycle (logger, providers/sentry, reporter, scrub); Sentry's client reports count the drop as `before_send` for category `transaction`
+    // eslint-disable-next-line unicorn/no-null -- Sentry's `beforeSendTransaction` drops a transaction only on `null`
+    return null;
   }
-  // eslint-disable-next-line unicorn/no-null -- Sentry's `beforeSendTransaction` drops a transaction only on `null`
-  return null;
 };
 
 /**
@@ -717,6 +714,23 @@ if (import.meta.vitest) {
         }
       );
 
+      it.each([
+        {
+          name: "a media file of the app",
+          url: "https://playground.test/static/media/logo.5d5d9eef2e3a1b7c9d01.svg",
+          shown:
+            "https://playground.test/static/media/logo.5d5d9eef2e3a1b7c9d01.svg",
+        },
+        {
+          name: "a token segment above the app's bundle",
+          url: "https://playground.test/abc123def456ghi789/static/js/main.3f2a1b4c.js",
+          shown:
+            "https://playground.test/[redacted]/static/js/main.3f2a1b4c.js",
+        },
+      ])("should show $name as $shown", ({ url, shown }) => {
+        expect(redact(url)).toBe(shown);
+      });
+
       it("should mask the last segment of a URL that ends in a character a key is not written in", () => {
         expect(redact("see https://x.test/a/abc123def456ghi789* then")).toBe(
           "see https://x.test/a/[redacted] then"
@@ -856,9 +870,11 @@ if (import.meta.vitest) {
         });
       });
 
-      it("should keep the app's own bundle names in frames and debug images, and mask a token in their place", () => {
+      it("should keep a content-hashed static file name whose name part is not a token in frames and debug images, and mask one whose name part is", () => {
         const BUNDLE = "https://playground.test/static/js/main.3f2a1b4c.js";
-        const TOKEN = "https://playground.test/static/js/abc123def456ghi789.js";
+        const CHUNK = "https://playground.test/static/js/812.a1b2c3d4.chunk.js";
+        const TOKEN =
+          "https://playground.test/static/js/abc123def456ghi789.3f2a1b4c.js";
 
         expect(
           scrubEvent({
@@ -869,6 +885,7 @@ if (import.meta.vitest) {
                   stacktrace: {
                     frames: [
                       { filename: BUNDLE, abs_path: BUNDLE },
+                      { filename: CHUNK, abs_path: CHUNK },
                       { filename: TOKEN, abs_path: TOKEN },
                     ],
                   },
@@ -885,6 +902,7 @@ if (import.meta.vitest) {
                 stacktrace: {
                   frames: [
                     { filename: BUNDLE, abs_path: BUNDLE },
+                    { filename: CHUNK, abs_path: CHUNK },
                     {
                       filename: "https://playground.test/static/js/[redacted]",
                       abs_path: "https://playground.test/static/js/[redacted]",

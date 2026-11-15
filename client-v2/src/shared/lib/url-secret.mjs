@@ -27,9 +27,33 @@ export const isTokenLike = (value) => {
   );
 };
 
-/** CRA's content-hashed build output (`static/js/main.3f2a1b4c.js`): a stack frame needs the name to find its source map */
+/** CRA's content-hashed build output (`static/js/main.3f2a1b4c.js`), its name part captured: a stack frame needs the file name to find its source map */
 const APP_ASSET =
-  /\/static\/(?:js|css|media)\/[\w-]+\.[0-9a-f]{8,32}(?:\.chunk)?\.[a-z0-9]+$/;
+  /\/static\/(?:js|css|media)\/([\w-]+)\.[0-9a-f]{8,32}(?:\.chunk)?\.[a-z0-9]+$/;
+
+/**
+ * Whether `pathname` ends in a file name of {@link APP_ASSET}'s shape whose
+ * name part is not itself token-like, as CRA's `main`, `812` and `logo` are.
+ *
+ * @param {string} pathname
+ * @returns {boolean}
+ */
+const isAppAsset = (pathname) => {
+  const name = APP_ASSET.exec(pathname)?.[1];
+  return name !== undefined && !isTokenLike(name);
+};
+
+/**
+ * `hostname` with each label that reads as a token replaced by `mask`.
+ *
+ * @param {string} mask what stands for each secret
+ * @returns {(hostname: string) => string}
+ */
+export const maskHostWith = (mask) => (hostname) =>
+  hostname
+    .split(".")
+    .map((label) => (isTokenLike(label) ? mask : label))
+    .join(".");
 
 /**
  * A URL's query as written, split into its terms: `[name, value]` for
@@ -86,8 +110,8 @@ export const isSecretQueryTerm = (name, value) =>
 /**
  * `url` with each secret replaced by `mask`: a user name or password, a host
  * label, path segment, bare query term or fragment that reads as a token, and
- * the value of a secret query term. The file name of a path {@link APP_ASSET}
- * matches stays. Built from the parsed parts split by hand,
+ * the value of a secret query term. The file name of a path {@link isAppAsset}
+ * accepts stays. Built from the parsed parts split by hand,
  * so names keep their spelling and `mask` is never percent-encoded; a value
  * that does not parse is `mask` whole.
  *
@@ -112,11 +136,11 @@ export const maskUrlWith = (mask) => (url) => {
 
   // A username and a password, either or both, show as one mask
   const auth = parsed.username || parsed.password ? `${maskOne()}@` : "";
-  const host =
-    parsed.hostname.split(".").map(maskToken).join(".") +
-    (parsed.port ? `:${parsed.port}` : "");
+  const hostname = maskHostWith(mask)(parsed.hostname);
+  if (hostname !== parsed.hostname) masked = true;
+  const host = hostname + (parsed.port ? `:${parsed.port}` : "");
   const segments = parsed.pathname.split("/");
-  const assetAt = APP_ASSET.test(parsed.pathname) ? segments.length - 1 : -1;
+  const assetAt = isAppAsset(parsed.pathname) ? segments.length - 1 : -1;
   const path = segments
     .map((segment, i) => (i === assetAt ? segment : maskToken(segment)))
     .join("/");

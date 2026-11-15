@@ -38,6 +38,8 @@ None.
   rate, and the browser sends no trace headers.
 - `client-v2-logging`: the rule that reports carry no secret key extends from error events and breadcrumbs to
   transactions and spans, and every URL in a report has its credentials redacted.
+- `client-v2-custom-rpcs`: the masking rule the saved RPC list shares with reports ignores characters outside the
+  token set at the end of a part, and shows a content-hashed file name under `static/` whose name part is not a token.
 
 ## Impact
 

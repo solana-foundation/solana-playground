@@ -186,22 +186,41 @@ describe("fetch spans", () => {
       )
       .filter((span) => span.op === "http.client");
 
-  it("should redact a bare token query term and a token fragment in a fetch span's attributes", async () => {
+  // `sig`, not `api-key`: Sentry's own query filter already hides `api-key`
+  it("should redact a bare token query term, a key-named query value and a token fragment in a fetch span's attributes", async () => {
     const TOKEN = "abc123def456ghi789";
 
     await Sentry.startNewTrace(() =>
       Sentry.startSpan({ name: "/", op: "pageload" }, async () => {
-        await fetch(`https://rpc.example.test/?${TOKEN}#${TOKEN}`);
+        await fetch(`https://rpc.example.test/?${TOKEN}&sig=abc#${TOKEN}`);
       })
     );
     await Sentry.flush();
 
     const [span] = httpSpansOf();
     expect(span.data).toMatchObject({
-      "url.query": "[redacted]",
+      "url.query": "[redacted]&sig=[redacted]",
       "url.fragment": "[redacted]",
     });
     expect(JSON.stringify(envelopes)).not.toContain(TOKEN);
+  });
+
+  it("should redact a token-like host label in a fetch span's server.address and url.domain", async () => {
+    const LABEL = "acme-mainnet-4f2a9c1b7d3e";
+
+    await Sentry.startNewTrace(() =>
+      Sentry.startSpan({ name: "/", op: "pageload" }, async () => {
+        await fetch(`https://${LABEL}.rpc.example.test/`);
+      })
+    );
+    await Sentry.flush();
+
+    const [span] = httpSpansOf();
+    expect(span.data).toMatchObject({
+      "server.address": "[redacted].rpc.example.test",
+      "url.domain": "[redacted].rpc.example.test",
+    });
+    expect(JSON.stringify(envelopes)).not.toContain(LABEL);
   });
 
   it("should add neither sentry-trace nor baggage to a same-origin or a cross-origin fetch in a sampled span", async () => {
@@ -421,18 +440,29 @@ describe("reporter scrub", () => {
         .filter(([header]) => header.type === "transaction")
         .map(([, event]) => event as unknown as ScrubbedTransaction);
 
-    it("should send nothing when it is the root span", async () => {
+    it("should send the transaction marked, with its measurements, when it is the root span", async () => {
       Sentry.startNewTrace(() =>
         Sentry.startSpan(
-          { name: "/", op: "pageload", attributes: { hostile } },
+          {
+            name: `/share?k=${KEY}`,
+            op: "pageload",
+            attributes: { hostile },
+          },
           () => {
+            Sentry.setMeasurement("lcp", 1200, "millisecond");
             Sentry.startSpan({ name: "child", op: "ui.render" }, () => {});
           }
         )
       );
       await Sentry.flush();
 
-      expect(transactionsOf()).toEqual([]);
+      const transactions = transactionsOf();
+      expect(transactions).toHaveLength(1);
+      expect(transactions[0]).toMatchObject({
+        contexts: { trace: { data: { "scrub.withheld": true } } },
+        measurements: { lcp: { value: 1200, unit: "millisecond" } },
+      });
+      expect(JSON.stringify(envelopes)).not.toContain(KEY);
     });
 
     it("should send the transaction with that child span marked as withheld", async () => {

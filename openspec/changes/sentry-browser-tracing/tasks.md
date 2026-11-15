@@ -9,8 +9,9 @@ Each task depends on the one before it; nothing runs in parallel.
   `Observability`'s `sentry` prop and `ReporterConfig` carry `tracesSampleRate`, and `sentryOptions` adds
   `browserTracingIntegration()`, `traceLifecycle: 'static'` and `beforeSendTransaction: scrubTransaction`. The rate
   defaults to 1. Document the variable in `.env.example`, `docs/production-runbook.md` and
-  `docs/deploy-client-vercel.md`. Verify: in-source tests of the parser give 1 for unset, `""`, `"abc"`, `"1.5"` and
-  `"-1"` (a warning for the last three), and the value itself for `0`, `0.25` and `1`; `scrub.ts` tests show `null`
+  `docs/deploy-client-vercel.md`. Verify: the parser's in-source rows give 1 without a warning for unset, `""` and
+  `" "`, 0 for `"0"`, and 1 with one warning naming the variable for `"1.5"`; the `SAMPLE_RATE` table in
+  `src/shared/lib/sample-rate.test.mjs` holds the pattern's accepted and rejected values; `scrub.ts` tests show `null`
   when the walk throws; `reporter/sentry.integration.test.ts` sends a transaction through a recording transport and
   finds it scrubbed; `Observability.test.tsx` passes the rate to `Sentry.init`; `yarn run check` passes. The PR states
   the `main` size from a build with `VERCEL_ENV=production` against one from `master`. HOO-2905.
@@ -21,15 +22,15 @@ Each task depends on the one before it; nothing runs in parallel.
   `maskRpcUrl`'s existing table passes unchanged; a `redact` table masks the Alchemy, QuickNode and `?api-key=` URLs
   of the logging spec and keeps `https://api.devnet.solana.com/`; the integration test finds no `sentry-trace` header
   on a same-origin and a cross-origin fetch inside a sampled span, and asserts `traceLifecycle` and
-  `beforeSendTransaction` on the client `reporter.init` builds; `public-env.test.mjs` accepts `0`, `0.25` and `1` and
-  rejects `1.5`, `-1` and `abc`; `yarn run check` passes. Depends on 1.1. HOO-2905.
+  `beforeSendTransaction` on the client `reporter.init` builds; the two traces sample rate rows of
+  `public-env.test.mjs` pass `0.25` and fail `1.5` with the problem naming the variable; `yarn run check` passes. Depends on 1.1. HOO-2905.
 - [x] 1.3 Apply the review of `6f7fdb84e` as design.md, Decisions 2, 3 and 5, describe: `beforeSendSpan` scrubs
   standalone spans (INP); `redact` masks a whole-URL string, IPv6 hosts and parentheses in paths; the browser parser
   and `public-env.mjs` share one decimal pattern; the logger provider test asserts the exact integration list.
   Verify: a standalone INP-shaped span with a token in `sentry.transaction` arrives redacted through the real client;
   `redact` masks `https://[2001:db8::1]/v2/abc123def456ghi789` and `https://rpc.example.com/rpc(v1)/abc123def456ghi789`,
-  and keeps the `)` of `(see https://x.test/a)` outside the URL; the parser gives 1 with a warning for `"0x1"` and
-  `"1e-1"`; `yarn run check` passes. Depends on 1.2. HOO-2905.
+  and keeps the `)` of `(see https://x.test/a)` outside the URL; the `SAMPLE_RATE` table in `sample-rate.test.mjs`
+  rejects `0x1` and `1e-1`; `yarn run check` passes. Depends on 1.2. HOO-2905.
 - [x] 1.4 Apply the review of `9d4ce3a40` as design.md, Decisions 2 and 5, describe: the URL masker keeps the file
   name of the app's content-hashed assets (`static/js/main.3f2a1b4c.js`); `redact` masks the `url.query` and
   `url.fragment` span attributes; `isTokenLike` ignores characters outside its alphabet at the end of a part; a span
@@ -42,16 +43,28 @@ Each task depends on the one before it; nothing runs in parallel.
   that span marked; `redact` masks the last segment before `,`, `;`, `:`, `!`, `]` and `*`; `SAMPLE_RATE` accepts
   `0`, `1`, `.5` and `1.0` and rejects `1.5`, `-1`, `0x1` and `1e-1`; `yarn run check` passes. Depends on 1.3.
   HOO-2905.
-- [ ] 1.5 Check the change on a preview before the merge: label the PR `preview`, set `SENTRY_PREVIEW_ENABLED=true`
+- [x] 1.5 Apply the review of `52897a80f` as design.md, Decisions 2 and 5, describe: `redact` masks a token-like
+  label of the host in the `server.address` and `url.domain` span attributes by the URL masker's host rule; a
+  transaction whose root span `scrubSpan` withheld is sent, scrubbed, with its numeric measurements and the
+  `scrub.withheld` marker, and `scrubTransaction` returns `null` only when its own walk throws; the URL masker keeps a
+  content-hashed file name under `static/` only when its name part is not token-like; the `client-v2-custom-rpcs`
+  masking requirement states the rule the screen follows; the runbook's Page loads check marks the dashboard clause
+  pending 1.6. Verify: through the real client, a fetch span to `acme-mainnet-4f2a9c1b7d3e.rpc.example.test` arrives
+  with both host attributes redacted, a `sig=abc` query term arrives as `sig=[redacted]` in `url.query`, and a
+  transaction whose root span cannot be scrubbed arrives marked, with its `lcp` measurement and no secret; a
+  `scrubEvent` test keeps `main.3f2a1b4c.js` and `812.a1b2c3d4.chunk.js` frames and masks
+  `abc123def456ghi789.3f2a1b4c.js`; `redact` keeps a `static/media/logo.<hash>.svg` URL and masks a token segment
+  above `static/js/main.<hash>.js`; `yarn run check` passes. Depends on 1.4. HOO-2905.
+- [ ] 1.6 Check the change on a preview before the merge: label the PR `preview`, set `SENTRY_PREVIEW_ENABLED=true`
   for it with the rate unset, and walk the manual scenarios of both delta specs. Verify: the `pageload` transaction
   shows in Sentry with LCP and CLS, the Web Vitals dashboard of project `solana-playground` shows the preview's
   environment, the PR lists each scenario with its result, and the PR states the preview's transaction count after
   one day in Sentry's usage stats, with production's projected monthly volume against the quota. If the dashboard
   stays empty while the transaction is in Discover, stop and update this change for stream mode (design.md, Risks).
-  Depends on 1.4. HOO-2905.
+  Depends on 1.5. HOO-2905.
 
 ## Workflow follow-up
 
 - After the merge, watch Sentry's usage stats for a week; if production's volume runs past the quota, set
   `REACT_APP_SENTRY_TRACES_SAMPLE_RATE` lower in Vercel and redeploy.
-- Archive the change in this PR once 1.5 is ticked (agreed 2026-11-14).
+- Archive the change in this PR once 1.6 is ticked (agreed 2026-11-14).
