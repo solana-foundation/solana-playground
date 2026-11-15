@@ -4,11 +4,10 @@
 // `beforeSendTransaction` and `beforeSendSpan` (`sentryOptions` in `reporter/sentry.ts`).
 
 import {
-  isSecretQueryTerm,
-  isTokenLike,
+  maskFragmentWith,
   maskHostWith,
+  maskQueryWith,
   maskUrlWith,
-  queryTermsOf,
 } from "../url-secret.mjs";
 
 const REDACTED = "[redacted]";
@@ -53,6 +52,9 @@ const SECRET_PATTERNS: [RegExp, string][] = [
 /** Past this depth a value is replaced rather than walked; Sentry's own normalising stops at 3 */
 const MAX_DEPTH = 12;
 
+/** Before a comma that starts another URL, as in endpoints joined by commas: each is masked as a URL of its own */
+const NEXT_URL = /(?=,https?:\/\/)/i;
+
 /**
  * An `http(s)://` URL in running text, up to whitespace, a quote, an angle
  * bracket, a brace or a character a URL escapes; brackets and parentheses stay
@@ -85,7 +87,7 @@ const urlPartOf = (match: string) => {
 
 /** A string that is one `http(s)://` URL from its first character to its last, as a span's `url.full` is */
 const isWholeUrl = (text: string) => {
-  if (!/^https?:\/\/\S+$/i.test(text)) return false;
+  if (!/^https?:\/\/\S+$/i.test(text) || NEXT_URL.test(text)) return false;
   try {
     return new URL(text).href !== "";
   } catch {
@@ -102,14 +104,21 @@ const maskedUrl = (url: string) => {
   return masked ? shown : url;
 };
 
+/** One URL found in text, a leading comma kept, with its secrets masked and its trailing punctuation kept */
+const maskFoundUrl = (found: string) => {
+  const comma = found.startsWith(",") ? "," : "";
+  const match = found.slice(comma.length);
+  const url = urlPartOf(match);
+  return comma + maskedUrl(url) + match.slice(url.length);
+};
+
 /** `text` with the secrets of each URL in it masked */
 const maskUrlsIn = (text: string) =>
   isWholeUrl(text)
     ? maskedUrl(text)
-    : text.replace(URL_IN_TEXT, (match) => {
-        const url = urlPartOf(match);
-        return maskedUrl(url) + match.slice(url.length);
-      });
+    : text.replace(URL_IN_TEXT, (match) =>
+        match.split(NEXT_URL).map(maskFoundUrl).join("")
+      );
 
 const redactText = (text: string) =>
   SECRET_PATTERNS.reduce(
@@ -117,16 +126,6 @@ const redactText = (text: string) =>
       scrubbed.replace(pattern, replacement),
     maskUrlsIn(text)
   );
-
-/** A URL's query, without its `?`, with each secret term's value masked, as {@link maskUrlWith} masks it in a URL */
-const maskQuery = (query: string) =>
-  queryTermsOf(`?${query}`)
-    .map(([name, value]) => {
-      const isSecret = isSecretQueryTerm(name, value);
-      if (value === undefined) return isSecret ? REDACTED : name;
-      return `${name}=${isSecret ? REDACTED : value}`;
-    })
-    .join("&");
 
 const maskHost = maskHostWith(REDACTED);
 
@@ -137,8 +136,8 @@ const maskHost = maskHostWith(REDACTED);
 const URL_PART_RULES = new Map<string, (text: string) => string>([
   ["server.address", maskHost],
   ["url.domain", maskHost],
-  ["url.query", maskQuery],
-  ["url.fragment", (fragment) => (isTokenLike(fragment) ? REDACTED : fragment)],
+  ["url.query", maskQueryWith(REDACTED)],
+  ["url.fragment", maskFragmentWith(REDACTED)],
 ]);
 
 /** `item` under `key` with its secrets redacted, by the URL rule for a URL part {@link URL_PART_RULES} names */
@@ -241,6 +240,12 @@ const attempt = <T>(read: () => T): T | undefined => {
 const textOf = (value: unknown) =>
   typeof value === "string" ? redactText(value) : undefined;
 
+/** What the scrub threw, by name: an `Error`'s `name`, else the value's type */
+const failureNameOf = (failure: unknown) =>
+  attempt(() =>
+    failure instanceof Error ? textOf(failure.name) : typeof failure
+  );
+
 /**
  * A breadcrumb fit to send, or `null` to drop it. Every `console` breadcrumb
  * is dropped: the user's tests print to this window's console, and nothing in
@@ -294,9 +299,7 @@ const withheld = <E extends ScrubbableEvent>(event: E, failure: unknown): E => {
       .filter(Boolean)
       .join(", ")
   );
-  const thrown = attempt(() =>
-    failure instanceof Error ? textOf(failure.name) : typeof failure
-  );
+  const thrown = failureNameOf(failure);
   const tags: Record<string, string> = {};
   if (ns) tags.ns = ns;
   if (types) tags.exception_type = types;
@@ -348,18 +351,22 @@ const WITHHELD = "scrub.withheld";
 
 /**
  * A transaction scrubbed as {@link scrubEvent} scrubs an error, its spans
- * included, or `null` to drop it when the walk throws. One whose root span
- * {@link scrubSpan} withheld is sent: it keeps its numeric measurements, marked {@link WITHHELD}.
+ * included, or `null` to drop it when the walk throws, after `onWithheld` gets
+ * the failure's name. One whose root span {@link scrubSpan} withheld is sent,
+ * marked {@link WITHHELD}, with its numeric measurements.
  */
-export const scrubTransaction = <E extends object>(event: E): E | null => {
-  try {
-    return scrubbedOf(event);
-  } catch {
-    // Not logged: importing the logger would close a cycle (logger, providers/sentry, reporter, scrub); Sentry's client reports count the drop as `before_send` for category `transaction`
-    // eslint-disable-next-line unicorn/no-null -- Sentry's `beforeSendTransaction` drops a transaction only on `null`
-    return null;
-  }
-};
+export const scrubTransactionWith =
+  (onWithheld: (failure: string | undefined) => void) =>
+  <E extends object>(event: E): E | null => {
+    try {
+      return scrubbedOf(event);
+    } catch (failure) {
+      // The logger would close an import cycle (logger, providers/sentry, reporter, scrub), so the caller reports
+      onWithheld(failureNameOf(failure));
+      // eslint-disable-next-line unicorn/no-null -- Sentry's `beforeSendTransaction` drops a transaction only on `null`
+      return null;
+    }
+  };
 
 /**
  * Redacts, in place, the root span's name in a dynamic sampling context: a
@@ -367,7 +374,7 @@ export const scrubTransaction = <E extends object>(event: E): E | null => {
  * sees the header. Sentry's `createDsc` hook passes the context to change.
  */
 export const scrubSamplingContext = (context: { transaction?: string }) => {
-  if (context.transaction !== undefined) {
+  if (typeof context.transaction === "string") {
     context.transaction = redactText(context.transaction);
   }
 };
@@ -403,14 +410,14 @@ const numericMeasurementsOf = (measurements: unknown) => {
 
 /**
  * A span with every value redacted, run by `beforeSendSpan` on each span of a transaction, root
- * included, before {@link scrubTransaction}, and on the standalone INP span. One the walk cannot
+ * included, before {@link scrubTransactionWith}, and on the standalone INP span. One the walk cannot
  * finish keeps ids, op, status, timing and numeric measurements, marked {@link WITHHELD}.
  */
 export const scrubSpan = <S extends ScrubbableSpan>(span: S): S => {
   try {
     return redact(span) as S;
   } catch {
-    // Not logged, as in `scrubTransaction`: the logger would close an import cycle
+    // Not logged: the logger would close an import cycle, as `scrubTransactionWith` says; the marker tells a reader
     return {
       span_id: attempt(() => textOf(span.span_id)),
       trace_id: attempt(() => textOf(span.trace_id)),
@@ -427,7 +434,7 @@ export const scrubSpan = <S extends ScrubbableSpan>(span: S): S => {
 };
 
 if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
+  const { describe, it, expect, vi } = import.meta.vitest;
 
   describe("shared/lib/reporter/scrub", () => {
     // A 64-byte secret key's length in base58, and a 44-character public key
@@ -731,10 +738,51 @@ if (import.meta.vitest) {
         expect(redact(url)).toBe(shown);
       });
 
-      it("should mask the last segment of a URL that ends in a character a key is not written in", () => {
-        expect(redact("see https://x.test/a/abc123def456ghi789* then")).toBe(
-          "see https://x.test/a/[redacted] then"
+      it.each([
+        {
+          name: "a character a key is not written in after it",
+          text: "see https://x.test/a/abc123def456ghi789* then",
+          shown: "see https://x.test/a/[redacted]* then",
+        },
+        {
+          name: "a comma and a word after it",
+          text: "https://x.test/v2/abc123def456ghi789,then",
+          shown: "https://x.test/v2/[redacted],then",
+        },
+        {
+          name: "a matrix parameter after it",
+          text: "https://x.test/v2/abc123def456ghi789;v=1",
+          shown: "https://x.test/v2/[redacted];v=1",
+        },
+        {
+          name: "a second URL joined by a comma",
+          text: "https://a.test/v2/abc123def456ghi789,https://u:pw@b.test/v2/abc123def456ghi789",
+          shown:
+            "https://a.test/v2/[redacted],https://[redacted]@b.test/v2/[redacted]",
+        },
+      ])(
+        "should mask a token in a segment with $name, keeping the rest",
+        ({ text, shown }) => {
+          expect(redact(text)).toBe(shown);
+        }
+      );
+
+      it("should mask a token host label before a port in server.address, keeping the port", () => {
+        expect(redact({ "server.address": "abc123def456ghi789:8899" })).toEqual(
+          { "server.address": "[redacted]:8899" }
         );
+      });
+
+      it("should keep the clean parts of url.query and url.fragment", () => {
+        expect(
+          redact({
+            "url.query": "cluster=devnet&sig=abc",
+            "url.fragment": "section",
+          })
+        ).toEqual({
+          "url.query": "cluster=devnet&sig=[redacted]",
+          "url.fragment": "section",
+        });
       });
 
       it("should leave numbers, booleans and null as they are", () => {
@@ -995,10 +1043,12 @@ if (import.meta.vitest) {
       );
     });
 
-    describe("scrubTransaction", () => {
-      it("should drop a console breadcrumb merged into the transaction", () => {
+    describe("scrubTransactionWith", () => {
+      it("should drop a console breadcrumb merged into the transaction, and report nothing", () => {
+        const onWithheld = vi.fn();
+
         expect(
-          scrubTransaction({
+          scrubTransactionWith(onWithheld)({
             type: "transaction",
             breadcrumbs: [
               { category: "console", message: "  1) failing test" },
@@ -1009,9 +1059,11 @@ if (import.meta.vitest) {
           type: "transaction",
           breadcrumbs: [{ category: "ui.click", message: "button.deploy" }],
         });
+        expect(onWithheld).not.toHaveBeenCalled();
       });
 
-      it("should drop a transaction it cannot walk", () => {
+      it("should drop a transaction it cannot walk and pass the failure's name to onWithheld", () => {
+        const onWithheld = vi.fn();
         const hostile = {
           get boom(): string {
             throw new TypeError(`getter ${KEY}`);
@@ -1019,8 +1071,27 @@ if (import.meta.vitest) {
         };
 
         expect(
-          scrubTransaction({ type: "transaction", spans: [{ data: hostile }] })
+          scrubTransactionWith(onWithheld)({
+            type: "transaction",
+            spans: [{ data: hostile }],
+          })
         ).toBeNull();
+        expect(onWithheld.mock.calls).toEqual([["TypeError"]]);
+      });
+    });
+
+    describe("scrubSamplingContext", () => {
+      it.each([
+        {
+          name: "a transaction name",
+          context: { transaction: `/share?k=${KEY}` },
+          scrubbed: { transaction: "/share?k=[redacted]" },
+        },
+        { name: "no transaction name", context: {}, scrubbed: {} },
+      ])("should redact $name in place", ({ context, scrubbed }) => {
+        scrubSamplingContext(context);
+
+        expect(context).toEqual(scrubbed);
       });
     });
 

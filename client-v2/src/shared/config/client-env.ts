@@ -39,10 +39,8 @@ export const SEND_TX_PER_SECOND = {
 };
 
 /**
- * Error reporting, tracing, analytics and the console log level. Unset, the
- * DSN and the GA id turn their part off, the trace rate means 1, and the log
- * level is the console provider's default for the environment. A getter, read
- * when called, because tests stub these per case.
+ * Error reporting, tracing, analytics and the console log level. Read when
+ * called, because tests stub these per case; each consumer owns its default.
  */
 export const observabilityEnv = () => ({
   SENTRY_DSN: process.env.REACT_APP_SENTRY_DSN,

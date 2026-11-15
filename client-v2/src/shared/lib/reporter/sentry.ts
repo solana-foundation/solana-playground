@@ -8,7 +8,7 @@ import {
   scrubEvent,
   scrubSamplingContext,
   scrubSpan,
-  scrubTransaction,
+  scrubTransactionWith,
 } from "./scrub";
 import type { Feedback, Reporter, ReporterConfig } from "./types";
 
@@ -34,6 +34,28 @@ const scrubSamplingContextIntegration = () => ({
     client.on("createDsc", scrubSamplingContext);
   },
 });
+
+/** Whether this session has reported a withheld transaction: one message says the scrub fails, more only cost quota */
+let hasReportedWithheld = false;
+
+/** Sends one message per session when a transaction is dropped because scrubbing it threw; `beforeSend` scrubs it */
+const reportWithheldTransaction = (failure: string | undefined) => {
+  if (hasReportedWithheld) return;
+  hasReportedWithheld = true;
+  const scope = new Sentry.Scope();
+  scope.setTag("scrub_error", failure ?? "unknown");
+  // Fresh scopes: the value the scrub threw on usually sits in the app's, and would withhold this message too
+  Sentry.withIsolationScope(new Sentry.Scope(), () =>
+    Sentry.getClient()?.captureMessage(
+      "Transaction withheld: scrubbing it failed",
+      "warning",
+      undefined,
+      scope
+    )
+  );
+};
+
+const scrubTransaction = scrubTransactionWith(reportWithheldTransaction);
 
 /** What `init` passes `Sentry.init`, and the integration test passes it too */
 export const sentryOptions = ({
