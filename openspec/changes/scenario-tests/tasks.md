@@ -31,16 +31,17 @@ follows 2.2, 3.1, 4.1, and 4.2. Each task that changes `client-v2/scripts/` titl
   `describe.skipIf(condition)("title", fn)`, as the base call of that member, conditionally skipped; count literal
   titles only; skip an unconditional skip (`.skip`, `.fixme`,
   and `.todo` on `test`, `it`, and `describe`, `test.describe.skip` and `test.describe.fixme` included, an in-body
-  `test.skip()` or `test.fixme()` with no argument as a statement of the body itself, an in-body `test.skip(true, …)`
-  or `test.fixme(true, …)` with the literal `true`, and a `node:test` `skip` or `todo` option that is `true` or a
-  string) and count a conditional one, a `test.skip()` or `test.fixme()` with no argument inside an `if` included;
+  `test.skip()` or `test.fixme()` with no argument, or `test.skip(true, …)` or `test.fixme(true, …)` with the literal
+  `true`, as a statement of the body itself, and a `node:test` `skip` or `todo` option that is `true` or a
+  string) and count a conditional one, either of those calls inside an `if` included;
   report a `(manual)` scenario a test cites as a conflict; and assign each file
   its level by path (design.md, decisions 3, 4, and 6); verify with `node --test scripts/spec-coverage.test.mjs`
   covering the scenarios of "Every scenario is a test or is marked manual" except "A manual scenario a test cites",
   which needs the strict list of 4.1, and the scenarios of "A scenario is checked at the integration or the
   end-to-end level" and "Titles are string literals"; among them "A test inside a skipped describe", "A test inside
   a describe with a modifier", "A node test skipped with the literal true", "A vitest test skipped with skipIf", "A
-  test that skips itself with the literal true", "A zero-argument skip inside an if", and "A title in single quotes"
+  test that skips itself with the literal true", "A zero-argument skip inside an if", "A literal-true skip inside an
+  if", and "A title in single quotes"
   (ticket to file)
 - [ ] 2.2 Read each scenario's clauses (GIVEN included, wrapped lines joined), normalise them and the step titles,
   and match them by nesting, with one rule for both runners (design.md, decision 5): the step of a container clause

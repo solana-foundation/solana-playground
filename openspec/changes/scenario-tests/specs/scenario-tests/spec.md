@@ -15,13 +15,13 @@ report, the generated `tests.md` of each capability, and the per-capability stri
 Every `#### Scenario:` in a spec under `openspec/specs/` or an active change SHALL be checked by a test titled
 `<capability>: <scenario name>`, where `<capability>` is the folder that holds the `spec.md`, or SHALL end its heading
 with `(manual)`. An unconditionally skipped or unwritten test SHALL NOT count: `.skip`, `.fixme`, or `.todo` on
-`test`, `it`, or `describe`, `test.describe.skip` and `test.describe.fixme` included; a test whose body holds
-`test.skip()` or `test.fixme()` with no argument, as a statement of the body itself; a test whose body calls
-`test.skip(true, …)` or `test.fixme(true, …)` with the literal `true`; and a `node:test` call whose `skip` or `todo`
-option is the literal `true` or a string. A conditionally skipped test SHALL count: an in-body
-`test.skip(<condition>, …)` or `test.fixme(<condition>, …)` with any other condition, a `test.skip()` or
-`test.fixme()` with no argument anywhere else in the body, such as inside an `if`, a `skip` or `todo` option holding
-any other expression, and vitest's `skipIf` and `runIf`. A member call other than the skip forms this requirement
+`test`, `it`, or `describe`, `test.describe.skip` and `test.describe.fixme` included; a test whose body holds, as a
+statement of the body itself, `test.skip()` or `test.fixme()` with no argument, or `test.skip(true, …)` or
+`test.fixme(true, …)` with the literal `true`; and a `node:test` call whose `skip` or `todo` option is the literal
+`true` or a string. A conditionally skipped test SHALL count: an in-body `test.skip(<condition>, …)` or
+`test.fixme(<condition>, …)` with any other condition, a `test.skip` or `test.fixme` call with no argument or with
+the literal `true` anywhere else in the body, such as inside an `if`, a `skip` or `todo` option holding any other
+expression, and vitest's `skipIf` and `runIf`. A member call other than the skip forms this requirement
 names (`skip`, `fixme`, `todo`, `skipIf`, `runIf`) and `test.step.skip` SHALL be read as its base call: `test.only`,
 `describe.only`, `it.only`, `describe.concurrent`, and `it.fails` are examples. A scenario that only a `## REMOVED`
 section of a delta names SHALL owe no test from the delta. A scenario marked `(manual)` that a test cites SHALL be
@@ -83,12 +83,17 @@ reported as a conflict, and in a strict capability `yarn spec:coverage` SHALL ex
 
 #### Scenario: A test that skips itself with the literal true
 
-- **WHEN** the only test titled with a scenario calls `test.skip(true, "parked")` inside its body
+- **WHEN** the only test titled with a scenario calls `test.skip(true, "parked")` as a statement of its body
 - **THEN** lists the scenario as uncovered
 
 #### Scenario: A zero-argument skip inside an if
 
 - **WHEN** the only test titled with a scenario calls `test.skip()` inside `if (isLive)` in its body
+- **THEN** counts the scenario as tested
+
+#### Scenario: A literal-true skip inside an if
+
+- **WHEN** the only test titled with a scenario calls `test.skip(true, "live only")` inside `if (isLive)` in its body
 - **THEN** counts the scenario as tested
 
 #### Scenario: A manual scenario

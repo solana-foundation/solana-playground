@@ -171,22 +171,24 @@ does not count:
 
 - `.skip`, `.fixme`, and `.todo` on `test`, `it`, and `describe`, `test.describe.skip` and `test.describe.fixme`
   included;
-- a test whose body holds `test.skip()` or `test.fixme()` with no argument, as a statement of the body itself;
-- a test whose body calls `test.skip(true, …)` or `test.fixme(true, …)` with the literal `true`;
+- a test whose body holds, as a statement of the body itself, `test.skip()` or `test.fixme()` with no argument, or
+  `test.skip(true, …)` or `test.fixme(true, …)` with the literal `true`;
 - a `node:test` call whose options hold `skip` or `todo` as the literal `true` or a string.
 
 A `test.step.skip` is not a step of its clause, so that clause is missing for the test.
 
 A conditional skip counts as covering the scenario: an in-body `test.skip(<condition>, …)` or
-`test.fixme(<condition>, …)` with any other condition, a `test.skip()` or `test.fixme()` with no argument anywhere
-else in the body, such as inside an `if`, a `node:test` `skip` or `todo` option holding any other expression, and
-vitest's `skipIf` and `runIf`.
+`test.fixme(<condition>, …)` with any other condition, a `test.skip` or `test.fixme` call with no argument or with
+the literal `true` anywhere else in the body, such as inside an `if`, a `node:test` `skip` or `todo` option holding
+any other expression, and vitest's `skipIf` and `runIf`.
 
 Why: the checker reads source text and cannot evaluate a condition such as `browserName === "firefox"` or `!DB`. A
 conditionally skipped test runs in some environment, and counting it as skipped would report
 `client-v2-layout: The editor's keyboard button on an iPhone` as uncovered, though CI runs it on Chromium (Context).
-The literal `true`, like `node:test`'s `skip: true`, and a zero-argument statement of the test body need no
-evaluation, so they are unconditional. The cost, a test whose condition holds in CI, is in Risks.
+A zero-argument call or a call with the literal `true`, as a statement of the test body, needs no evaluation, like
+`node:test`'s `skip: true`, so it is unconditional. The same call inside an `if` runs only when the `if`'s condition
+holds, which the checker cannot evaluate, so it is conditional. The cost, a test whose condition holds in CI, is in
+Risks.
 
 ### 4. Sources and levels follow the file's path
 
