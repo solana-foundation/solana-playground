@@ -7,8 +7,9 @@
 A transaction and each span the browser sends to Sentry SHALL be scrubbed by the
 rules that "Reports carry no user code or secret key" sets for an error event,
 its breadcrumbs included: every value in a URL, a span description, a tag or an
-attribute that matches one of those patterns SHALL arrive as `[redacted]`, and a
-transaction that cannot be scrubbed SHALL NOT be sent.
+attribute that matches one of those patterns SHALL arrive as `[redacted]`. A
+transaction whose scrub throws SHALL NOT be sent; one whose root span alone
+fails SHALL be sent marked, with its Web Vitals.
 
 #### Scenario: A secret key in the page URL (manual)
 
@@ -29,14 +30,22 @@ transaction that cannot be scrubbed SHALL NOT be sent.
 - **WHEN** scrubbing a transaction throws
 - **THEN** the transaction is dropped, and no span of it reaches Sentry
 
+#### Scenario: A root span that cannot be scrubbed (manual)
+
+- **WHEN** scrubbing a page load's root span throws, and the rest of the
+  transaction scrubs
+- **THEN** the `pageload` transaction reaches Sentry with its Web Vitals
+  measurements, its trace data marked `scrub.withheld`, and no secret
+
 ### Requirement: URLs in reports carry no credentials
 
 In every URL inside an error event, a breadcrumb, a transaction or a span the
-browser sends to Sentry, and in a span's `url.query` and `url.fragment`, a user
-name or password, a token-like host label, path segment or fragment, and the
-value of a secret query term SHALL be replaced with `[redacted]`, by the rule
-that masks a custom RPC URL on screen. The rest of the URL SHALL stay, the
-app's own content-hashed file names included.
+browser sends to Sentry, and in a span's `url.query`, `url.fragment`,
+`server.address` and `url.domain`, a user name or password, a token-like host
+label, path segment or fragment, and the value of a secret query term SHALL be
+replaced with `[redacted]`, by the rule that masks a custom RPC URL on screen.
+The rest SHALL stay, a content-hashed file name under `static/` whose name part
+is not token-like included.
 
 #### Scenario: A provider key in the path (manual)
 
@@ -56,6 +65,13 @@ app's own content-hashed file names included.
   `https://playground.solana.com/static/js/main.<hash>.js`
 - **THEN** the event's stack frames show that URL unchanged and resolve against
   the uploaded source maps
+
+#### Scenario: A provider key in the host (manual)
+
+- **WHEN** a traced page load sends a request to
+  `https://acme-mainnet-4f2a9c1b7d3e.rpc.example.test/`
+- **THEN** the request span shows `[redacted].rpc.example.test` in its URL, its
+  server address and its domain
 
 #### Scenario: A URL with nothing secret in it (manual)
 

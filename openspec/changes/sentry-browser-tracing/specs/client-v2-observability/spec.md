@@ -74,8 +74,8 @@ that names the variable and the value.
 #### Scenario: An invalid rate in a development build (manual)
 
 - **WHEN** `yarn dev` runs with the variable set to `"1.5"`
-- **THEN** Sentry is initialised with a sample rate of 1, and the console shows
-  one warning naming `REACT_APP_SENTRY_TRACES_SAMPLE_RATE` and the value
+- **THEN** the console shows one warning naming
+  `REACT_APP_SENTRY_TRACES_SAMPLE_RATE` and the value
 
 ### Requirement: The browser sends no trace headers
 
