@@ -6,10 +6,11 @@
 
 A transaction and each span the browser sends to Sentry SHALL be scrubbed by the
 rules that "Reports carry no user code or secret key" sets for an error event,
-its breadcrumbs included: every value in a URL, a span description, a tag or an
-attribute that matches one of those patterns SHALL arrive as `[redacted]`. A
-transaction whose scrub throws SHALL NOT be sent; one whose root span alone
-fails SHALL be sent marked, with its Web Vitals.
+its breadcrumbs included: each value in a URL, span description, tag or
+attribute that matches those patterns SHALL arrive as `[redacted]`. A
+transaction whose scrub throws SHALL NOT be sent, and one message per session
+SHALL say so; one whose root span alone fails SHALL be sent marked, with its
+Web Vitals.
 
 #### Scenario: A secret key in the page URL (manual)
 
@@ -27,8 +28,10 @@ fails SHALL be sent marked, with its Web Vitals.
 
 #### Scenario: A transaction that cannot be scrubbed (manual)
 
-- **WHEN** scrubbing a transaction throws
-- **THEN** the transaction is dropped, and no span of it reaches Sentry
+- **WHEN** scrubbing a transaction throws, twice in one session
+- **THEN** neither transaction nor any span of it reaches Sentry
+- **AND** Issues lists one "Transaction withheld: scrubbing it failed" message,
+  tagged `scrub_error` with the failure's name
 
 #### Scenario: A root span that cannot be scrubbed (manual)
 
@@ -39,13 +42,13 @@ fails SHALL be sent marked, with its Web Vitals.
 
 ### Requirement: URLs in reports carry no credentials
 
-In every URL inside an error event, a breadcrumb, a transaction or a span the
-browser sends to Sentry, and in a span's `url.query`, `url.fragment`,
-`server.address` and `url.domain`, a user name or password, a token-like host
-label, path segment or fragment, and the value of a secret query term SHALL be
-replaced with `[redacted]`, by the rule that masks a custom RPC URL on screen.
-The rest SHALL stay, a content-hashed file name under `static/` whose name part
-is not token-like included.
+In every URL the browser sends to Sentry, comma-joined URLs each on their own,
+and in a span's `url.query`, `url.fragment`, `server.address` and
+`url.domain`, credentials, each token-like run in a host label, path segment,
+query value or fragment, and a key-named query value SHALL be `[redacted]`, by
+the rule that masks a custom RPC URL on screen. The rest SHALL stay, a port and
+a content-hashed file name under `static/` whose name is not token-like
+included.
 
 #### Scenario: A provider key in the path (manual)
 

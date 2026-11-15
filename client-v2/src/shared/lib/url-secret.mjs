@@ -7,25 +7,42 @@
 /** A query name a provider puts a key under (`api-key`, `apiKey`, `access_token`…) */
 const KEY_NAME = /key|token|secret|auth|pass|sig|credential/i;
 
+/** A maximal run of the characters a key is written in: letters, digits, `-`, `_`, `.`, `~`, `+`, `=`, `%`, so JWTs and base64 too */
+const TOKEN_RUN = /[\w.~+=%-]+/g;
+
 /**
- * A value that reads as a token: 16 or more characters a key is written in
- * (letters, digits, `-`, `_`, `.`, `~`, `+`, `=`, `%`, so JWTs and base64
- * too), with a digit, or 24 or more in mixed case. A long slug with a digit
- * counts as well: on screen, hiding a word is cheaper than showing a key, and
- * in a build, failing on a slug is cheaper than publishing a key. Characters
- * outside that set at the end are not counted, so `<key>*` reads as `<key>`.
+ * Whether one {@link TOKEN_RUN} reads as a token: 16 or more characters with
+ * a digit, or 24 or more in mixed case. A long slug with a digit counts as
+ * well: on screen, hiding a word is cheaper than showing a key, and in a
+ * build, failing on a slug is cheaper than publishing a key.
+ *
+ * @param {string} run
+ * @returns {boolean}
+ */
+const isTokenRun = (run) =>
+  run.length >= 16 &&
+  (/\d/.test(run) ||
+    (run.length >= 24 && /[a-z]/.test(run) && /[A-Z]/.test(run)));
+
+/**
+ * Whether any run of key characters in `value` reads as a token, each run
+ * judged on its own, so `<key>,then`, `<key>;v=1` and `<key>:8899` all do.
  *
  * @param {string} value one part of a URL, as written in it (not decoded)
  * @returns {boolean}
  */
-export const isTokenLike = (value) => {
-  const token = value.replace(/[^\w.~+=%-]+$/, "");
-  return (
-    /^[\w.~+=%-]{16,}$/.test(token) &&
-    (/\d/.test(token) ||
-      (token.length >= 24 && /[a-z]/.test(token) && /[A-Z]/.test(token)))
-  );
-};
+export const isTokenLike = (value) =>
+  (value.match(TOKEN_RUN) ?? []).some(isTokenRun);
+
+/**
+ * `part` with each run of key characters that reads as a token replaced by
+ * `mask`; the characters between runs stay as written.
+ *
+ * @param {string} mask what stands for each secret
+ * @returns {(part: string) => string}
+ */
+const maskTokensWith = (mask) => (part) =>
+  part.replace(TOKEN_RUN, (run) => (isTokenRun(run) ? mask : run));
 
 /** CRA's content-hashed build output (`static/js/main.3f2a1b4c.js`), its name part captured: a stack frame needs the file name to find its source map */
 const APP_ASSET =
@@ -44,16 +61,16 @@ const isAppAsset = (pathname) => {
 };
 
 /**
- * `hostname` with each label that reads as a token replaced by `mask`.
+ * `hostname` with each token in a label replaced by `mask`; a `:port` stays.
  *
  * @param {string} mask what stands for each secret
  * @returns {(hostname: string) => string}
  */
-export const maskHostWith = (mask) => (hostname) =>
-  hostname
-    .split(".")
-    .map((label) => (isTokenLike(label) ? mask : label))
-    .join(".");
+export const maskHostWith = (mask) => {
+  const maskTokens = maskTokensWith(mask);
+  // Split first: `.` is a key character, so one run would span every label
+  return (hostname) => hostname.split(".").map(maskTokens).join(".");
+};
 
 /**
  * A URL's query as written, split into its terms: `[name, value]` for
@@ -91,9 +108,20 @@ const percentDecoded = (text) =>
     );
 
 /**
- * Whether a query term carries a secret: a non-empty value under a key-like
- * name, as written or decoded (`k%65y` is `key` to the server), a value that
- * reads as a token, or a bare term that does.
+ * Whether a query term holds a non-empty value under a key-like name, as
+ * written or decoded (`k%65y` is `key` to the server).
+ *
+ * @param {string} name the term's name, as written
+ * @param {string} value the value after `=`, as written
+ * @returns {boolean}
+ */
+const isKeyNamedTerm = (name, value) =>
+  value !== "" && (KEY_NAME.test(name) || KEY_NAME.test(percentDecoded(name)));
+
+/**
+ * Whether a query term carries a secret: a value under a key-like name
+ * ({@link isKeyNamedTerm}), a value that reads as a token, or a bare term
+ * that does.
  *
  * @param {string} name the term's name, or the bare term, as written
  * @param {string | undefined} value the value after `=`, as written; `undefined` for a bare term
@@ -102,63 +130,86 @@ const percentDecoded = (text) =>
 export const isSecretQueryTerm = (name, value) =>
   value === undefined
     ? isTokenLike(name)
-    : value !== "" &&
-      (KEY_NAME.test(name) ||
-        KEY_NAME.test(percentDecoded(name)) ||
-        isTokenLike(value));
+    : isKeyNamedTerm(name, value) || isTokenLike(value);
 
 /**
- * `url` with each secret replaced by `mask`: a user name or password, a host
- * label, path segment, bare query term or fragment that reads as a token, and
- * the value of a secret query term. The file name of a path {@link isAppAsset}
- * accepts stays. Built from the parsed parts split by hand,
- * so names keep their spelling and `mask` is never percent-encoded; a value
- * that does not parse is `mask` whole.
+ * A URL's query, without its `?`, with the whole value of a term
+ * {@link isKeyNamedTerm} accepts, and each token in another value or a bare
+ * term, replaced by `mask`.
+ *
+ * @param {string} mask what stands for each secret
+ * @returns {(query: string) => string}
+ */
+export const maskQueryWith = (mask) => {
+  const maskTokens = maskTokensWith(mask);
+  return (query) =>
+    queryTermsOf(`?${query}`)
+      .map(([name, value]) => {
+        if (value === undefined) return maskTokens(name);
+        return `${name}=${
+          isKeyNamedTerm(name, value) ? mask : maskTokens(value)
+        }`;
+      })
+      .join("&");
+};
+
+/**
+ * A URL's fragment, without its `#`, with each token in it replaced by `mask`.
+ *
+ * @param {string} mask what stands for each secret
+ * @returns {(fragment: string) => string}
+ */
+export const maskFragmentWith = maskTokensWith;
+
+/**
+ * `url` with each secret replaced by `mask`: a user name or password, each
+ * token in a host label, path segment, query value, bare query term or
+ * fragment, and the value of a term {@link maskQueryWith} masks. The file name
+ * of a path {@link isAppAsset} accepts stays. Built from the parsed parts
+ * split by hand, so names keep their spelling and `mask` is never
+ * percent-encoded; a value that does not parse is `mask` whole.
  *
  * @param {string} mask what stands for each secret
  * @returns {(url: string) => { text: string, masked: boolean }} the text, and whether anything was masked
  */
-export const maskUrlWith = (mask) => (url) => {
-  let parsed;
-  try {
-    parsed = new URL(url);
-  } catch {
-    // Not a URL: any part of it may be the key, so none of it is kept
-    return { text: mask, masked: true };
-  }
-  let masked = false;
-  const maskOne = () => {
-    masked = true;
-    return mask;
-  };
-  /** @param {string} part */
-  const maskToken = (part) => (isTokenLike(part) ? maskOne() : part);
+export const maskUrlWith = (mask) => {
+  const maskHost = maskHostWith(mask);
+  const maskTokens = maskTokensWith(mask);
+  const maskQuery = maskQueryWith(mask);
+  const maskFragment = maskFragmentWith(mask);
+  return (url) => {
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch {
+      // Not a URL: any part of it may be the key, so none of it is kept
+      return { text: mask, masked: true };
+    }
+    const hasAuth = parsed.username !== "" || parsed.password !== "";
+    // A username and a password, either or both, show as one mask
+    const auth = hasAuth ? `${mask}@` : "";
+    const port = parsed.port ? `:${parsed.port}` : "";
+    const segments = parsed.pathname.split("/");
+    const assetAt = isAppAsset(parsed.pathname) ? segments.length - 1 : -1;
+    const path = segments
+      .map((segment, i) => (i === assetAt ? segment : maskTokens(segment)))
+      .join("/");
+    const search = parsed.search.slice(1);
+    const query = parsed.search ? `?${maskQuery(search)}` : "";
+    const hash = parsed.hash.slice(1);
+    const fragment = parsed.hash ? `#${maskFragment(hash)}` : "";
+    const hostname = maskHost(parsed.hostname);
+    // A part equals its masked form only when nothing in it was masked, or it held the mask already
+    const masked =
+      hasAuth ||
+      hostname !== parsed.hostname ||
+      path !== parsed.pathname ||
+      (parsed.search !== "" && query !== parsed.search) ||
+      (parsed.hash !== "" && fragment !== parsed.hash);
 
-  // A username and a password, either or both, show as one mask
-  const auth = parsed.username || parsed.password ? `${maskOne()}@` : "";
-  const hostname = maskHostWith(mask)(parsed.hostname);
-  if (hostname !== parsed.hostname) masked = true;
-  const host = hostname + (parsed.port ? `:${parsed.port}` : "");
-  const segments = parsed.pathname.split("/");
-  const assetAt = isAppAsset(parsed.pathname) ? segments.length - 1 : -1;
-  const path = segments
-    .map((segment, i) => (i === assetAt ? segment : maskToken(segment)))
-    .join("/");
-  const query = parsed.search
-    ? "?" +
-      queryTermsOf(parsed.search)
-        .map(([name, value]) => {
-          if (value === undefined) return maskToken(name);
-          return `${name}=${
-            isSecretQueryTerm(name, value) ? maskOne() : value
-          }`;
-        })
-        .join("&")
-    : "";
-  const fragment = parsed.hash ? `#${maskToken(parsed.hash.slice(1))}` : "";
-
-  return {
-    text: `${parsed.protocol}//${auth}${host}${path}${query}${fragment}`,
-    masked,
+    return {
+      text: `${parsed.protocol}//${auth}${hostname}${port}${path}${query}${fragment}`,
+      masked,
+    };
   };
 };

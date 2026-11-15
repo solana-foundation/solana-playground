@@ -56,17 +56,22 @@ and `beforeSendTransaction` runs on it.
 
 ### 2. A transaction scrub that drops instead of withholding
 
-`reporter/scrub.ts` gains `scrubTransaction`, which re-checks the transaction's breadcrumbs as `scrubEvent` does,
-runs the same `redact` walk over the whole event, its `spans` array included, and returns `null` when the walk
-throws. `sentryOptions` passes it as `beforeSendTransaction`.
+`reporter/scrub.ts` gains `scrubTransactionWith(onWithheld)`, which re-checks the transaction's breadcrumbs as
+`scrubEvent` does, runs the same `redact` walk over the whole event, its `spans` array included, and, when the walk
+throws, passes the failure's name to `onWithheld` and returns `null`. `sentryOptions` passes the result as
+`beforeSendTransaction`.
 
 - **Why not `scrubEvent`:** its withheld replacement keeps an error visible; a transaction has nothing worth keeping
   without its values (Context).
 - **Standalone spans:** in static mode the SDK sends INP as a standalone span (`standalone = !hasSpanStreamingEnabled(client)` in `@sentry/browser-utils`), which `beforeSendTransaction` never sees. `sentryOptions` therefore also passes `beforeSendSpan: Sentry.withStaticSpan(scrubSpan)`, which runs the same `redact` walk over the span; only a `withStaticSpan` callback runs in static mode (`captureStandaloneSpanWithStaticCallback` in `@sentry/core`). It cannot drop a span, so a span whose walk throws is replaced by one that keeps only its ids, op, status, timing, and numeric `measurements` (an INP span keeps its value), with the description "Span withheld: scrubbing it failed" and `data` of `{ "scrub.withheld": true }`, so a reader of the span sees that the scrub withheld it.
 - **Envelope header:** a standalone span's envelope header carries the root span's name as `trace.transaction` from the dynamic sampling context, which `beforeSendSpan` never sees; an INP span that is its own root is named after the clicked element's selector. A `ScrubSamplingContext` integration redacts that name on the client's `createDsc` hook.
-- **A child span that cannot be scrubbed:** the static `beforeSendSpan` also runs on every span of a transaction, before `beforeSendTransaction`, so such a child span is reduced and marked, and the transaction is still sent. The SDK runs it on the root span too and merges the result back into the transaction's `contexts.trace`, so a root span that cannot be scrubbed arrives at `scrubTransaction` with `contexts.trace` replaced by the reduced span, named "Span withheld: scrubbing it failed", and with the transaction's numeric measurements kept. `scrubTransaction` scrubs and sends such a transaction like any other: its Web Vitals still reach the dashboard, and `scrub.withheld` in `contexts.trace.data` tells a reader why its name is gone. Only a transaction whose own walk throws is dropped. Sentry normalises a transaction's span data before either hook (`normalizeDepth`), so the reduce and drop paths guard values its normalising lets through.
-- **Not logged:** the scrub module cannot import the logger, since the logger reports through the reporter that
-  imports the scrub. A drop shows in Sentry's client reports as `before_send` for category `transaction`.
+- **A child span that cannot be scrubbed:** the static `beforeSendSpan` also runs on every span of a transaction, before `beforeSendTransaction`, so such a child span is reduced and marked, and the transaction is still sent. The SDK runs it on the root span too and merges the result back into the transaction's `contexts.trace`, so a root span that cannot be scrubbed arrives at the transaction scrub with `contexts.trace` replaced by the reduced span, named "Span withheld: scrubbing it failed", and with the transaction's numeric measurements kept. The transaction scrub scrubs and sends such a transaction like any other: its Web Vitals still reach the dashboard, and `scrub.withheld` in `contexts.trace.data` tells a reader why its name is gone. Only a transaction whose own walk throws is dropped. Sentry normalises a transaction's span data before either hook (`normalizeDepth`), so the reduce and drop paths guard values its normalising lets through.
+- **Reported by the reporter, not logged:** the scrub module cannot import the logger, since the logger reports
+  through the reporter that imports the scrub. `sentryOptions` passes an `onWithheld` that sends one message,
+  "Transaction withheld: scrubbing it failed", tagged `scrub_error`, at most once per session, so a regression that
+  throws on every page load reaches the team as an issue, not only as a `before_send` count on the Stats page. The
+  message goes through `beforeSend` like any event. It is captured on fresh scopes: the value the walk threw on usually
+  sits in the app's scopes, and would make `scrubEvent` withhold the message too.
 
 ### 3. The rate is parsed in the browser, once, with 1 as the default
 
@@ -102,14 +107,17 @@ config, and sets `tracePropagationTargets: []`, so no request carries `sentry-tr
 ### 5. One URL rule for the screen and for reports
 
 `url-secret.mjs` gains a URL masker, curried on the mask text, built from `maskRpcUrl`'s rule: a user name or
-password, a token-like host label, path segment or fragment, and the value of a secret query term are replaced. The
-rest of the URL stays. `maskRpcUrl` calls it with `••••`. `redact` in `scrub.ts` passes a string that is a whole URL
-(a span's `url.full`) through the masker with `[redacted]`, and in any other string finds each `http(s)://` URL,
-an IPv6 host in brackets and parentheses in the path included, before `SECRET_PATTERNS` run. A closing parenthesis
-that only wraps the URL in prose stays outside it. Sentry's fetch instrumentation also copies a URL's query and
-fragment into the span attributes `url.query` and `url.fragment`, without the `?` or `#`, and its host into
-`server.address` and `url.domain`, without the scheme, so `redact` masks the first two with `isSecretQueryTerm` and
-`isTokenLike` directly, and the host attributes label by label with the masker's own host rule (`maskHostWith`).
+password, each token in a host label, path segment, query value, bare query term or fragment, and the whole value of
+a query term with a key-like name are replaced. The rest of the URL stays. Inside one part, each run of the
+characters a key is written in is judged on its own, and the text between runs stays as written, so a key followed by
+`,then`, `;v=1` or `:8899` is masked and the rest is kept. `maskRpcUrl` calls the masker with `••••`. `redact` in
+`scrub.ts` passes a string that is a whole URL (a span's `url.full`) through the masker with `[redacted]`, and in any
+other string finds each `http(s)://` URL, an IPv6 host in brackets and parentheses in the path included, before
+`SECRET_PATTERNS` run. A closing parenthesis that only wraps the URL in prose stays outside it, and a comma followed by
+`http(s)://` starts a URL of its own, so endpoints joined by commas are each masked with their credentials. Sentry's
+fetch instrumentation also copies a URL's query and fragment into the span attributes `url.query` and `url.fragment`,
+without the `?` or `#`, and its host into `server.address` and `url.domain`, without the scheme, so `redact` masks
+them with the masker's own part rules, `maskQueryWith`, `maskFragmentWith` and `maskHostWith`.
 
 - **The app's own assets:** CRA names its build output `static/(js|css|media)/<name>.<hash>(.chunk)?.<ext>`, and a
   file name such as `main.3f2a1b4c.js` reads as a token. The masker keeps the last segment of a path of that shape,
@@ -119,20 +127,20 @@ fragment into the span attributes `url.query` and `url.fragment`, without the `?
 - **Why one rule:** the screen, the build check and the reports then agree on what in a URL is a key, and a change to
   `isTokenLike` reaches all three.
 - **Why mask, not strip the path:** `/v2/[redacted]` still names the provider's route, which a span needs to be read.
-- **Limit:** `isTokenLike` reads a part as a token when, less any characters outside its alphabet at the end, it is 16
-  or more characters of that alphabet with a digit, or 24 or more in mixed case. A key shorter than 16 characters, a
-  key with no digit unless it is 24 or more characters in mixed case, and a key with a character outside the alphabet
-  before its end are kept, as on screen and in the build.
+- **Limit:** `isTokenLike` reads a part as holding a token when one run of its alphabet in it is 16 or more characters
+  with a digit, or 24 or more in mixed case. A key shorter than 16 characters, a key with no digit unless it is 24 or
+  more characters in mixed case, and a key split by a character outside the alphabet into shorter runs are kept, as on
+  screen and in the build.
 
 ## Risks / Trade-offs
 
-- [The Web Vitals dashboard reads streamed spans, not static transactions] → Unverified. Task 1.6 checks the dashboard
+- [The Web Vitals dashboard reads streamed spans, not static transactions] → Unverified. Task 1.7 checks the dashboard
   on a preview, before the merge. If it stays empty while the transaction is in Discover, the change returns to the
   spec and design for stream mode before it merges.
 - [A sampled page load sends a transaction with dozens of resource spans, each scrubbed] → `redact` already walks
   error events of similar size; the scrub runs on each span through `beforeSendSpan` and once more over the whole
   transaction through `beforeSendTransaction`, after the page settles, outside any user action.
-- [Quota: production traces every page load from the merge on, and an exhausted quota can drop events] → Task 1.6
+- [Quota: production traces every page load from the merge on, and an exhausted quota can drop events] → Task 1.7
   reads the preview's usage in Sentry's usage stats after one day and projects production from it. Setting
   `REACT_APP_SENTRY_TRACES_SAMPLE_RATE` lower, or to `0`, and redeploying cuts the volume.
 - [The URL masker hides a word that only looks like a token] → Accepted, as on screen: a hidden slug costs a reader a
@@ -143,6 +151,6 @@ fragment into the span attributes `url.query` and `url.fragment`, without the `?
 ## Migration Plan
 
 Before the merge, deploy the PR as a preview with `SENTRY_PREVIEW_ENABLED=true` and the variable unset, and check
-the manual scenarios and the usage (task 1.6). If the projected production volume exceeds the quota, set a lower
+the manual scenarios and the usage (task 1.7). If the projected production volume exceeds the quota, set a lower
 `REACT_APP_SENTRY_TRACES_SAMPLE_RATE` in Vercel's production environment before the merge, since CRA inlines the
 value at build time. Rollback is setting the variable to `0` and redeploying.

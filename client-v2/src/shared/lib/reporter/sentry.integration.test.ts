@@ -13,12 +13,7 @@ import {
 } from "vitest";
 
 import { requireFor } from "../../../test-utils/require-for";
-import {
-  scrubBreadcrumb,
-  scrubEvent,
-  scrubSpan,
-  scrubTransaction,
-} from "./scrub";
+import { scrubBreadcrumb, scrubEvent, scrubSpan } from "./scrub";
 import { reporter, sentryOptions } from "./sentry";
 
 type Transport = NonNullable<
@@ -321,7 +316,9 @@ describe("reporter scrub", () => {
     const client = Sentry.getClient();
     expect(client?.getOptions().beforeSend).toBe(scrubEvent);
     expect(client?.getOptions().beforeBreadcrumb).toBe(scrubBreadcrumb);
-    expect(client?.getOptions().beforeSendTransaction).toBe(scrubTransaction);
+    expect(client?.getOptions().beforeSendTransaction).toBe(
+      sentryOptions({ dsn: DSN, tracesSampleRate: 0 }).beforeSendTransaction
+    );
     expect(client?.getOptions().beforeSendSpan).toBe(scrubSpan);
     expect(client?.getOptions().traceLifecycle).toBe("static");
     expect(client?.getIntegrationByName("Console")).toBeUndefined();
@@ -490,6 +487,53 @@ describe("reporter scrub", () => {
       ]);
       expect(JSON.stringify(envelopes)).not.toContain(KEY);
     });
+  });
+
+  it("should drop a transaction it cannot walk and send one withheld message per session", async () => {
+    await Sentry.close();
+    envelopes.length = 0;
+    const options = sentryOptions({ dsn: DSN, tracesSampleRate: 1 });
+    Sentry.init({
+      dsn: options.dsn,
+      tracesSampleRate: options.tracesSampleRate,
+      traceLifecycle: options.traceLifecycle,
+      beforeSend: options.beforeSend,
+      beforeSendTransaction: options.beforeSendTransaction,
+      // Sentry's normalising would turn the getter into text before the scrub sees it
+      normalizeDepth: 0,
+      defaultIntegrations: false,
+      transport: recording,
+    });
+    const hostile = {
+      get boom(): string {
+        throw new TypeError(`getter ${KEY}`);
+      },
+    };
+    const loadPage = () =>
+      Sentry.withScope((scope) => {
+        // Not a span attribute: `beforeSendSpan` would reduce it before the transaction's own walk
+        scope.setExtra("hostile", hostile);
+        Sentry.startNewTrace(() =>
+          Sentry.startSpan({ name: "/", op: "pageload" }, () => {})
+        );
+      });
+
+    loadPage();
+    await Sentry.flush();
+    loadPage();
+    await Sentry.flush();
+
+    const items = envelopes.map((envelope) => itemsOf(envelope)[0]);
+    expect(items.filter(([header]) => header.type === "transaction")).toEqual(
+      []
+    );
+    expect(eventsOf()).toEqual([
+      expect.objectContaining({
+        message: "Transaction withheld: scrubbing it failed",
+        tags: { scrub_error: "TypeError" },
+      }),
+    ]);
+    expect(JSON.stringify(envelopes)).not.toContain(KEY);
   });
 
   /** Stands in for the user's test printing through mocha to this window's console */
