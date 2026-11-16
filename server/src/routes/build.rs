@@ -54,6 +54,8 @@ const BUILD_DIR_CLEANUP_INTERVAL: Duration = Duration::from_secs(60 * 60);
 impl BuildState {
     /// Create a new value with the maximum amount of concurrent builds, and start removing old
     /// build directories in the background.
+    ///
+    /// Must be called inside a Tokio runtime.
     pub fn new(concurrency: usize) -> Self {
         tokio::spawn(async {
             let mut ticks = interval(BUILD_DIR_CLEANUP_INTERVAL);
@@ -103,7 +105,7 @@ pub async fn build(
     }))
 }
 
-/// Run `f` with the permit's id on the blocking pool, so it does not block the thread.
+/// Run `f` with the permit's id on the blocking pool, so it does not block an async worker.
 ///
 /// The permit moves into the blocking task and is released when `f` returns. A request that ends
 /// early drops only this future: the build goes on, and keeps its slot until it has ended.
@@ -225,6 +227,21 @@ mod tests {
         let state = BuildState::with_concurrency(1);
         let permit = concurrent::Permit::acquire(state.clone()).await.unwrap();
         assert_eq!(run_holding(permit, |id| id).await.unwrap(), 0);
+        assert_eq!(state.sem.available_permits(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_build_that_fails_or_panics_frees_the_slot() {
+        let state = BuildState::with_concurrency(1);
+        let permit = concurrent::Permit::acquire(state.clone()).await.unwrap();
+        let timed_out = run_holding(permit, |_| Err::<(), _>("Build timed out"));
+        assert!(timed_out.await.unwrap().is_err());
+        assert_eq!(state.sem.available_permits(), 1);
+
+        let permit = concurrent::Permit::acquire(state.clone()).await.unwrap();
+        assert!(run_holding(permit, |_| panic!("build panicked"))
+            .await
+            .is_err());
         assert_eq!(state.sem.available_permits(), 1);
     }
 }
