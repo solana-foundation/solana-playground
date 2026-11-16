@@ -80,18 +80,20 @@ export const systemPrompt = () =>
     .filter((part) => part !== undefined)
     .join("\n\n---\n\n");
 
+/** Which of the wallets `signing` is, as the prompt says it */
+const signerLabel = ({ playground, signing }: WalletKeys) => {
+  if (signing === undefined) return "";
+  if (signing === playground) return " (the Playground wallet)";
+  return " (a connected wallet)";
+};
+
 /** The wallets' lines of the project state: public keys only */
-const describeWallets = ({ playground, connected, signing }: WalletKeys) => {
-  const whose =
-    signing === undefined
-      ? ""
-      : signing === playground
-      ? " (the Playground wallet)"
-      : " (a connected wallet)";
+const describeWallets = (wallets: WalletKeys) => {
+  const { playground, connected, signing } = wallets;
   return [
     `Playground wallet: ${playground ?? "none"}`,
     `Connected wallet: ${connected.join(", ") || "none"}`,
-    `Signing wallet: ${signing ?? "none"}${whose}`,
+    `Signing wallet: ${signing ?? "none"}${signerLabel(wallets)}`,
   ];
 };
 

@@ -208,7 +208,7 @@ const projectTools = (bridge: PlaygroundBridge): ToolDefinition[] => [
     } catch (e) {
       // TODO(HOO-2603): log the error with `report: true`; a build that
       // could not run reaches no logger here
-      const message = e instanceof Error ? e.message : String(e);
+      const message = maskUrlsIn(e instanceof Error ? e.message : String(e));
       PgAssistant.setApprovalFailure(
         approvalId,
         `build could not run: ${message}`
