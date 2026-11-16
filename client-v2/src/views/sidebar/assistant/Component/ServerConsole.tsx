@@ -4,10 +4,10 @@ import remarkGfm from "remark-gfm";
 
 import type { McpServerEntry, McpTool } from "@/features/mcp";
 import { callTool } from "@/features/mcp";
+import { ImageAddress } from "@/shared/lib/image-address";
 import { cn } from "@/shared/lib/utils";
 import { NativeSelect, NativeSelectOption } from "@/shared/ui/native-select";
 
-import ImageAddress from "../../../../components/Markdown/ImageAddress";
 import { PgConnection } from "../../../../utils";
 import { PgAssistant } from "../store";
 import { emphasiseLabels } from "./caps-label";
@@ -33,14 +33,6 @@ const LONG_DESCRIPTION = 220;
 /** The Markdown a tool description renders to, spaced for the card's small type */
 const DESCRIPTION_MARKDOWN =
   "[overflow-wrap:anywhere] [&_ol]:mb-2 [&_ol]:list-decimal [&_ol]:pl-[1.125rem] [&_p]:mb-2 [&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-[1.125rem] [&_li+li]:mt-1 [&_li>p]:mt-1 [&_li>p]:mb-0 [&_li>ul]:mt-1 [&_li>ul]:mb-0 [&>:last-child]:mb-0 [&_strong]:font-semibold [&_strong]:text-[var(--text-primary)] [&_code]:rounded [&_code]:bg-surface-hover [&_code]:px-1 [&_code]:py-px [&_code]:font-pg-code [&_code]:text-[0.95em]";
-
-/**
- * An image in a tool description, which is the MCP server's text: loading it
- * would fetch from the server's host with no click, so it shows as its address
- */
-const DescriptionImage = ({ src, alt }: { src?: string; alt?: string }) => (
-  <ImageAddress src={src} alt={alt} />
-);
 
 /** Argument names that mean the Solana cluster, whatever the server calls it */
 const CLUSTER_KEYS = ["cluster", "network"];
@@ -220,7 +212,9 @@ const ServerConsole = ({ server, providerName, scope }: ServerConsoleProps) => {
               >
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
-                  components={{ img: DescriptionImage }}
+                  // A description is the MCP server's text: an image in it,
+                  // from any host, shows as text and is never fetched
+                  components={{ img: ImageAddress }}
                 >
                   {emphasiseLabels(description)}
                 </ReactMarkdown>

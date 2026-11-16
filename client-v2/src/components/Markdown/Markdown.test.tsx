@@ -11,7 +11,7 @@ vi.mock("../CodeBlock", () => ({
 // so it is replaced with the few members Markdown touches
 vi.mock("../../utils", () => ({
   PgCommon: {
-    // The real join: a slash between the parts, the second's leading one dropped
+    // Mirrors the real join for two parts: one slash between them
     joinPaths: (root: string, path: string) =>
       (root.endsWith("/") ? root : `${root}/`) +
       (path.startsWith("/") ? path.slice(1) : path),
@@ -173,6 +173,13 @@ describe("Markdown", () => {
 
       expect(container.querySelector('[data-testid="img"]')).toBeNull();
       expect(container.textContent).toBe("//example.com/pixel.png");
+    });
+
+    it("shows an image whose address react-markdown cleared as its alt text", async () => {
+      await render("![Logo](data:image/png;base64,AAAA)");
+
+      expect(container.querySelector('[data-testid="img"]')).toBeNull();
+      expect(container.textContent).toBe("Logo");
     });
   });
 });

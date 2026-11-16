@@ -39,13 +39,14 @@ it("flips Show more and Show less and says which state it is in", () => {
 });
 
 // A tool description is the MCP server's text: an image in it would be
-// fetched with no click, so it shows as its address instead
+// fetched with no click, so every one shows as text, a local one too
 it("shows an image in a tool description as text, never loads it", () => {
   vi.spyOn(PgAssistant, "mcpTools", "get").mockReturnValue({
     docs: [
       {
         name: "search",
-        description: "Searches. ![Tracker](https://example.com/pixel.png)",
+        description:
+          "Searches. ![Tracker](https://example.com/pixel.png) ![Logo](/logo.png)",
         inputSchema: {},
       },
     ],
@@ -62,4 +63,5 @@ it("shows an image in a tool description as text, never loads it", () => {
   expect(
     screen.getByText("Tracker (https://example.com/pixel.png)")
   ).toBeTruthy();
+  expect(screen.getByText("Logo (/logo.png)")).toBeTruthy();
 });

@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
 
+import { ImageAddress } from "@/shared/lib/image-address";
 import { isSameOrigin } from "@/shared/lib/same-origin";
 import { cn } from "@/shared/lib/utils";
 import { Icon } from "@/shared/ui/icon";
@@ -13,7 +14,6 @@ import { PgCommon, PgRouter } from "../../utils";
 import CodeBlock from "../CodeBlock";
 import Img from "../Img";
 import Link, { LinkProps } from "../Link";
-import ImageAddress from "./ImageAddress";
 
 interface MarkdownProps {
   /** Markdown string */
@@ -98,19 +98,21 @@ const Markdown: FC<React.PropsWithChildren<MarkdownProps>> = ({
         a: (linkProps) => <Link {...(linkProps as unknown as LinkProps)} />,
 
         /**
-         * Images. Every Markdown this component renders loads only this
-         * app's own: an assistant reply, an imported tutorial or a tool's
-         * text may come from outside it, and an image from another host would
-         * be fetched, address and all, with no click. Any other image,
-         * `data:` ones included, shows as its address. Both the address as
-         * written and the one the page loads are checked.
+         * Images. This component loads only images from the app's own
+         * origin: an assistant reply or an imported tutorial may come from
+         * outside the app, and an image from another host would be fetched,
+         * address and all, with no click. Both the address as written and
+         * the one the page loads are checked. Any other image shows as text,
+         * and so does one whose address react-markdown cleared (it empties
+         * every scheme but http and https, `data:` among them).
          */
         img: ({ src, alt, ...imgProps }) => {
-          const resolved =
-            src && !src.startsWith("/")
-              ? PgCommon.joinPaths(rootSrc ?? PgRouter.location.pathname, src)
-              : src;
-          if (src && !(isSameOrigin(src) && isSameOrigin(resolved ?? ""))) {
+          if (!src) return <ImageAddress src={src} alt={alt} />;
+
+          const resolved = src.startsWith("/")
+            ? src
+            : PgCommon.joinPaths(rootSrc ?? PgRouter.location.pathname, src);
+          if (!isSameOrigin(src) || !isSameOrigin(resolved)) {
             return <ImageAddress src={src} alt={alt} />;
           }
 
