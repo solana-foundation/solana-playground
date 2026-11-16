@@ -218,6 +218,7 @@ const projectTools = (bridge: PlaygroundBridge): ToolDefinition[] => [
 
   bindToolFor("deploy")(async () => {
     const { cluster } = bridge.getProjectContext();
+    const hasConnectionChanged = bridge.watchConnection();
     const quote = await bridge.quoteDeploy();
     const cost =
       quote.cost === null
@@ -238,7 +239,7 @@ const projectTools = (bridge: PlaygroundBridge): ToolDefinition[] => [
     if (!allowed) return "The user declined to deploy.";
     // The card named the network it was asked on; a switch while it waited
     // would spend SOL somewhere the user never approved
-    if (bridge.getProjectContext().cluster !== cluster) {
+    if (hasConnectionChanged()) {
       PgAssistant.setApprovalFailure(
         approvalId,
         "not deployed: network changed"

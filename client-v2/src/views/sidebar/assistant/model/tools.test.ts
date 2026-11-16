@@ -435,10 +435,11 @@ describe("build and deploy approvals", () => {
     ({
       getProjectContext: () => ({
         workspaceName: "hello_anchor",
-        cluster: TEST_ENDPOINT.DEVNET,
+        cluster: "devnet",
         // eslint-disable-next-line unicorn/no-null -- `ProjectContext.buildError` is `string | null`
         buildError: null,
       }),
+      watchConnection: () => () => false,
       quoteDeploy: async () => quote,
       build: vi.fn(async () => {}),
       // eslint-disable-next-line unicorn/no-null -- `deploy()` answers `null` without a program id
@@ -490,15 +491,16 @@ describe("build and deploy approvals", () => {
   });
 
   it("deploys nothing when the network changed while the approval waited", async () => {
-    let cluster: string = TEST_ENDPOINT.DEVNET;
+    let hasConnectionChanged = false;
     const deploy = vi.fn(async () => {});
     const b = {
       getProjectContext: () => ({
         workspaceName: "hello_anchor",
-        cluster,
+        cluster: "devnet",
         // eslint-disable-next-line unicorn/no-null -- `ProjectContext.buildError` is `string | null`
         buildError: null,
       }),
+      watchConnection: () => () => hasConnectionChanged,
       quoteDeploy: async () => PRICED,
       deploy,
     } as unknown as PlaygroundBridge;
@@ -506,7 +508,7 @@ describe("build and deploy approvals", () => {
     if (!found) throw new Error("createTools has no tool named deploy");
     const run = found.run({});
     await vi.waitFor(() => expect(PgAssistant.items).toHaveLength(1));
-    cluster = TEST_ENDPOINT.MAINNET_BETA;
+    hasConnectionChanged = true;
     PgAssistant.resolveApproval(PgAssistant.items[0].id, true);
 
     expect(await run).toContain("nothing was deployed");

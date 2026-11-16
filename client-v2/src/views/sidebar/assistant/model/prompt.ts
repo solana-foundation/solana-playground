@@ -1,6 +1,10 @@
 import type { McpServerEntry } from "@/features/mcp";
 
-import { type PlaygroundBridge, realBridge } from "../bridge/playground-bridge";
+import {
+  type PlaygroundBridge,
+  realBridge,
+  type WalletKeys,
+} from "../bridge/playground-bridge";
 import assistantContext from "../content/assistant-context.md";
 import { describeCatalog } from "../grounding";
 import { PgAssistant } from "../store";
@@ -76,6 +80,21 @@ export const systemPrompt = () =>
     .filter((part) => part !== undefined)
     .join("\n\n---\n\n");
 
+/** The wallets' lines of the project state: public keys only */
+const describeWallets = ({ playground, connected, signing }: WalletKeys) => {
+  const whose =
+    signing === null
+      ? ""
+      : signing === playground
+      ? " (the Playground wallet)"
+      : " (the connected wallet)";
+  return [
+    `Playground wallet: ${playground ?? "none"}`,
+    `Connected wallet: ${connected.join(", ") || "none"}`,
+    `Signing wallet: ${signing ?? "none"}${whose}`,
+  ];
+};
+
 /**
  * Describe the project as it stands right now.
  *
@@ -94,7 +113,7 @@ export const describeProjectWith = (bridge: PlaygroundBridge) => {
   const lines = [
     `Workspace: ${ctx.workspaceName ?? "none"}`,
     `Cluster: ${ctx.cluster}`,
-    `Wallet connected: ${ctx.walletConnected ? "yes" : "no"}`,
+    ...describeWallets(ctx.wallets),
     `Files in context (open tabs and files the user added; you can read only these): ${
       ctx.contextFiles.map((file) => file.path).join(", ") || "none"
     }`,

@@ -3,6 +3,7 @@ import {
   normalizeProjectPath,
   PgAssistantContext,
 } from "@/entities/assistant-context";
+import { type Cluster, getKnownCluster } from "@/entities/cluster";
 import { networkInSentence } from "@/features/deploy";
 import { merge3 } from "@/features/persistence/model/merge";
 
@@ -27,6 +28,27 @@ export interface IdlSummary {
   refused?: string;
 }
 
+/**
+ * The network the app is on, by name. A custom RPC's URL can carry its
+ * provider's API key, so the assistant gets the cluster, never the address:
+ * `custom` is an RPC on no known cluster, or one whose cluster is still being
+ * read (HOO-2878)
+ */
+export type AssistantCluster = Cluster | "custom";
+
+/**
+ * The wallets' public keys, base58: never a wallet or key object, whose
+ * Playground keypair carries the secret key (HOO-2857)
+ */
+export interface WalletKeys {
+  /** The selected Playground wallet account; null before one exists */
+  playground: string | null;
+  /** Wallets connected through ConnectorKit (Wallet Standard) */
+  connected: string[];
+  /** The wallet that signs and pays: one of the above, null while none is connected */
+  signing: string | null;
+}
+
 /** What the assistant is allowed to know about the project without asking */
 export interface ProjectContext {
   workspaceName: string | null;
@@ -44,8 +66,8 @@ export interface ProjectContext {
   idl: IdlSummary | null;
   programId: string | null;
   deployState: "ready" | "loading" | "paused" | "cancelled";
-  cluster: string;
-  walletConnected: boolean;
+  cluster: AssistantCluster;
+  wallets: WalletKeys;
 }
 
 /** A change the assistant proposes to one file */
@@ -92,6 +114,11 @@ export interface PlaygroundBridge {
   /** Removes a file; what Undo patch does to a file the patch created */
   deleteFile(path: string): Promise<void>;
   build(): Promise<void>;
+  /**
+   * Remembers the connection now and returns a check of whether it changed
+   * since. The connection is compared, not named: its address stays here
+   */
+  watchConnection(): () => boolean;
   /** @returns where the deployed program can be seen, when that is known */
   deploy(): Promise<{ programId: string; explorerUrl: string } | null>;
   /**
@@ -161,6 +188,28 @@ const foldTyping = ({
   return merged.kind === "clean" ? merged.text : typed;
 };
 
+/** The cluster the app is on; see {@link AssistantCluster} */
+const currentCluster = (): AssistantCluster =>
+  getKnownCluster(PgConnection.current.rpcEndpoint) ??
+  (PgConnection.clusterIsStale ? undefined : PgConnection.cluster) ??
+  "custom";
+
+const toBase58 = (key: { toBase58(): string } | null | undefined) =>
+  key?.toBase58() ?? null;
+
+/** The wallets' public keys; see {@link WalletKeys} */
+const currentWalletKeys = (): WalletKeys => {
+  const account = PgWallet.accounts[PgWallet.currentIndex];
+  return {
+    playground: account ? toBase58(PgWallet.create(account).publicKey) : null,
+    connected: PgWallet.getConnectedStandardWallets().flatMap((wallet) => {
+      const key = toBase58(wallet.publicKey);
+      return key ? [key] : [];
+    }),
+    signing: toBase58(PgWallet.current?.publicKey),
+  };
+};
+
 export const realBridge: PlaygroundBridge = {
   getProjectContext() {
     const currentFullPath = PgExplorer.currentFilePath;
@@ -180,8 +229,8 @@ export const realBridge: PlaygroundBridge = {
       idl: summarizeIdl(),
       programId: PgProgramInfo.getPkStr() ?? null,
       deployState: PgGlobal.deployState,
-      cluster: PgConnection.current.rpcEndpoint,
-      walletConnected: !!PgWallet.current,
+      cluster: currentCluster(),
+      wallets: currentWalletKeys(),
     };
   },
 
@@ -270,6 +319,11 @@ export const realBridge: PlaygroundBridge = {
 
   async build() {
     await PgCommand.build.execute();
+  },
+
+  watchConnection() {
+    const endpoint = PgConnection.current.rpcEndpoint;
+    return () => PgConnection.current.rpcEndpoint !== endpoint;
   },
 
   async quoteDeploy() {
