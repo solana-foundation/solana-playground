@@ -241,7 +241,10 @@ describe("a server the user added", () => {
 
     await (await echo()).run({}, { signal: controller.signal });
 
-    expect(outcome).toHaveBeenCalledWith("card", "stopped");
+    expect(outcome).toHaveBeenCalledWith(
+      "card",
+      "stopped: the server may already have acted"
+    );
     expect(failure).not.toHaveBeenCalled();
   });
 

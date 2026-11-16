@@ -63,7 +63,7 @@ const hasCredentials = (entry: McpServerEntry) =>
  * The card a call to a user-added server waits on. The host comes from the
  * entry's own URL, never from anything the server or the model reports
  */
-const toolApprovalOf =
+const toolApprovalFor =
   (server: McpServerEntry, tool: McpTool) =>
   (input: unknown): ToolApproval => {
     const host = hostOf(server.url);
@@ -99,7 +99,9 @@ const define = (server: McpServerEntry, tool: McpTool): ToolDefinition => ({
     // for their answer; the gateway's servers are the operator's (HOO-2877)
     const approval = PgAssistant.isGatewayMcpServer(current.id)
       ? undefined
-      : await PgAssistant.requestApproval(toolApprovalOf(current, tool)(input));
+      : await PgAssistant.requestApproval(
+          toolApprovalFor(current, tool)(input)
+        );
     if (approval && !approval.allowed) {
       return `The user declined to call ${tool.name} on ${current.name}.`;
     }
@@ -129,7 +131,11 @@ const define = (server: McpServerEntry, tool: McpTool): ToolDefinition => ({
       const message = e instanceof Error ? e.message : String(e);
       // Stop ended the call, which is not the server failing
       if (options?.signal?.aborted) {
-        if (approval) PgAssistant.setApprovalOutcome(approval.id, "stopped");
+        if (approval)
+          PgAssistant.setApprovalOutcome(
+            approval.id,
+            "stopped: the server may already have acted"
+          );
       } else {
         PgAssistant.addToolCall(`${tool.name} on ${entry.name} failed`);
         if (approval) {
