@@ -1,3 +1,7 @@
+import { createLogger } from "./logger";
+
+const log = createLogger("shared:same-origin");
+
 /**
  * Whether an address, as a page would resolve it, points at this app's own
  * origin. The browser's URL parser decides, so the forms a prefix check
@@ -13,7 +17,10 @@ export const isSameOrigin = (address: string): boolean => {
   try {
     return new URL(address, here).origin === new URL(here).origin;
   } catch {
-    // An address the URL parser rejects loads nothing, so it is no local one
+    // An address the URL parser rejects loads nothing, so it is no local one.
+    // Neither the address nor the parser's message (which repeats it in some
+    // browsers) is logged: an address may carry private data.
+    log.debug("address does not parse; treated as remote");
     return false;
   }
 };
