@@ -174,7 +174,7 @@ export const BaseApprovalCard = ({
       {/* Outside the scroll: long arguments must not push where they go, and
           whether credentials go with them, out of view of Allow (A7) */}
       {request.type !== "patch" && (
-        <p className="px-3 pt-1.5 pb-2 text-xs text-muted-foreground">
+        <p className="px-3 pt-1.5 pb-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">
           {request.effect}
         </p>
       )}
