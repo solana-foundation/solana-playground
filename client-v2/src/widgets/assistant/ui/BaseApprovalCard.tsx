@@ -86,6 +86,7 @@ const cardTitle = (request: ApprovalItem["request"]) => {
   if (request.question) {
     return { text: request.question, className: QUESTION_TITLE };
   }
+  if (request.type === "tool") return { text: `wants to call ${request.tool}` };
   return { text: `wants to run ${request.name}` };
 };
 
@@ -141,7 +142,22 @@ export const BaseApprovalCard = ({
         ) : (
           // A pre holds phrasing content only, so its lines are block spans
           <span className="block px-3">
-            <code className="block text-warning">$ {request.name}</code>
+            {request.type === "tool" ? (
+              <>
+                {/* No "$": an MCP call is not a terminal command */}
+                <code className="block text-warning [overflow-wrap:anywhere] whitespace-normal">
+                  {request.tool}
+                </code>
+                <code
+                  data-tool-input
+                  className="block pt-1.5 text-foreground [overflow-wrap:anywhere] whitespace-pre-wrap"
+                >
+                  {request.input}
+                </code>
+              </>
+            ) : (
+              <code className="block text-warning">$ {request.name}</code>
+            )}
             <span className="block pt-1.5 font-sans text-xs whitespace-normal text-muted-foreground">
               {request.effect}
             </span>

@@ -29,6 +29,22 @@ const patchCard = (
   request: { type: "patch", path: "src/lib.rs", before, after },
 });
 
+const toolCard = (status: ApprovalItem["status"]): ApprovalItem => ({
+  id: "card-3",
+  createdAt: CREATED,
+  kind: "approval",
+  status,
+  request: {
+    type: "tool",
+    server: "Srv",
+    tool: "echo",
+    host: "srv.test",
+    input: '{\n  "q": 1\n}',
+    effect: "Sends these arguments to srv.test.",
+    question: "Call echo on Srv?",
+  },
+});
+
 const ANSWERS = /^(Apply|Discard|Allow|Deny)$/;
 
 describe("BaseApprovalCard", () => {
@@ -67,6 +83,21 @@ describe("BaseApprovalCard", () => {
     );
     expect(screen.getByText("+2")).toBeTruthy();
     expect(screen.getByText("−0")).toBeTruthy();
+  });
+
+  it("an MCP tool call shows the tool, its arguments and where they go", () => {
+    const onAnswer = vi.fn();
+    const { container } = render(
+      <BaseApprovalCard item={toolCard("pending")} onAnswer={onAnswer} />
+    );
+    expect(screen.getByText("Call echo on Srv?")).toBeTruthy();
+    expect(screen.getByText("echo")).toBeTruthy();
+    expect(container.querySelector("[data-tool-input]")?.textContent).toBe(
+      '{\n  "q": 1\n}'
+    );
+    expect(screen.getByText("Sends these arguments to srv.test.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Deny" }));
+    expect(onAnswer).toHaveBeenCalledWith("deny");
   });
 
   it("a command shows what it runs", () => {
