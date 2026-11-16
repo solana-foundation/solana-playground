@@ -1,6 +1,6 @@
 # Plan: 1 MCP tool approval
 
-Goal: tasks 1.1-1.4 of [tasks.md](../tasks.md) in one PR, test first.
+Goal: tasks 1.1-1.4 of [tasks.md](https://github.com/hoodieshq/solana-playground/blob/213529bb47f646629e701a350b5a9562cd98be35/openspec/changes/mcp-tool-approval/tasks.md) in one PR, test first.
 
 1. `mcp-tools.test.ts`: failing tests for a user-added server (card asked with `type: "tool"`, server, tool, host,
    arguments; Deny returns a refusal and `callTool` is never called; a cut turn sends nothing; Allow runs and records
