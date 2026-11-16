@@ -58,21 +58,43 @@ it("drops a failed route's error when the next route brings its view", async () 
 });
 
 it.each([
-  // A GitHub link to a path with no code
-  [new GithubImportError("No program code found", "no-source"), false],
-  // A route that broke
-  [new Error("Seahorse example is gone"), true],
-])("reports a view that failed with %s: %s", async (error, reported) => {
+  new GithubImportError("No program code found", "no-source"),
+  new GithubImportError("GitHub did not answer", "network"),
+])(
+  "warns, without reporting, of a view whose link failed: %s",
+  async (error) => {
+    const logs = memoryProvider();
+    initLogger({ providers: [logs] });
+    render(<Primary />);
+
+    void PgView.setMainPrimary(async () => {
+      throw error;
+    });
+
+    expect(await screen.findByText(error.message)).toBeTruthy();
+    // `PgView` outlives a test, so an earlier row's view, put back on this
+    // mount, may log its own failure beside this one
+    expect(logs.entries).toContainEqual(
+      expect.objectContaining({
+        level: "warn",
+        context: { reason: error.reason, error: String(error) },
+      })
+    );
+    expect(logs.entries.some((e) => e.report)).toBe(false);
+  }
+);
+
+it("reports a view whose route broke", async () => {
   const logs = memoryProvider();
   initLogger({ providers: [logs] });
   render(<Primary />);
 
   void PgView.setMainPrimary(async () => {
-    throw error;
+    throw new Error("Seahorse example is gone");
   });
 
-  expect(await screen.findByText(error.message)).toBeTruthy();
-  expect(logs.entries.some((e) => e.report)).toBe(reported);
+  expect(await screen.findByText("Seahorse example is gone")).toBeTruthy();
+  expect(logs.entries.some((e) => e.report)).toBe(true);
 });
 
 it("keeps a newer view over an older one that fails after it", async () => {

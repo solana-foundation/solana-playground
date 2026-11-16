@@ -1,3 +1,5 @@
+import { isNetworkFailure } from "@/shared/lib/ai";
+
 import { PgExplorer, TupleFiles } from "./explorer";
 import { noProgramCode, PgFramework } from "./framework";
 import {
@@ -375,9 +377,10 @@ export class PgGithub {
   }
 
   /**
-   * Fetch a GitHub URL; a request that gets no answer (`fetch` rejects with a
-   * `TypeError`) becomes a `GithubImportError` with reason `network`, so a
-   * programming error's `TypeError` is never read as one.
+   * Fetch a GitHub URL; a request that gets no answer (`isNetworkFailure`)
+   * becomes a `GithubImportError` with reason `network`. Any other rejection,
+   * such as the `TypeError` of a URL we built wrong, stays as it is, so it is
+   * never read as the user's network.
    *
    * @param url what to fetch
    * @param subject repository or file the request is about
@@ -387,7 +390,7 @@ export class PgGithub {
     try {
       return await fetch(url);
     } catch (e) {
-      if (e instanceof TypeError) {
+      if (isNetworkFailure(e)) {
         throw new GithubImportError(
           `GitHub did not answer the request for "${subject}". Check the ` +
             "connection and try again.",

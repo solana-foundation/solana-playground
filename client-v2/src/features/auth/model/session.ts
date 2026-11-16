@@ -121,14 +121,23 @@ const ANSWERS = new Set([401, 404]);
 const READ_TIMEOUT_MS = 10_000;
 
 /**
- * Whether a session read rejected because it got no answer: the connection
- * dropped (`isNetworkFailure`), `READ_TIMEOUT_MS` ran out (`TimeoutError`),
- * or the page aborted the request (`AbortError`)
+ * The name of a thrown value, read by name rather than by class: a
+ * `DOMException` is not an `Error` everywhere (jsdom's is not)
  */
-const isNoAnswer = (error: unknown) =>
-  isNetworkFailure(error) ||
-  (error instanceof DOMException &&
-    (error.name === "TimeoutError" || error.name === "AbortError"));
+const nameOf = (error: unknown) =>
+  typeof error === "object" && error !== null && "name" in error
+    ? String(error.name)
+    : undefined;
+
+/**
+ * Whether a session read rejected because the user's side dropped it: the
+ * connection failed (`isNetworkFailure`), or the browser aborted the request
+ * (`AbortError`), as on leaving the page. Running out of `READ_TIMEOUT_MS`
+ * (`TimeoutError`) is not one: a route of ours that hangs times out for
+ * every reader, so it is still reported.
+ */
+const isDroppedRead = (error: unknown) =>
+  isNetworkFailure(error) || nameOf(error) === "AbortError";
 
 /**
  * How a session read can go: none settled yet, `failed` (no answer, a 5xx
@@ -449,16 +458,24 @@ export class PgSession {
       }
     } catch (error) {
       failed = true;
-      if (isNoAnswer(error)) {
-        // Offline, timed out or aborted: the user's network, not a defect to
-        // report, as with a 403 or a 429 above
+      if (isDroppedRead(error)) {
+        // Offline or aborted: the user's network, not a defect to report
         log.warn("session read got no answer", {
           context: {
             step: "refresh",
             error: String(error),
-            name: (error as Error).name,
+            name: nameOf(error),
           },
         });
+      } else if (nameOf(error) === "TimeoutError") {
+        // Reported by what timed out: the bare `DOMException` says only
+        // "signal timed out" and carries no frame of ours to title it by
+        log.error(
+          new Error(`session read timed out after ${READ_TIMEOUT_MS} ms`, {
+            cause: error,
+          }),
+          { report: true, context: { step: "refresh" } }
+        );
       } else {
         log.error(error, { report: true, context: { step: "refresh" } });
       }
@@ -1185,26 +1202,58 @@ if (import.meta.vitest) {
       });
 
       it.each([
-        // Safari's and Chrome's dropped connection
-        [new TypeError("Load failed"), false],
-        [new TypeError("Failed to fetch"), false],
-        [new DOMException("signal timed out", "TimeoutError"), false],
-        [new DOMException("aborted", "AbortError"), false],
-        // A programming error is still a defect
-        [new TypeError("x.json is not a function"), true],
-      ])(
-        "reports a read that rejected with %s: %s",
-        async (error, reported) => {
-          const logs = memoryProvider();
-          initLogger({ providers: [logs] });
-          vi.spyOn(globalThis, "fetch").mockRejectedValue(error);
+        // Safari's and Chrome's dropped connection, and one the SDK wrapped
+        new TypeError("Load failed"),
+        new TypeError("Failed to fetch"),
+        new Error("wrapped", { cause: new TypeError("Failed to fetch") }),
+        // The browser dropping the request, as on leaving the page
+        new DOMException("aborted", "AbortError"),
+      ])("warns, without reporting, of a read that got %s", async (error) => {
+        const logs = memoryProvider();
+        initLogger({ providers: [logs] });
+        vi.spyOn(globalThis, "fetch").mockRejectedValue(error);
 
-          await PgSession.refresh();
+        await PgSession.refresh();
 
-          expect(PgSession.readState).toBe("failed");
-          expect(logs.entries.some((e) => e.report)).toBe(reported);
-        }
-      );
+        expect(PgSession.readState).toBe("failed");
+        expect(logs.entries).toEqual([
+          expect.objectContaining({
+            level: "warn",
+            report: false,
+            context: expect.objectContaining({
+              step: "refresh",
+              name: error.name,
+            }),
+          }),
+        ]);
+      });
+
+      it("reports a read that timed out, by what timed out", async () => {
+        const logs = memoryProvider();
+        initLogger({ providers: [logs] });
+        const timeout = new DOMException("signal timed out", "TimeoutError");
+        vi.spyOn(globalThis, "fetch").mockRejectedValue(timeout);
+
+        await PgSession.refresh();
+
+        const [entry] = logs.entries.filter((e) => e.report);
+        expect(entry.error?.message).toBe(
+          "session read timed out after 10000 ms"
+        );
+        expect(entry.error?.cause).toBe(timeout);
+      });
+
+      it("reports a read that rejected with a programming error", async () => {
+        const logs = memoryProvider();
+        initLogger({ providers: [logs] });
+        vi.spyOn(globalThis, "fetch").mockRejectedValue(
+          new TypeError("x.json is not a function")
+        );
+
+        await PgSession.refresh();
+
+        expect(logs.entries.some((e) => e.report)).toBe(true);
+      });
 
       it("gives up on a read that hangs, as no answer", async () => {
         initLogger({ providers: [memoryProvider()] });
