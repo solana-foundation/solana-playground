@@ -1,18 +1,20 @@
 /**
- * The security headers every page response carries, read from `vercel.json`
- * (the one source the deployment and `scripts/serve-build.mjs` both apply).
+ * The security headers every response carries, read from `vercel.json` (the
+ * one source the deployment and `scripts/serve-build.mjs` both apply). The
+ * dev server sets only COEP and COOP (`craco.config.js`), so `yarn dev` runs
+ * without this policy.
  *
  * - Framing by another site is refused. `frame-ancestors` only works in an
  *   enforcing `Content-Security-Policy` (browsers ignore it in a Report-Only
  *   one), and `X-Frame-Options` covers browsers that predate it.
- * - Images load only from this origin and the few hosts the app shows images
- *   from.
- * - Connections go to this origin, to any `https:`/`wss:` host, and to a local
- *   node or build server. A user can point the app at any RPC endpoint or build
- *   server (Settings), so a host list would break that; the policy still
- *   refuses plain-`http:` hosts other than the local machine.
+ * - Images load only from this origin, `data:`/`blob:` (wallet-standard icons
+ *   are data URIs) and the hosts listed below.
+ * - Connections go to this origin, to any `https:`/`wss:` host, and to the
+ *   local machine. A user can point the app at their own RPC endpoint, build
+ *   server or model endpoint (Settings), so a host list would break those; a
+ *   plain `http:`/`ws:` endpoint works only on the local machine.
  * - `Cross-Origin-Embedder-Policy`/`Cross-Origin-Opener-Policy` stay: the Rust
- *   analyzer worker needs a cross-origin isolated page.
+ *   analyzer starts only on a cross-origin isolated page (`rust-analyzer.ts`).
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -24,49 +26,66 @@ const { headers } = platformRules(
   JSON.parse(readFileSync(new URL("./vercel.json", import.meta.url), "utf8"))
 );
 
-/** A CSP header's directives, as `name -> sources` */
-const directives = (value = "") =>
-  Object.fromEntries(
-    value
-      .split(";")
-      .map((d) => d.trim().split(/\s+/))
-      .filter(([name]) => name)
-      .map(([name, ...sources]) => [name, sources])
-  );
+/** A CSP header's directives, in header order, as `[name, sources]` */
+const directiveList = (value = "") =>
+  value
+    .split(";")
+    .map((d) => d.trim().split(/\s+/))
+    .filter(([name]) => name)
+    .map(([name, ...sources]) => [name.toLowerCase(), sources]);
 
-const enforced = directives(headers["Content-Security-Policy"]);
-const reportOnly = directives(headers["Content-Security-Policy-Report-Only"]);
-/**
- * A directive from whichever CSP header carries it, so `img-src` and
- * `connect-src` may move to a Report-Only header for a rollout
- */
-const directive = (name) => enforced[name] ?? reportOnly[name];
+const enforcedList = directiveList(headers["Content-Security-Policy"]);
+const enforced = Object.fromEntries(enforcedList);
+const reportOnly = Object.fromEntries(
+  directiveList(headers["Content-Security-Policy-Report-Only"])
+);
+
+const LOOPBACK = ["localhost", "127.0.0.1", "[::1]"];
 
 describe("vercel.json security headers", () => {
+  it("names each directive once, since a browser reads only the first", () => {
+    const names = enforcedList.map(([name]) => name);
+    assert.deepEqual(names, [...new Set(names)]);
+  });
+
   it("refuses framing by any site, in the enforcing policy", () => {
     assert.deepEqual(enforced["frame-ancestors"], ["'none'"]);
     assert.equal(reportOnly["frame-ancestors"], undefined);
     assert.equal(headers["X-Frame-Options"], "DENY");
   });
 
-  it("loads images only from this origin and a short host list", () => {
-    const img = directive("img-src");
-    assert.ok(img, "img-src is set");
-    assert.ok(img.includes("'self'"));
-    for (const source of img) {
-      assert.doesNotMatch(source, /^(\*|https?:|http:\/\/\*)$/, source);
-    }
+  it("enforces images from this origin and the listed hosts only", () => {
+    assert.deepEqual(enforced["img-src"], [
+      "'self'",
+      "data:",
+      "blob:",
+      // GitHub avatars: the signed-in user, catalog program icons
+      "https://avatars.githubusercontent.com",
+      // program icons in the catalog
+      "https://raw.githubusercontent.com",
+      // Google Analytics beacons
+      "https://*.google-analytics.com",
+      "https://*.googletagmanager.com",
+      "https://*.g.doubleclick.net",
+      "https://www.google.com",
+    ]);
   });
 
-  it("connects to this origin, secure hosts and the local machine only", () => {
-    const connect = directive("connect-src");
-    assert.ok(connect, "connect-src is set");
+  it("enforces connections to this origin, secure hosts and the local machine", () => {
+    const connect = enforced["connect-src"];
+    assert.ok(connect, "connect-src is enforced");
     for (const source of ["'self'", "https:", "wss:"]) {
       assert.ok(connect.includes(source), source);
     }
-    assert.ok(!connect.includes("*"));
-    assert.ok(!connect.includes("http:"));
-    assert.ok(!connect.includes("ws:"));
+    for (const host of LOOPBACK) {
+      assert.ok(connect.includes(`http://${host}:*`), `http://${host}`);
+      assert.ok(connect.includes(`ws://${host}:*`), `ws://${host}`);
+    }
+    for (const source of connect) {
+      if (["'self'", "https:", "wss:"].includes(source)) continue;
+      const loopback = source.match(/^(?:http|ws):\/\/(.+):\*$/)?.[1];
+      assert.ok(LOOPBACK.includes(loopback), `${source} is not loopback`);
+    }
   });
 
   it("keeps the cross-origin isolation headers", () => {
