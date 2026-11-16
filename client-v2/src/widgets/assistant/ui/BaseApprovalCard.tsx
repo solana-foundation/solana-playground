@@ -90,7 +90,7 @@ const cardTitle = (request: ApprovalItem["request"]) => {
   return { text: `wants to run ${request.name}` };
 };
 
-/** What a command or an MCP tool call will do: its name, an MCP call's arguments, and its effect */
+/** What a command or an MCP tool call runs: its name and an MCP call's arguments */
 const CommandBody = ({
   request,
 }: {
@@ -114,9 +114,6 @@ const CommandBody = ({
     ) : (
       <code className="block text-warning">$ {request.name}</code>
     )}
-    <span className="block pt-1.5 font-sans text-xs whitespace-normal text-muted-foreground">
-      {request.effect}
-    </span>
   </span>
 );
 
@@ -173,6 +170,14 @@ export const BaseApprovalCard = ({
           <CommandBody request={request} />
         )}
       </DiffContent>
+
+      {/* Outside the scroll: long arguments must not push where they go, and
+          whether credentials go with them, out of view of Allow (A7) */}
+      {request.type !== "patch" && (
+        <p className="px-3 pt-1.5 pb-2 text-xs text-muted-foreground">
+          {request.effect}
+        </p>
+      )}
 
       <DiffFooter>
         {pending ? (

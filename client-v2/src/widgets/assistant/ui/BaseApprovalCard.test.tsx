@@ -100,6 +100,12 @@ describe("BaseApprovalCard", () => {
     expect(onAnswer).toHaveBeenCalledWith("deny");
   });
 
+  it("keeps where the arguments go outside the scrolling arguments", () => {
+    render(<BaseApprovalCard item={toolCard("pending")} onAnswer={vi.fn()} />);
+    const effect = screen.getByText("Sends these arguments to srv.test.");
+    expect(effect.closest("[data-slot=diff-content]")).toBeNull();
+  });
+
   it("a command shows what it runs", () => {
     render(
       <BaseApprovalCard item={commandCard("pending")} onAnswer={vi.fn()} />
