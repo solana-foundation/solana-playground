@@ -14,7 +14,7 @@
 #
 # `yarn install` refuses to run while these folders are missing, and a real
 # build takes about an hour on a cold target. A stub loses Rust intellisense in
-# the editor and the `solana`, `spl-token`, `sugar` terminal commands
+# the editor and the `solana` and `spl-token` terminal commands
 # plus Seahorse (Python) builds. The UI, Monaco, rustfmt, the wallet, and Rust
 # program builds via the build server work.
 #
@@ -66,7 +66,6 @@ JS
 
 stub_cli solana-cli       runSolana
 stub_cli spl-token-cli    runSplToken
-stub_cli sugar-cli        runSugar
 stub_cli seahorse-compile compileSeahorse
 
 # Rust Analyzer needs to resolve successfully: initRustAnalyzer retries worker

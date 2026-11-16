@@ -42,8 +42,8 @@ yarn dev:with-stubs
 yarn test-e2e:with-stubs
 ```
 
-The stubs lose Rust intellisense, the `solana`, `spl-token` and
-`sugar` terminal commands, and Seahorse builds. `yarn start`, `yarn dev`,
+The stubs lose Rust intellisense, the `solana` and `spl-token`
+terminal commands, and Seahorse builds. `yarn start`, `yarn dev`,
 `yarn dev-cra` (and so `yarn dev-vercel`), and `yarn test-e2e` stop with the
 names of the stubbed packages when they find stubs in `node_modules` and
 `USE_WASM_STUBS=true` is not set. `yarn test-e2e:with-stubs` leaves out the
