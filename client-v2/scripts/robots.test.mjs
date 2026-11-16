@@ -3,15 +3,15 @@ import { test } from "node:test";
 
 import { DISALLOW_ROBOTS, isRobotsDisallowed } from "./robots.mjs";
 
-test("DISALLOW_ROBOTS=true keeps crawlers out", () => {
+test("keeps crawlers out when DISALLOW_ROBOTS=true", () => {
   assert.equal(isRobotsDisallowed({ [DISALLOW_ROBOTS]: "true" }), true);
 });
 
-test("an unset DISALLOW_ROBOTS leaves the site crawlable", () => {
+test("leaves the site crawlable when DISALLOW_ROBOTS is unset", () => {
   assert.equal(isRobotsDisallowed({}), false);
 });
 
-test("a value other than true leaves the site crawlable", () => {
+test("leaves the site crawlable for a value other than true", () => {
   for (const value of ["", "1", "TRUE", "yes", "false"]) {
     assert.equal(isRobotsDisallowed({ [DISALLOW_ROBOTS]: value }), false);
   }
