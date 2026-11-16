@@ -28,16 +28,22 @@ const server: McpServerEntry = {
   enabled: true,
 };
 
-/** Answer every approval card the way the user would, with the card it was asked on */
-const answerCards = (allowed: boolean) =>
+/** Answer every approval card with Allow, on the card it was asked on */
+const allowCards = () =>
   vi
     .spyOn(PgAssistant, "requestApproval")
-    .mockImplementation(async () => ({ id: "card", allowed }));
+    .mockImplementation(async () => ({ id: "card", allowed: true }));
+
+/** Answer every approval card with Deny */
+const denyCards = () =>
+  vi
+    .spyOn(PgAssistant, "requestApproval")
+    .mockImplementation(async () => ({ id: "card", allowed: false }));
 
 beforeEach(() => {
   vi.restoreAllMocks();
   mcp.callTool.mockReset();
-  answerCards(true);
+  allowCards();
 });
 
 const echo = async () => {
@@ -109,7 +115,7 @@ it("records no failure for a call that Stop ended", async () => {
 describe("a server the user added", () => {
   it("asks on a card naming the tool, the server, its host and the arguments", async () => {
     mcp.callTool.mockResolvedValue({ text: "done", isError: false });
-    const asked = answerCards(true);
+    const asked = allowCards();
 
     await (await echo()).run({ q: 1 }, {});
 
@@ -126,7 +132,7 @@ describe("a server the user added", () => {
 
   it("names the user's saved credentials on the card when the entry has some", async () => {
     mcp.callTool.mockResolvedValue({ text: "done", isError: false });
-    const asked = answerCards(true);
+    const asked = allowCards();
     const tool = await echo();
     PgAssistant.setMcpServers([
       {
@@ -170,7 +176,7 @@ describe("a server the user added", () => {
 
   it("sends nothing to the server for a declined call and tells the model", async () => {
     const tool = await echo();
-    answerCards(false);
+    denyCards();
     const recorded = vi.spyOn(PgAssistant, "addToolCall");
 
     const answer = await tool.run({ q: 1 }, {});

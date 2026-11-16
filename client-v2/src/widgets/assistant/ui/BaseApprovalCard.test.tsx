@@ -85,7 +85,7 @@ describe("BaseApprovalCard", () => {
     expect(screen.getByText("−0")).toBeTruthy();
   });
 
-  it("an MCP tool call shows the tool, its arguments and where they go", () => {
+  it("shows the MCP tool, its arguments and where they go", () => {
     const onAnswer = vi.fn();
     const { container } = render(
       <BaseApprovalCard item={toolCard("pending")} onAnswer={onAnswer} />

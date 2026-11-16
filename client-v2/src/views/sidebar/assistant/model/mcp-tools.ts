@@ -1,9 +1,12 @@
 import type { McpServerEntry, McpTool } from "@/features/mcp";
 import { callTool, sameConnection } from "@/features/mcp";
 import type { ToolDefinition, ToolSchema } from "@/shared/lib/ai";
+import { createLogger } from "@/shared/lib/logger";
 
 import type { ToolApproval } from "../store";
 import { PgAssistant } from "../store";
+
+const log = createLogger("assistant:mcp-tools");
 
 /** Separates the server from the tool, and is legal in every provider's names */
 const SEPARATOR = "__";
@@ -36,7 +39,11 @@ const schemaFor = (tool: McpTool): ToolSchema => {
 const hostOf = (url: string) => {
   try {
     return new URL(url).host;
-  } catch {
+  } catch (e) {
+    // The card then names the URL as written, which still says where it goes
+    log.warn("MCP server URL does not parse; the card shows it as written", {
+      context: { error: e },
+    });
     return url;
   }
 };
