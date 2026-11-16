@@ -11,14 +11,19 @@ vi.mock("../CodeBlock", () => ({
 // so it is replaced with the few members Markdown touches
 vi.mock("../../utils", () => ({
   PgCommon: {
-    joinPaths: vi.fn(),
+    joinPaths: (...paths: string[]) => paths.join("/").replace(/\/{2,}/g, "/"),
     toKebabFromTitle: (s: string) => s.toLowerCase(),
   },
   PgRouter: { location: {}, onDidChangeHash: () => ({ dispose: () => {} }) },
   PgTheme: { convertToCSS: () => "", alpha: (color: string) => color },
 }));
 vi.mock("../Link", () => ({ __esModule: true, default: () => null }));
-vi.mock("../Img", () => ({ __esModule: true, default: () => null }));
+vi.mock("../Img", () => ({
+  __esModule: true,
+  default: ({ src }: { src?: string }) => (
+    <img data-testid="img" src={src} alt="" />
+  ),
+}));
 vi.mock("../Icons", () => ({ HyperLink: () => null }));
 
 import { act } from "react";
@@ -121,5 +126,42 @@ describe("Markdown", () => {
     });
 
     expect(container.querySelector("h2")?.id).toBe("mdgetting");
+  });
+
+  // An assistant reply is text the page does not control: an image from
+  // another host would be fetched with no click, so it is shown as text
+  describe("images", () => {
+    const render = (markdown: string) =>
+      act(async () => {
+        root.render(<Markdown rootSrc="/tutorials/hello">{markdown}</Markdown>);
+      });
+
+    it("renders an image at a local path", async () => {
+      await render("![diagram](/tutorials/hello/diagram.png)");
+
+      const img = container.querySelector('[data-testid="img"]');
+      expect(img?.getAttribute("src")).toBe("/tutorials/hello/diagram.png");
+    });
+
+    it("renders a relative image under the root it is given", async () => {
+      await render("![diagram](diagram.png)");
+
+      const img = container.querySelector('[data-testid="img"]');
+      expect(img?.getAttribute("src")).toBe("/tutorials/hello/diagram.png");
+    });
+
+    it.each([
+      ["with no scheme", "//example.com/pixel.png"],
+      ["over https", "https://example.com/pixel.png"],
+    ])(
+      "shows the address of an image from another host %s as text",
+      async (_, address) => {
+        await render(`![pixel](${address})`);
+
+        expect(container.querySelector('[data-testid="img"]')).toBeNull();
+        expect(container.textContent).toContain(address);
+        expect(container.textContent).toContain("pixel");
+      }
+    );
   });
 });

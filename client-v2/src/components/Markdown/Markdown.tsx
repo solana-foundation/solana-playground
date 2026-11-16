@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
 
+import { isSameOrigin } from "@/shared/lib/same-origin";
 import { cn } from "@/shared/lib/utils";
 import { Icon } from "@/shared/ui/icon";
 
@@ -95,18 +96,28 @@ const Markdown: FC<React.PropsWithChildren<MarkdownProps>> = ({
         /** Links */
         a: (linkProps) => <Link {...(linkProps as unknown as LinkProps)} />,
 
-        /** Images */
-        img: (imgProps) => {
+        /**
+         * Images. Only this app's own are loaded: a reply's text may come
+         * from outside it, and an image from another host would be fetched,
+         * address and all, with no click. Such an image shows its address
+         * as text instead.
+         */
+        img: ({ src, alt, ...imgProps }) => {
+          if (src && !isSameOrigin(src)) {
+            return <span>{alt ? `${alt} (${src})` : src}</span>;
+          }
+
           return (
             <Img
               {...imgProps}
+              alt={alt}
               src={
-                imgProps.src && !imgProps.src.startsWith("/")
+                src && !src.startsWith("/")
                   ? PgCommon.joinPaths(
                       rootSrc ?? PgRouter.location.pathname,
-                      imgProps.src
+                      src
                     )
-                  : imgProps.src
+                  : src
               }
             />
           );
