@@ -119,6 +119,17 @@ export const maskRpcUrl = (url: string): MaskedUrl => {
   };
 };
 
+/** Any http(s) URL inside free text, such as an RPC's error message */
+const URL_IN_TEXT = /https?:\/\/[^\s"'<>`)\]]+/g;
+
+/**
+ * `text` with every URL in it masked by {@link maskRpcUrl}. An RPC's error can
+ * quote its URL, key included, and error text can reach the assistant's model
+ * and its stored chat (HOO-2878)
+ */
+export const maskUrlsIn = (text: string) =>
+  text.replace(URL_IN_TEXT, (url) => maskRpcUrl(url).text);
+
 /** `new URL(value).href`, or the value itself when it is not a URL */
 const normalised = (value: string) => {
   try {
@@ -506,6 +517,22 @@ if (import.meta.vitest) {
         "rpc.example.com"
       );
       expect(hostOf("http://localhost:8899/")).toBe("localhost:8899");
+    });
+
+    describe("maskUrlsIn", () => {
+      it("masks the key of every URL an error quotes, and leaves the rest", () => {
+        expect(
+          maskUrlsIn(
+            "failed to get recent blockhash: 401 from https://devnet.helius-rpc.com/?api-key=abc (https://r.test/?apiKey=x)"
+          )
+        ).toBe(
+          "failed to get recent blockhash: 401 from https://devnet.helius-rpc.com/?api-key=•••• (https://r.test/?apiKey=••••)"
+        );
+      });
+
+      it("leaves text without a URL as it is", () => {
+        expect(maskUrlsIn("insufficient funds")).toBe("insufficient funds");
+      });
     });
 
     describe("maskRpcUrl", () => {

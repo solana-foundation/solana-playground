@@ -87,7 +87,7 @@ const describeWallets = ({ playground, connected, signing }: WalletKeys) => {
       ? ""
       : signing === playground
       ? " (the Playground wallet)"
-      : " (the connected wallet)";
+      : " (a connected wallet)";
   return [
     `Playground wallet: ${playground ?? "none"}`,
     `Connected wallet: ${connected.join(", ") || "none"}`,

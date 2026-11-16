@@ -98,6 +98,8 @@ const secretSpellings = () => {
     Buffer.from(secret).toString("base64"),
     Buffer.from(secret).toString("hex"),
     JSON.stringify(Array.from(secret)),
+    // A `Uint8Array` serialised as it stands: `{"0":12,"1":…}`
+    JSON.stringify(secret),
     Array.from(secret).join(","),
     // The private half alone, which is what signs
     utils.bytes.bs58.encode(secret.slice(0, 32)),
@@ -157,6 +159,13 @@ describe("what the assistant learns of the connection", () => {
     expect(realBridge.getProjectContext().cluster).toBe("custom");
   });
 
+  it("names a public endpoint's cluster even while a custom RPC's read is stale", () => {
+    state.endpoint = Endpoint.MAINNET;
+    state.cluster = "devnet";
+    state.clusterIsStale = true;
+    expect(realBridge.getProjectContext().cluster).toBe("mainnet");
+  });
+
   it("calls a custom RPC still being read custom, not the previous cluster", () => {
     state.endpoint = KEYED_RPC;
     state.cluster = "mainnet";
@@ -206,7 +215,7 @@ describe("what the assistant learns of the wallets", () => {
       `Connected wallet: ${external.publicKey.toBase58()}`
     );
     expect(prompt).toContain(
-      `Signing wallet: ${external.publicKey.toBase58()} (the connected wallet)`
+      `Signing wallet: ${external.publicKey.toBase58()} (a connected wallet)`
     );
   });
 
@@ -229,6 +238,40 @@ describe("what the assistant learns of the wallets", () => {
     for (const spelling of secretSpellings()) {
       expect(sent).not.toContain(spelling);
     }
+  });
+
+  it("leaves out a Playground key that does not parse, and still describes the project", () => {
+    onPlaygroundWallet();
+    state.accounts = [{ kp: [1, 2, 3], name: "Wallet 1" }];
+    expect(describeProjectWith(realBridge)).toContain(
+      "Playground wallet: none"
+    );
+  });
+
+  it("carries only plain values: no key, wallet or byte array anywhere", () => {
+    onConnectedWallet();
+    state.endpoint = KEYED_RPC;
+    const context = realBridge.getProjectContext();
+    expect(Object.keys(context).sort()).toStrictEqual(
+      [
+        "buildError",
+        "cluster",
+        "contextFiles",
+        "currentFilePath",
+        "deployState",
+        "idl",
+        "programId",
+        "wallets",
+        "workspaceName",
+      ].sort()
+    );
+    const isPlain = (value: unknown): boolean =>
+      value === null ||
+      ["string", "number", "boolean", "undefined"].includes(typeof value) ||
+      (Array.isArray(value) && value.every(isPlain)) ||
+      (Object.getPrototypeOf(value) === Object.prototype &&
+        Object.values(value as object).every(isPlain));
+    expect(isPlain(context)).toBe(true);
   });
 
   it("hands over the keys as strings, never a wallet or key object", () => {

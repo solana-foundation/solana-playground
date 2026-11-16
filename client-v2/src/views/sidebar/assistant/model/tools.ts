@@ -1,6 +1,7 @@
 import { NetworkRefusedError } from "@/commands/deploy/network-refused";
 import { solOn, UNKNOWN_NETWORK } from "@/constants";
 import { bindToolFor } from "@/entities/agent-tools";
+import { maskUrlsIn } from "@/entities/cluster";
 import { formatSol } from "@/features/deploy";
 import type { ToolDefinition, ToolInput } from "@/shared/lib/ai";
 import { createLogger } from "@/shared/lib/logger";
@@ -217,7 +218,6 @@ const projectTools = (bridge: PlaygroundBridge): ToolDefinition[] => [
   }),
 
   bindToolFor("deploy")(async () => {
-    const { cluster } = bridge.getProjectContext();
     const hasConnectionChanged = bridge.watchConnection();
     const quote = await bridge.quoteDeploy();
     const cost =
@@ -231,7 +231,9 @@ const projectTools = (bridge: PlaygroundBridge): ToolDefinition[] => [
     const { id: approvalId, allowed } = await PgAssistant.requestApproval({
       type: "command",
       name: "deploy",
-      effect: `Sends a transaction to ${cluster} and spends SOL from the connected wallet.`,
+      effect: `Sends a transaction to ${
+        quote.network ?? UNKNOWN_NETWORK
+      } and spends SOL from the connected wallet.`,
       question: `Deploy ${programName(bridge)} to ${
         quote.network ?? UNKNOWN_NETWORK
       }?${cost}`,
@@ -264,7 +266,7 @@ const projectTools = (bridge: PlaygroundBridge): ToolDefinition[] => [
     } catch (e) {
       // TODO(HOO-2603): log the error with `report: true`; a failed deploy
       // reaches no logger here
-      const message = e instanceof Error ? e.message : String(e);
+      const message = maskUrlsIn(e instanceof Error ? e.message : String(e));
       if (e instanceof NetworkRefusedError) {
         PgAssistant.setApprovalOutcome(approvalId, "deploy did not start");
         return `The deploy did not start, and nothing was sent: ${message}`;

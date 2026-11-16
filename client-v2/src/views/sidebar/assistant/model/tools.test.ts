@@ -398,6 +398,21 @@ describe("build and deploy", () => {
       outcome: "deploy failed: insufficient funds",
     });
   });
+
+  it("masks the key of an RPC URL a failed deploy's error quotes", async () => {
+    const { result, card } = await allowed(
+      commandBridge({
+        deploy: vi.fn(async () => {
+          throw new Error(
+            "failed to get recent blockhash: 401 from https://devnet.helius-rpc.com/?api-key=k3y-0f-the-rpc"
+          );
+        }),
+      }),
+      "deploy"
+    );
+    expect(JSON.stringify({ result, card })).not.toContain("k3y-0f-the-rpc");
+    expect(result).toContain("https://devnet.helius-rpc.com/?api-key=••••");
+  });
 });
 
 describe("build and deploy approvals", () => {

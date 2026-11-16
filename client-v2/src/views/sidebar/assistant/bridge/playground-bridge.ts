@@ -6,6 +6,7 @@ import {
 import { type Cluster, getKnownCluster } from "@/entities/cluster";
 import { networkInSentence } from "@/features/deploy";
 import { merge3 } from "@/features/persistence/model/merge";
+import { createLogger } from "@/shared/lib/logger";
 
 import { estimateDeployCostWithin } from "../../../../commands/deploy/estimate";
 import {
@@ -32,7 +33,7 @@ export interface IdlSummary {
  * The network the app is on, by name. A custom RPC's URL can carry its
  * provider's API key, so the assistant gets the cluster, never the address:
  * `custom` is an RPC on no known cluster, or one whose cluster is still being
- * read (HOO-2878)
+ * read or could not be read (HOO-2878)
  */
 export type AssistantCluster = Cluster | "custom";
 
@@ -45,7 +46,7 @@ export interface WalletKeys {
   playground?: string;
   /** Wallets connected through ConnectorKit (Wallet Standard) */
   connected: string[];
-  /** The wallet that signs and pays: one of the above, absent while none is connected */
+  /** The wallet that signs and pays, one of the keys above; absent while none is connected */
   signing?: string;
 }
 
@@ -115,8 +116,10 @@ export interface PlaygroundBridge {
   deleteFile(path: string): Promise<void>;
   build(): Promise<void>;
   /**
-   * Remembers the connection now and returns a check of whether it changed
-   * since. The connection is compared, not named: its address stays here
+   * Remembers the RPC endpoint now and returns a check of whether another one
+   * was selected since. The endpoint is compared inside the bridge and never
+   * returned, since its URL can carry a key; a cluster resolving late is not a
+   * change
    */
   watchConnection(): () => boolean;
   /** @returns where the deployed program can be seen, when that is known */
@@ -188,7 +191,14 @@ const foldTyping = ({
   return merged.kind === "clean" ? merged.text : typed;
 };
 
-/** The cluster the app is on; see {@link AssistantCluster} */
+const log = createLogger("assistant:bridge");
+
+/**
+ * The cluster the app is on; see {@link AssistantCluster}. A public or local
+ * endpoint names its cluster at once; a custom one has it only once its
+ * genesis hash is read, and until then `PgConnection.cluster` still names the
+ * previous endpoint's, so a stale read counts as no cluster
+ */
 const currentCluster = (): AssistantCluster =>
   getKnownCluster(PgConnection.current.rpcEndpoint) ??
   (PgConnection.clusterIsStale ? undefined : PgConnection.cluster) ??
@@ -197,11 +207,29 @@ const currentCluster = (): AssistantCluster =>
 const toBase58 = (key: { toBase58(): string } | null | undefined) =>
   key?.toBase58();
 
+/**
+ * The selected Playground account's public key. A stored key that does not
+ * parse gives none, rather than failing every assistant turn over one line of
+ * context
+ */
+const playgroundKey = () => {
+  const account = PgWallet.accounts[PgWallet.currentIndex];
+  if (!account) return undefined;
+  try {
+    return toBase58(PgWallet.create(account).publicKey);
+  } catch {
+    // Never the error: it is about the secret key
+    log.warn("the Playground wallet's stored key does not parse; left out", {
+      report: true,
+    });
+    return undefined;
+  }
+};
+
 /** The wallets' public keys; see {@link WalletKeys} */
 const currentWalletKeys = (): WalletKeys => {
-  const account = PgWallet.accounts[PgWallet.currentIndex];
   return {
-    playground: account && toBase58(PgWallet.create(account).publicKey),
+    playground: playgroundKey(),
     connected: PgWallet.getConnectedStandardWallets().flatMap((wallet) => {
       const key = toBase58(wallet.publicKey);
       return key ? [key] : [];
