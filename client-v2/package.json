@@ -17,7 +17,6 @@
     "@isomorphic-git/lightning-fs": "^4.6.0",
     "@metaplex-foundation/js": "^0.19.4",
     "@metaplex-foundation/mpl-bubblegum": "*",
-    "@metaplex-foundation/mpl-candy-machine-core": "*",
     "@metaplex-foundation/mpl-token-metadata": "*",
     "@project-serum/anchor": "^0.23.0",
     "@sentry/node": "11.4.0",

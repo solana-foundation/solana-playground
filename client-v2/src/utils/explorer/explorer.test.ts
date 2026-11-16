@@ -1832,3 +1832,26 @@ describe("deleting a file that has no tab", () => {
     expect(PgExplorer.currentFilePath).toBe(lib);
   });
 });
+
+describe("PgExplorer.writeGeneratedFileWith", () => {
+  beforeEach(reset);
+
+  it("writes a generated file over the file size limit, twice", async () => {
+    await PgExplorer.createWorkspace("generated", {
+      files: files("generated"),
+    });
+    const content = "a".repeat(129 * 1024);
+    const write = PgExplorer.writeGeneratedFileWith({});
+
+    // Twice, as a periodic save does: the second overwrites the first
+    await write("out/cache.json", content);
+    await write("out/cache.json", content);
+
+    const path = "/generated/out/cache.json";
+    const stored = (
+      PgExplorer.fs as unknown as { __files: Map<string, string> }
+    ).__files;
+    expect(stored.get(path)).toBe(content);
+    expect(PgExplorer.files[path].content).toBe(content);
+  });
+});
