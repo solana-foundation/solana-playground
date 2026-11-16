@@ -4,7 +4,7 @@
  * misses count as remote: `//host` (no scheme), `/\host`, `\\host`, an
  * address with a tab inside, and one with leading spaces. An address that
  * does not parse, or that has no origin of its own (`data:`), is not
- * same-origin.
+ * same-origin, and with no `location` (outside a page) nothing is.
  */
 export const isSameOrigin = (address: string): boolean => {
   const here = globalThis.location?.href;

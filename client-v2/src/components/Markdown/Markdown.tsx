@@ -103,11 +103,12 @@ const Markdown: FC<React.PropsWithChildren<MarkdownProps>> = ({
          * outside the app, and an image from another host would be fetched,
          * address and all, with no click. Both the address as written and
          * the one the page loads are checked. Any other image shows as text,
-         * and so does one whose address react-markdown cleared (it empties
-         * every scheme but http and https, `data:` among them).
+         * and so does one whose address react-markdown's `urlTransform`
+         * cleared (`data:`, for one). The raw-address check is what turns
+         * the schemes it keeps, such as `mailto:`, into text.
          */
         img: ({ src, alt, ...imgProps }) => {
-          if (!src) return <ImageAddress src={src} alt={alt} />;
+          if (!src) return <ImageAddress alt={alt} />;
 
           const resolved = src.startsWith("/")
             ? src
