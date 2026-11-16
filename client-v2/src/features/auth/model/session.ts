@@ -1,3 +1,4 @@
+import { isNetworkFailure } from "@/shared/lib/ai";
 import { createLogger } from "@/shared/lib/logger";
 import { timeoutSignal } from "@/shared/lib/timeout-signal";
 
@@ -118,6 +119,16 @@ const ANSWERS = new Set([401, 404]);
  * to lead with or retry
  */
 const READ_TIMEOUT_MS = 10_000;
+
+/**
+ * Whether a session read rejected because it got no answer: the connection
+ * dropped (`isNetworkFailure`), `READ_TIMEOUT_MS` ran out (`TimeoutError`),
+ * or the page aborted the request (`AbortError`)
+ */
+const isNoAnswer = (error: unknown) =>
+  isNetworkFailure(error) ||
+  (error instanceof DOMException &&
+    (error.name === "TimeoutError" || error.name === "AbortError"));
 
 /**
  * How a session read can go: none settled yet, `failed` (no answer, a 5xx
@@ -438,7 +449,19 @@ export class PgSession {
       }
     } catch (error) {
       failed = true;
-      log.error(error, { report: true, context: { step: "refresh" } });
+      if (isNoAnswer(error)) {
+        // Offline, timed out or aborted: the user's network, not a defect to
+        // report, as with a 403 or a 429 above
+        log.warn("session read got no answer", {
+          context: {
+            step: "refresh",
+            error: String(error),
+            name: (error as Error).name,
+          },
+        });
+      } else {
+        log.error(error, { report: true, context: { step: "refresh" } });
+      }
     }
 
     // A failed read keeps the user it had: it says nothing new about them
@@ -1160,6 +1183,28 @@ if (import.meta.vitest) {
         expect(PgSession.readState).toBe("failed");
         expect(logs.entries.some((e) => e.report)).toBe(reported);
       });
+
+      it.each([
+        // Safari's and Chrome's dropped connection
+        [new TypeError("Load failed"), false],
+        [new TypeError("Failed to fetch"), false],
+        [new DOMException("signal timed out", "TimeoutError"), false],
+        [new DOMException("aborted", "AbortError"), false],
+        // A programming error is still a defect
+        [new TypeError("x.json is not a function"), true],
+      ])(
+        "reports a read that rejected with %s: %s",
+        async (error, reported) => {
+          const logs = memoryProvider();
+          initLogger({ providers: [logs] });
+          vi.spyOn(globalThis, "fetch").mockRejectedValue(error);
+
+          await PgSession.refresh();
+
+          expect(PgSession.readState).toBe("failed");
+          expect(logs.entries.some((e) => e.report)).toBe(reported);
+        }
+      );
 
       it("gives up on a read that hangs, as no answer", async () => {
         initLogger({ providers: [memoryProvider()] });

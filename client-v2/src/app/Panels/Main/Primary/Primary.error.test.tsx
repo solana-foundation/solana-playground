@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { initLogger, memoryProvider, resetLogger } from "@/shared/lib/logger";
+import { GithubImportError } from "@/utils/import-error";
 
 // The `utils` barrel cannot load under jsdom; `Primary` needs only these.
 // The boundary is the real one: what it keeps between views is under test.
@@ -54,6 +55,24 @@ it("drops a failed route's error when the next route brings its view", async () 
 
   expect(await screen.findByText("Hello Solana")).toBeTruthy();
   expect(screen.queryByText("Seahorse example is gone")).toBeNull();
+});
+
+it.each([
+  // A GitHub link to a path with no code
+  [new GithubImportError("No program code found", "no-source"), false],
+  // A route that broke
+  [new Error("Seahorse example is gone"), true],
+])("reports a view that failed with %s: %s", async (error, reported) => {
+  const logs = memoryProvider();
+  initLogger({ providers: [logs] });
+  render(<Primary />);
+
+  void PgView.setMainPrimary(async () => {
+    throw error;
+  });
+
+  expect(await screen.findByText(error.message)).toBeTruthy();
+  expect(logs.entries.some((e) => e.report)).toBe(reported);
 });
 
 it("keeps a newer view over an older one that fails after it", async () => {
