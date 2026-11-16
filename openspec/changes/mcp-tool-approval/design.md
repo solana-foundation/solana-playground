@@ -18,8 +18,8 @@ shapes: `patch` and `command` (`build` | `deploy`). MCP tools are built in `mcp-
 
 - **A third request shape, `tool`**, rather than widening `command.name` to any string. `command` is matched on its
   name in the card, the codec tests and telemetry; a separate shape carries `server`, `tool`, `host` and the
-  arguments as pretty-printed JSON without loosening those. The card's command body is reused: `$ <tool>`, then the
-  arguments, then the effect line.
+  arguments as pretty-printed JSON without loosening those. The card's command body is reused: the tool's name (no `$`:
+  an MCP call is not a terminal command), then the arguments, then the effect line.
 - **Gate by origin, not by name.** A server needs approval when its id is not one the gateway serves at call time.
   Reading it at call time, like the entry itself, means a server the gateway starts or stops offering mid-turn is
   judged as it is now.

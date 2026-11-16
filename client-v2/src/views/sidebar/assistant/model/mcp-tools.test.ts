@@ -200,6 +200,69 @@ describe("a server the user added", () => {
     expect(mcp.callTool).not.toHaveBeenCalled();
   });
 
+  it("sends nothing when the server's token changed while the card waited", async () => {
+    const tool = await echo();
+    vi.spyOn(PgAssistant, "requestApproval").mockImplementation(async () => {
+      PgAssistant.setMcpServers([
+        {
+          id: "srv",
+          name: "Srv",
+          url: "https://srv.test/mcp",
+          enabled: true,
+          authToken: "other-token",
+        },
+      ]);
+      return { id: "card", allowed: true };
+    });
+
+    const answer = await tool.run({}, {});
+
+    expect(answer).toContain("changed while the approval waited");
+    expect(mcp.callTool).not.toHaveBeenCalled();
+  });
+
+  it("marks the card failed when the tool reports an error", async () => {
+    mcp.callTool.mockResolvedValue({ text: "nope", isError: true });
+    const failure = vi.spyOn(PgAssistant, "setApprovalFailure");
+
+    await (await echo()).run({}, {});
+
+    expect(failure).toHaveBeenCalledWith("card", "the tool reported an error");
+  });
+
+  it("marks an allowed call that Stop ended as stopped, not failed", async () => {
+    const controller = new AbortController();
+    mcp.callTool.mockImplementation(async () => {
+      controller.abort();
+      throw new Error("Request was aborted");
+    });
+    const outcome = vi.spyOn(PgAssistant, "setApprovalOutcome");
+    const failure = vi.spyOn(PgAssistant, "setApprovalFailure");
+
+    await (await echo()).run({}, { signal: controller.signal });
+
+    expect(outcome).toHaveBeenCalledWith("card", "stopped");
+    expect(failure).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing when the turn is stopped while the card waits", async () => {
+    const tool = await echo();
+    vi.restoreAllMocks();
+    const controller = new AbortController();
+    PgAssistant.beginTurn(controller);
+
+    const running = tool.run({}, { signal: controller.signal });
+    expect(PgAssistant.items.at(-1)).toMatchObject({
+      kind: "approval",
+      status: "pending",
+    });
+    PgAssistant.stopTurn();
+
+    expect(await running).toContain("declined");
+    expect(mcp.callTool).not.toHaveBeenCalled();
+    PgAssistant.endTurn(controller);
+  });
+
   it("waits on a real card and sends nothing once it is denied", async () => {
     const tool = await echo();
     vi.restoreAllMocks();

@@ -1,5 +1,5 @@
 import type { McpServerEntry, McpTool } from "@/features/mcp";
-import { callTool } from "@/features/mcp";
+import { callTool, sameConnection } from "@/features/mcp";
 import type { ToolDefinition, ToolSchema } from "@/shared/lib/ai";
 
 import type { ToolApproval } from "../store";
@@ -41,10 +41,13 @@ const hostOf = (url: string) => {
   }
 };
 
-/** Whether the entry is still enabled and still points where it did */
-const sameTarget = (entry: McpServerEntry) =>
-  PgAssistant.enabledMcpServers.some(
-    (now) => now.id === entry.id && now.url === entry.url
+/**
+ * The entry as it is after the user answered, when it still connects the way
+ * the card showed (same URL and credentials); `undefined` when it changed or went
+ */
+const approvedEntry = (shown: McpServerEntry) =>
+  PgAssistant.enabledMcpServers.find(
+    (now) => now.id === shown.id && sameConnection(now, shown)
   );
 
 /** Whether the entry carries a credential of the user's, sent with every call */
@@ -100,29 +103,35 @@ const define = (server: McpServerEntry, tool: McpTool): ToolDefinition => ({
     if (approval && !approval.allowed) {
       return `The user declined to call ${tool.name} on ${current.name}.`;
     }
-    // The card named this URL's host; an entry edited or removed while it
-    // waited would send the arguments somewhere the user never approved
-    if (approval && !sameTarget(current)) {
+    // The card named this entry's host and credentials; one edited or removed
+    // while it waited would send the arguments where the user never approved
+    const target = approval ? approvedEntry(current) : current;
+    if (approval && !target) {
       PgAssistant.setApprovalFailure(approval.id, "server changed, not called");
       return `Did not call ${tool.name}: the ${current.name} MCP server changed while the approval waited. Ask again if it is still needed.`;
     }
-    PgAssistant.addToolCall(`${tool.name} on ${current.name}`);
+    const entry = target ?? current;
+    PgAssistant.addToolCall(`${tool.name} on ${entry.name}`);
     try {
-      const { text, isError } = await callTool(current, tool.name, input, {
+      const { text, isError } = await callTool(entry, tool.name, input, {
         signal: options?.signal,
       });
-      if (approval) {
-        PgAssistant.setApprovalOutcome(
+      if (approval && isError) {
+        PgAssistant.setApprovalFailure(
           approval.id,
-          isError ? "the tool reported an error" : "called"
+          "the tool reported an error"
         );
+      } else if (approval) {
+        PgAssistant.setApprovalOutcome(approval.id, "called");
       }
       return isError ? `The tool reported an error: ${text}` : text;
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       // Stop ended the call, which is not the server failing
-      if (!options?.signal?.aborted) {
-        PgAssistant.addToolCall(`${tool.name} on ${current.name} failed`);
+      if (options?.signal?.aborted) {
+        if (approval) PgAssistant.setApprovalOutcome(approval.id, "stopped");
+      } else {
+        PgAssistant.addToolCall(`${tool.name} on ${entry.name} failed`);
         if (approval) {
           PgAssistant.setApprovalFailure(
             approval.id,

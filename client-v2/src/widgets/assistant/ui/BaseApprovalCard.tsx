@@ -90,6 +90,36 @@ const cardTitle = (request: ApprovalItem["request"]) => {
   return { text: `wants to run ${request.name}` };
 };
 
+/** What a command or an MCP tool call will do: its name, an MCP call's arguments, and its effect */
+const CommandBody = ({
+  request,
+}: {
+  request: Exclude<ApprovalItem["request"], PatchApproval>;
+}) => (
+  // A pre holds phrasing content only, so its lines are block spans
+  <span className="block px-3">
+    {request.type === "tool" ? (
+      <>
+        {/* No "$": an MCP call is not a terminal command */}
+        <code className="block text-warning [overflow-wrap:anywhere] whitespace-normal">
+          {request.tool}
+        </code>
+        <code
+          data-tool-input
+          className="block pt-1.5 text-foreground [overflow-wrap:anywhere] whitespace-pre-wrap"
+        >
+          {request.input}
+        </code>
+      </>
+    ) : (
+      <code className="block text-warning">$ {request.name}</code>
+    )}
+    <span className="block pt-1.5 font-sans text-xs whitespace-normal text-muted-foreground">
+      {request.effect}
+    </span>
+  </span>
+);
+
 /**
  * A change or a command the assistant wants to make, with the user's answer.
  *
@@ -140,28 +170,7 @@ export const BaseApprovalCard = ({
         {patch ? (
           <PatchLines request={request} />
         ) : (
-          // A pre holds phrasing content only, so its lines are block spans
-          <span className="block px-3">
-            {request.type === "tool" ? (
-              <>
-                {/* No "$": an MCP call is not a terminal command */}
-                <code className="block text-warning [overflow-wrap:anywhere] whitespace-normal">
-                  {request.tool}
-                </code>
-                <code
-                  data-tool-input
-                  className="block pt-1.5 text-foreground [overflow-wrap:anywhere] whitespace-pre-wrap"
-                >
-                  {request.input}
-                </code>
-              </>
-            ) : (
-              <code className="block text-warning">$ {request.name}</code>
-            )}
-            <span className="block pt-1.5 font-sans text-xs whitespace-normal text-muted-foreground">
-              {request.effect}
-            </span>
-          </span>
+          <CommandBody request={request} />
         )}
       </DiffContent>
 
