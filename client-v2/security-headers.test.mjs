@@ -27,8 +27,8 @@ const { headers } = platformRules(
 );
 
 /** A CSP header's directives, in header order, as `[name, sources]` */
-const directiveList = (value = "") =>
-  value
+const directiveList = (value) =>
+  (value ?? "")
     .split(";")
     .map((d) => d.trim().split(/\s+/))
     .filter(([name]) => name)
@@ -45,7 +45,7 @@ const LOOPBACK = ["localhost", "127.0.0.1", "[::1]"];
 describe("vercel.json security headers", () => {
   it("names each directive once, since a browser reads only the first", () => {
     const names = enforcedList.map(([name]) => name);
-    assert.deepEqual(names, [...new Set(names)]);
+    assert.deepEqual(names, Array.from(new Set(names)));
   });
 
   it("refuses framing by any site, in the enforcing policy", () => {
