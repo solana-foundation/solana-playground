@@ -78,7 +78,7 @@ describe("describeProject", () => {
     getProjectContext: () => ({
       workspaceName: "counter",
       cluster: "devnet",
-      wallets: { playground: null, connected: [], signing: null },
+      wallets: { connected: [] },
       contextFiles: [
         { path: "src/lib.rs", content: "pub fn secret_sauce() {}" },
         { path: "tests/a.ts", content: "it('works')" },
@@ -112,7 +112,7 @@ describe("describeProject", () => {
       getProjectContext: () => ({
         workspaceName: "counter",
         cluster: "devnet",
-        wallets: { playground: null, connected: [], signing: null },
+        wallets: { connected: [] },
         contextFiles: [{ path: "tests/a.ts", content: "it('works')" }],
         programId: null,
         idl: null,
@@ -131,7 +131,7 @@ describe("describeProject", () => {
       getProjectContext: () => ({
         workspaceName: "p",
         cluster: "devnet",
-        wallets: { playground: null, connected: [], signing: null },
+        wallets: { connected: [] },
         contextFiles: [],
         programId: null,
         idl,

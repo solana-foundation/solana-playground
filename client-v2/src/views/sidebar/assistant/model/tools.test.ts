@@ -4,7 +4,6 @@ import {
   memoryProvider,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
-import { TEST_ENDPOINT } from "@/test-utils/endpoints.mjs";
 import { requireFor } from "@/test-utils/require-for";
 
 import type { PlaygroundBridge } from "../bridge/playground-bridge";
@@ -332,6 +331,7 @@ describe("build and deploy", () => {
     ({
       build: over.build ?? vi.fn(async () => {}),
       deploy: over.deploy ?? vi.fn(async () => null),
+      watchConnection: () => () => false,
       quoteDeploy: vi.fn(async () => ({
         network: "devnet",
         cost: null,
@@ -635,6 +635,7 @@ describe("deploy", () => {
     const tool = requireFor("the deploy tool")(
       createTools({
         getProjectContext: () => ({ cluster: "devnet" }),
+        watchConnection: () => () => false,
         quoteDeploy: async () => ({
           network: "devnet",
           cost: 1_420_000_000,

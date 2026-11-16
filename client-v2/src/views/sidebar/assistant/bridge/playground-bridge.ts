@@ -41,12 +41,12 @@ export type AssistantCluster = Cluster | "custom";
  * Playground keypair carries the secret key (HOO-2857)
  */
 export interface WalletKeys {
-  /** The selected Playground wallet account; null before one exists */
-  playground: string | null;
+  /** The selected Playground wallet account; absent before one exists */
+  playground?: string;
   /** Wallets connected through ConnectorKit (Wallet Standard) */
   connected: string[];
-  /** The wallet that signs and pays: one of the above, null while none is connected */
-  signing: string | null;
+  /** The wallet that signs and pays: one of the above, absent while none is connected */
+  signing?: string;
 }
 
 /** What the assistant is allowed to know about the project without asking */
@@ -195,13 +195,13 @@ const currentCluster = (): AssistantCluster =>
   "custom";
 
 const toBase58 = (key: { toBase58(): string } | null | undefined) =>
-  key?.toBase58() ?? null;
+  key?.toBase58();
 
 /** The wallets' public keys; see {@link WalletKeys} */
 const currentWalletKeys = (): WalletKeys => {
   const account = PgWallet.accounts[PgWallet.currentIndex];
   return {
-    playground: account ? toBase58(PgWallet.create(account).publicKey) : null,
+    playground: account && toBase58(PgWallet.create(account).publicKey),
     connected: PgWallet.getConnectedStandardWallets().flatMap((wallet) => {
       const key = toBase58(wallet.publicKey);
       return key ? [key] : [];

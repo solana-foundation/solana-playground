@@ -83,7 +83,7 @@ export const systemPrompt = () =>
 /** The wallets' lines of the project state: public keys only */
 const describeWallets = ({ playground, connected, signing }: WalletKeys) => {
   const whose =
-    signing === null
+    signing === undefined
       ? ""
       : signing === playground
       ? " (the Playground wallet)"

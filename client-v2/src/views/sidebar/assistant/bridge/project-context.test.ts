@@ -1,18 +1,22 @@
+import { utils } from "@coral-xyz/anchor";
 import { Keypair } from "@solana/web3.js";
-import bs58 from "bs58";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { Endpoint } from "@/entities/cluster";
+import { TEST_ENDPOINT } from "@/test-utils/endpoints.mjs";
 
 /** A custom RPC whose URL carries an API key, as providers hand them out */
 const RPC_KEY = "k3y-0f-the-rpc-provider";
-const KEYED_RPC = `https://rpc.provider.test/v1/?api-key=${RPC_KEY}`;
+const KEYED_RPC = `${TEST_ENDPOINT.DEVNET}/v1/?api-key=${RPC_KEY}`;
+const KEYED_HOST = new URL(TEST_ENDPOINT.DEVNET).host;
 
 const state = vi.hoisted(() => ({
   endpoint: "",
-  cluster: null as string | null,
+  cluster: undefined as string | undefined,
   clusterIsStale: false,
   accounts: [] as { kp: number[]; name: string }[],
   currentIndex: -1,
-  current: null as unknown,
+  current: undefined as unknown,
   standardWallets: [] as unknown[],
 }));
 
@@ -41,7 +45,11 @@ vi.mock("../../../../utils", async () => {
       onDidMoveItem: () => {},
     },
     PgGlobal: { deployState: "ready" },
-    PgProgramInfo: { getPkStr: () => undefined, readIdl: () => undefined, callableIdl: () => undefined },
+    PgProgramInfo: {
+      getPkStr: () => undefined,
+      readIdl: () => undefined,
+      callableIdl: () => undefined,
+    },
     PgWallet: {
       get accounts() {
         return state.accounts;
@@ -86,13 +94,13 @@ const standardWallet = {
 const secretSpellings = () => {
   const secret = playground.secretKey;
   return [
-    bs58.encode(secret),
+    utils.bytes.bs58.encode(secret),
     Buffer.from(secret).toString("base64"),
     Buffer.from(secret).toString("hex"),
     JSON.stringify(Array.from(secret)),
     Array.from(secret).join(","),
     // The private half alone, which is what signs
-    bs58.encode(secret.slice(0, 32)),
+    utils.bytes.bs58.encode(secret.slice(0, 32)),
     Buffer.from(secret.slice(0, 32)).toString("hex"),
   ];
 };
@@ -123,15 +131,15 @@ const onConnectedWallet = () => {
 describe("what the assistant learns of the connection", () => {
   afterEach(() => {
     state.endpoint = "";
-    state.cluster = null;
+    state.cluster = undefined;
     state.clusterIsStale = false;
   });
 
   it.each([
-    ["https://api.devnet.solana.com", "devnet"],
-    ["https://api.mainnet-beta.solana.com", "mainnet-beta"],
-    ["https://api.testnet.solana.com", "testnet"],
-    ["http://localhost:8899", "localnet"],
+    [Endpoint.DEVNET, "devnet"],
+    [Endpoint.MAINNET, "mainnet"],
+    [Endpoint.TESTNET, "testnet"],
+    [Endpoint.LOCALNET, "localnet"],
   ])("names the cluster of %s as %s", (endpoint, cluster) => {
     state.endpoint = endpoint;
     expect(realBridge.getProjectContext().cluster).toBe(cluster);
@@ -145,31 +153,28 @@ describe("what the assistant learns of the connection", () => {
 
   it("calls a custom RPC on no known cluster custom", () => {
     state.endpoint = KEYED_RPC;
-    state.cluster = null;
+    state.cluster = undefined;
     expect(realBridge.getProjectContext().cluster).toBe("custom");
   });
 
   it("calls a custom RPC still being read custom, not the previous cluster", () => {
     state.endpoint = KEYED_RPC;
-    state.cluster = "mainnet-beta";
+    state.cluster = "mainnet";
     state.clusterIsStale = true;
     expect(realBridge.getProjectContext().cluster).toBe("custom");
   });
 
   it.each([
     ["on a known cluster", "devnet"],
-    ["on no known cluster", null],
-  ])(
-    "never sends the address of a custom RPC or its key, %s",
-    (_, cluster) => {
-      state.endpoint = KEYED_RPC;
-      state.cluster = cluster;
-      onPlaygroundWallet();
-      const sent = payload();
-      expect(sent).not.toContain(RPC_KEY);
-      expect(sent).not.toContain("rpc.provider.test");
-    }
-  );
+    ["on no known cluster", undefined],
+  ])("never sends the address of a custom RPC or its key, %s", (_, cluster) => {
+    state.endpoint = KEYED_RPC;
+    state.cluster = cluster;
+    onPlaygroundWallet();
+    const sent = payload();
+    expect(sent).not.toContain(RPC_KEY);
+    expect(sent).not.toContain(KEYED_HOST);
+  });
 
   it("says in the prompt which cluster the app is on", () => {
     state.endpoint = KEYED_RPC;
@@ -208,7 +213,7 @@ describe("what the assistant learns of the wallets", () => {
   it("says no wallet signs while none is connected", () => {
     state.accounts = [];
     state.currentIndex = -1;
-    state.current = null;
+    state.current = undefined;
     state.standardWallets = [];
     const prompt = describeProjectWith(realBridge);
     expect(prompt).toContain("Playground wallet: none");
@@ -229,7 +234,7 @@ describe("what the assistant learns of the wallets", () => {
   it("hands over the keys as strings, never a wallet or key object", () => {
     onConnectedWallet();
     const { wallets } = realBridge.getProjectContext();
-    expect(wallets).toEqual({
+    expect(wallets).toStrictEqual({
       playground: playground.publicKey.toBase58(),
       connected: [external.publicKey.toBase58()],
       signing: external.publicKey.toBase58(),
