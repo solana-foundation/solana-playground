@@ -1848,10 +1848,10 @@ describe("PgExplorer.writeGeneratedFileWith", () => {
     await write("out/cache.json", content);
 
     const path = "/generated/out/cache.json";
-    const stored = (
+    const generated = (
       PgExplorer.fs as unknown as { __files: Map<string, string> }
     ).__files;
-    expect(stored.get(path)).toBe(content);
+    expect(generated.get(path)).toBe(content);
     expect(PgExplorer.files[path].content).toBe(content);
   });
 });
