@@ -43,10 +43,10 @@ const LOGGED_STDERR_LEN: usize = 4096;
 /// How long a build may run before its process tree is stopped.
 ///
 /// Generous on purpose: the first build in a concurrency slot compiles every dependency.
-pub const BUILD_TIME_LIMIT: Duration = Duration::from_secs(10 * 60);
+const BUILD_TIME_LIMIT: Duration = Duration::from_secs(10 * 60);
 
 /// How long a program's build directory is kept after its last build
-pub const BUILD_DIR_RETENTION: Duration = Duration::from_secs(24 * 60 * 60);
+const BUILD_DIR_RETENTION: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// Build the program from the given program name and files.
 ///
@@ -159,7 +159,7 @@ pub fn build(concurrency_id: usize, program_name: &str, files: &Files) -> anyhow
         .arg(&program_path)
         .arg("--offline")
         .args(["--", "--locked"]);
-    let (status, stderr) = run_with_time_limit(&mut cmd, BUILD_TIME_LIMIT)
+    let (status, stderr) = run_with_time_limit(&mut cmd, BUILD_TIME_LIMIT, STDERR_GRACE)
         .inspect_err(|e| warn!("Build of {program_name} in slot {concurrency_id}: {e}"))?;
 
     // Check output length
@@ -183,20 +183,11 @@ const STDERR_GRACE: Duration = Duration::from_secs(5);
 ///
 /// Once `limit` passes, the process group is killed, which stops the compiler processes `cmd`
 /// started unless one left the group, and an error saying the build timed out is returned.
+/// A process left in the group that still holds stderr open after the build process exits is
+/// killed after `grace`, and the output read so far is returned with the build's status.
 /// Stderr is kept up to one byte past [`MAX_STDERR_LEN`], enough for the caller to see it was
 /// exceeded; the rest is drained.
 fn run_with_time_limit(
-    cmd: &mut Command,
-    limit: Duration,
-) -> anyhow::Result<(ExitStatus, Vec<u8>)> {
-    run_with_limits(cmd, limit, STDERR_GRACE)
-}
-
-/// [`run_with_time_limit`], with how long stderr may stay open after the build process exits.
-///
-/// A process left in the group that still holds stderr open is killed after `grace`, and the
-/// output read so far is returned with the build process's status.
-fn run_with_limits(
     cmd: &mut Command,
     limit: Duration,
     grace: Duration,
@@ -243,7 +234,7 @@ fn run_with_limits(
 /// A build process leading its own process group.
 ///
 /// Dropped before the build process has been reaped, it kills the group and reaps the process,
-/// so no path out of [`run_with_limits`] leaves a build running.
+/// so no path out of [`run_with_time_limit`] leaves a build running.
 struct ProcessGroup(Child);
 
 impl Drop for ProcessGroup {
@@ -462,6 +453,7 @@ mod tests {
         let (status, stderr) = run_with_time_limit(
             Command::new("sh").args(["-c", "echo built >&2"]),
             Duration::from_secs(10),
+            STDERR_GRACE,
         )
         .unwrap();
         assert!(status.success());
@@ -478,6 +470,7 @@ mod tests {
         let error = run_with_time_limit(
             Command::new("sh").args(["-c", &script]),
             Duration::from_secs(2),
+            STDERR_GRACE,
         )
         .unwrap_err();
 
@@ -489,7 +482,7 @@ mod tests {
     }
 
     #[test]
-    fn run_with_limits_returns_the_output_when_a_child_keeps_stderr_open() {
+    fn run_with_time_limit_returns_the_output_when_a_child_keeps_stderr_open() {
         // The build process exits at once; the child it leaves behind keeps stderr open
         let dir = test_dir();
         let pid_file = dir.join("pid");
@@ -499,7 +492,7 @@ mod tests {
         );
         let started = Instant::now();
 
-        let (status, stderr) = run_with_limits(
+        let (status, stderr) = run_with_time_limit(
             Command::new("sh").args(["-c", &script]),
             Duration::from_secs(30),
             Duration::from_millis(500),
