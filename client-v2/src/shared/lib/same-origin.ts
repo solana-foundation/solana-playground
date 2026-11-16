@@ -1,11 +1,12 @@
 /**
  * Whether an address, as a page would resolve it, points at this app's own
  * origin. The browser's URL parser decides, so the forms a prefix check
- * misses count as remote: `//host` (no scheme), `/\host`, and an address
- * with a tab or a leading space inside. An address that does not parse, or
- * that has no origin of its own (`data:`), is not same-origin.
+ * misses count as remote: `//host` (no scheme), `/\host`, `\\host`, an
+ * address with a tab inside, and one with leading spaces. An address that
+ * does not parse, or that has no origin of its own (`data:`), is not
+ * same-origin.
  */
-export const isSameOrigin = (address: string) => {
+export const isSameOrigin = (address: string): boolean => {
   const here = globalThis.location?.href;
   if (here === undefined) return false;
 
@@ -46,6 +47,10 @@ if (import.meta.vitest) {
 
     it("takes an address with no origin of its own as remote", () => {
       expect(isSameOrigin("data:image/png;base64,AAAA")).toBe(false);
+    });
+
+    it("takes an address the URL parser rejects as remote", () => {
+      expect(isSameOrigin("https://[example.com/image.png")).toBe(false);
     });
   });
 }

@@ -13,6 +13,7 @@ import { PgCommon, PgRouter } from "../../utils";
 import CodeBlock from "../CodeBlock";
 import Img from "../Img";
 import Link, { LinkProps } from "../Link";
+import ImageAddress from "./ImageAddress";
 
 interface MarkdownProps {
   /** Markdown string */
@@ -97,30 +98,23 @@ const Markdown: FC<React.PropsWithChildren<MarkdownProps>> = ({
         a: (linkProps) => <Link {...(linkProps as unknown as LinkProps)} />,
 
         /**
-         * Images. Only this app's own are loaded: a reply's text may come
-         * from outside it, and an image from another host would be fetched,
-         * address and all, with no click. Such an image shows its address
-         * as text instead.
+         * Images. Every Markdown this component renders loads only this
+         * app's own: an assistant reply, an imported tutorial or a tool's
+         * text may come from outside it, and an image from another host would
+         * be fetched, address and all, with no click. Any other image,
+         * `data:` ones included, shows as its address. Both the address as
+         * written and the one the page loads are checked.
          */
         img: ({ src, alt, ...imgProps }) => {
-          if (src && !isSameOrigin(src)) {
-            return <span>{alt ? `${alt} (${src})` : src}</span>;
+          const resolved =
+            src && !src.startsWith("/")
+              ? PgCommon.joinPaths(rootSrc ?? PgRouter.location.pathname, src)
+              : src;
+          if (src && !(isSameOrigin(src) && isSameOrigin(resolved ?? ""))) {
+            return <ImageAddress src={src} alt={alt} />;
           }
 
-          return (
-            <Img
-              {...imgProps}
-              alt={alt}
-              src={
-                src && !src.startsWith("/")
-                  ? PgCommon.joinPaths(
-                      rootSrc ?? PgRouter.location.pathname,
-                      src
-                    )
-                  : src
-              }
-            />
-          );
+          return <Img {...imgProps} alt={alt} src={resolved} />;
         },
 
         /** Code blocks */

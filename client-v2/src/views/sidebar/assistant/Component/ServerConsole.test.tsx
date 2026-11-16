@@ -37,3 +37,29 @@ it("flips Show more and Show less and says which state it is in", () => {
   const open = screen.getByRole("button", { name: "Show less" });
   expect(open.getAttribute("aria-expanded")).toBe("true");
 });
+
+// A tool description is the MCP server's text: an image in it would be
+// fetched with no click, so it shows as its address instead
+it("shows an image in a tool description as text, never loads it", () => {
+  vi.spyOn(PgAssistant, "mcpTools", "get").mockReturnValue({
+    docs: [
+      {
+        name: "search",
+        description: "Searches. ![Tracker](https://example.com/pixel.png)",
+        inputSchema: {},
+      },
+    ],
+  });
+
+  const { container } = render(
+    <ServerConsole server={server} providerName="Anthropic" scope="" />
+  );
+  fireEvent.change(screen.getByRole("combobox"), {
+    target: { value: "search" },
+  });
+
+  expect(container.querySelector("img")).toBeNull();
+  expect(
+    screen.getByText("Tracker (https://example.com/pixel.png)")
+  ).toBeTruthy();
+});

@@ -11,7 +11,10 @@ vi.mock("../CodeBlock", () => ({
 // so it is replaced with the few members Markdown touches
 vi.mock("../../utils", () => ({
   PgCommon: {
-    joinPaths: (...paths: string[]) => paths.join("/").replace(/\/{2,}/g, "/"),
+    // The real join: a slash between the parts, the second's leading one dropped
+    joinPaths: (root: string, path: string) =>
+      (root.endsWith("/") ? root : `${root}/`) +
+      (path.startsWith("/") ? path.slice(1) : path),
     toKebabFromTitle: (s: string) => s.toLowerCase(),
   },
   PgRouter: { location: {}, onDidChangeHash: () => ({ dispose: () => {} }) },
@@ -20,8 +23,8 @@ vi.mock("../../utils", () => ({
 vi.mock("../Link", () => ({ __esModule: true, default: () => null }));
 vi.mock("../Img", () => ({
   __esModule: true,
-  default: ({ src }: { src?: string }) => (
-    <img data-testid="img" src={src} alt="" />
+  default: ({ src, alt }: { src?: string; alt?: string }) => (
+    <img data-testid="img" src={src} alt={alt} />
   ),
 }));
 vi.mock("../Icons", () => ({ HyperLink: () => null }));
@@ -128,8 +131,9 @@ describe("Markdown", () => {
     expect(container.querySelector("h2")?.id).toBe("mdgetting");
   });
 
-  // An assistant reply is text the page does not control: an image from
-  // another host would be fetched with no click, so it is shown as text
+  // Markdown here is often text the page does not control (an assistant
+  // reply, an imported tutorial): an image from another host would be
+  // fetched with no click, so it is shown as text
   describe("images", () => {
     const render = (markdown: string) =>
       act(async () => {
@@ -141,6 +145,7 @@ describe("Markdown", () => {
 
       const img = container.querySelector('[data-testid="img"]');
       expect(img?.getAttribute("src")).toBe("/tutorials/hello/diagram.png");
+      expect(img?.getAttribute("alt")).toBe("diagram");
     });
 
     it("renders a relative image under the root it is given", async () => {
@@ -154,14 +159,20 @@ describe("Markdown", () => {
       ["with no scheme", "//example.com/pixel.png"],
       ["over https", "https://example.com/pixel.png"],
     ])(
-      "shows the address of an image from another host %s as text",
+      "shows an image from another host %s as its alt text and address",
       async (_, address) => {
-        await render(`![pixel](${address})`);
+        await render(`![Account layout](${address})`);
 
         expect(container.querySelector('[data-testid="img"]')).toBeNull();
-        expect(container.textContent).toContain(address);
-        expect(container.textContent).toContain("pixel");
+        expect(container.textContent).toBe(`Account layout (${address})`);
       }
     );
+
+    it("shows an image from another host with no alt text as its address alone", async () => {
+      await render("![](//example.com/pixel.png)");
+
+      expect(container.querySelector('[data-testid="img"]')).toBeNull();
+      expect(container.textContent).toBe("//example.com/pixel.png");
+    });
   });
 });
