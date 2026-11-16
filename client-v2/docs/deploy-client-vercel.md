@@ -235,6 +235,12 @@ So `scripts/vercel-install.sh` installs each version itself, into `.cache/rust/w
 
 The version comes from the lockfile, the file wasm-pack reads, after `cargo metadata --locked` has accepted it, so a bump without `cargo update` stops the build before wasm-pack asks for a version the script did not install. To bump: change the two manifests, then `cargo update -p wasm-bindgen` in `wasm/` and in `wasm/rust-analyzer/`.
 
+## Crawlers
+
+The build serves upstream's `robots.txt`, which allows every crawler; the production site keeps it. A project that is not the public site, such as hoodies' preview project, sets `DISALLOW_ROBOTS=true` (a build-time variable, not `REACT_APP_*`; only the exact value `true` counts). `scripts/update-static.mjs`, which every build runs, then writes a `robots.txt` that disallows the whole site, and its log line ends with `disallowed every crawler in robots.txt`.
+
+Vercel already sends `X-Robots-Tag: noindex` on preview deployments, though not on a production deployment or a custom domain. `Disallow` stops crawling, not listing: a URL linked from elsewhere can still appear in search results without a snippet.
+
 ## Public variables
 
 Every `REACT_APP_*` variable a build sees is public: every visitor can read it in the bundle. CRA defines `process.env` as one object holding all of them, and third-party code that reads `process.env.<anything>` makes webpack inline that object, values and all, whether or not our code reads the variable. Set no other `REACT_APP_*` in any environment. The client reads only these, all in `src/shared/config/client-env.ts`:
