@@ -810,3 +810,134 @@ describe("signing out", () => {
     effect.dispose();
   });
 });
+
+describe("another account after a session ended", () => {
+  const ada = {
+    id: "ada",
+    name: undefined,
+    image: undefined,
+    login: undefined,
+  };
+  const bob = {
+    id: "bob",
+    name: undefined,
+    image: undefined,
+    login: undefined,
+  };
+
+  /** Who `/api/auth/get-session` answers with; nobody is a 401 */
+  let who: typeof ada | undefined;
+  /** The thread id of every conversation POST, in order */
+  let posted: string[];
+  let effect: ReturnType<typeof session>;
+
+  const json = (status: number, body: unknown) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { "content-type": "application/json" },
+    });
+
+  const answer = async (url: string, init: RequestInit | undefined) => {
+    if (url === "/api/auth/get-session") {
+      return who ? json(200, { user: who }) : json(401, {});
+    }
+    if (url === "/api/sync") return json(200, { enabled: true, db: "ok" });
+    if (url === "/api/conversations" && init?.method === "POST") {
+      posted.push(JSON.parse(String(init.body)).threadId);
+      return json(200, { written: 1 });
+    }
+    if (url.startsWith("/api/conversations?projectId=")) {
+      return json(200, { threads: [] });
+    }
+    return json(404, {});
+  };
+
+  const message: ChatItem = {
+    kind: "user",
+    id: "6f1c2b0e-0000-4000-8000-000000000001",
+    createdAt: new Date(1000).toISOString(),
+    text: "ada's question",
+  };
+
+  /** A session read, and the sign-in pass it starts, landed */
+  const read = async (next: typeof ada | undefined) => {
+    who = next;
+    const passes = vi.mocked(restore.reconcile).mock.calls.length;
+    await PgSession.refresh();
+    if (next) {
+      await vi.waitFor(() =>
+        expect(vi.mocked(restore.reconcile).mock.calls.length).toBe(passes + 1)
+      );
+    }
+    await settle();
+  };
+
+  beforeEach(async () => {
+    posted = [];
+    who = undefined;
+    PgSession.reset();
+    PgSyncClient.reset();
+    await PgChatStorage.clear();
+    await PgThreadIndex.clear();
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) =>
+      answer(String(input), init)
+    );
+    vi.spyOn(restore, "reconcile").mockResolvedValue(result());
+    vi.spyOn(PgProjectSync, "holdPushes").mockReturnValue(undefined);
+    vi.spyOn(PgProjectSync, "releasePushes").mockReturnValue(undefined);
+    vi.spyOn(PgExplorer, "isInitialized", "get").mockReturnValue(true);
+    vi.spyOn(PgExplorer, "currentWorkspaceId", "get").mockReturnValue("w1");
+    vi.spyOn(PgExplorer, "currentWorkspaceName", "get").mockReturnValue(
+      undefined
+    );
+    vi.spyOn(PgExplorer, "switchWorkspace").mockResolvedValue(
+      undefined as never
+    );
+
+    effect = session();
+    await read(ada);
+    const threadId = await PgThreadIndex.ensure("w1");
+    await PgChatStorage.write(threadId, [message]);
+    await PgAssistant.loadThread(threadId);
+    // Ada's session ends without a sign-out
+    await read(undefined);
+    expect(PgSession.expiredUser?.id).toBe("ada");
+    posted.length = 0;
+  });
+
+  afterEach(() => {
+    effect.dispose();
+    vi.restoreAllMocks();
+  });
+
+  it("uploads none of the ended account's threads under the next one", async () => {
+    const adas = await PgChatStorage.threadIds();
+
+    await read(bob);
+
+    expect(adas).toHaveLength(1);
+    expect(posted.filter((id) => adas?.includes(id))).toEqual([]);
+  });
+
+  it("shows the next account none of the ended account's messages", async () => {
+    const adas = await PgChatStorage.threadIds();
+
+    await read(bob);
+
+    expect(PgAssistant.threadId).toBeTruthy();
+    expect(PgAssistant.threadId).not.toBe(adas?.[0]);
+    expect(PgAssistant.items.map(({ id }) => id)).not.toContain(message.id);
+  });
+
+  it("gives the ended account its threads back when it signs in again", async () => {
+    const adas = await PgChatStorage.threadIds();
+    await read(bob);
+    // Bob's session ends too, and Ada is the one who signs in next
+    await read(undefined);
+
+    await read(ada);
+
+    expect(posted).toEqual(expect.arrayContaining(adas ?? []));
+    expect(await PgThreadIndex.get("w1")).toBe(adas?.[0]);
+  });
+});

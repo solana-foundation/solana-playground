@@ -9,6 +9,7 @@ import { DELETED_REASON, isDeletedScope } from "./deleted.mjs";
 import { report } from "./diagnostics";
 import { sha256 } from "./snapshot";
 import { PgSyncClient } from "./sync-client";
+import { PgThreadFence } from "./thread-fence";
 import { PgThreadIndex } from "./thread-index";
 
 /**
@@ -163,6 +164,10 @@ export class PgChatSync {
   /** @returns how the push ended -- see `PushOutcome` */
   static async push(threadId: string): Promise<PushOutcome> {
     if (!(await PgChatSync._ready())) return "failed";
+
+    // Another account's, written back by a tab that had it open: it is kept
+    // for that account, and failing it keeps it out of a sign-out's `forget`
+    if (await PgThreadFence.isFenced(threadId)) return "failed";
 
     const items = await PgChatStorage.read(threadId);
     // "The thread is now on the server" is a claim, and the caller deletes on
@@ -463,6 +468,10 @@ export class PgChatSync {
       // The directory went with it, but the index also caches that migration
       // has run -- and for the next user of this browser it has not.
       await PgThreadIndex.clear();
+      // Nothing left belongs to this account, so the next account's sign-in
+      // has nothing to fence. A partial hand-over keeps the owner: what failed
+      // to upload is this account's, and must not upload into the next one.
+      await PgThreadFence.clearOwner();
       return;
     }
 

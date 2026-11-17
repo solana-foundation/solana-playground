@@ -8,6 +8,7 @@ import {
   releaseLocalProjects,
 } from "../../features/persistence/model/project-restore";
 import { PgProjectSync } from "../../features/persistence/model/project-sync";
+import { PgThreadFence } from "../../features/persistence/model/thread-fence";
 import { PgThreadIndex } from "../../features/persistence/model/thread-index";
 // Deep import rather than the `utils` barrel: the barrel reaches `settings.ts`,
 // which reads `GLOBAL_SETTINGS`, a global only webpack defines, so the unit
@@ -78,6 +79,8 @@ export const session = (): Disposable => {
    */
   const adopt = async ({ openLatest }: { openLatest: boolean }) => {
     let result;
+    // Whether the panel's thread was another account's and is closed now
+    let left = false;
     try {
       // Inside the `try`, all of it. Pushes are held from the moment this
       // effect is created, and this is the only thing that releases them --
@@ -85,6 +88,7 @@ export const session = (): Disposable => {
       // explorer or handing the chat threads over, leaves every project on
       // this device unable to save for the rest of the session, silently.
       await explorerReady();
+      left = await leaveAnotherAccountsThreads();
       // Before the dump: it would upload a thread minted while signed out as
       // a conversation of its own, and the account's would never be found
       await PgChatSync.adoptAccountThreads();
@@ -120,11 +124,17 @@ export const session = (): Disposable => {
     try {
       const workspaceId = PgExplorer.currentWorkspaceId;
       const open = PgAssistant.threadId;
-      const wanted = workspaceId && (await PgThreadIndex.get(workspaceId));
+      // A thread fenced from under the panel leaves the workspace with none:
+      // a fresh one opens, and `openThread` adopts the account's own
+      const wanted =
+        workspaceId &&
+        (left
+          ? await PgThreadIndex.ensure(workspaceId)
+          : await PgThreadIndex.get(workspaceId));
       if (
         workspaceId &&
         wanted &&
-        open &&
+        (open || left) &&
         PgExplorer.currentWorkspaceId === workspaceId
       ) {
         await openThread(workspaceId, wanted);
@@ -155,6 +165,42 @@ export const session = (): Disposable => {
     if (target && PgExplorer.allWorkspaceNames?.includes(target)) {
       await PgExplorer.switchWorkspace(target);
     }
+  };
+
+  /**
+   * Keep the threads of an account whose session ended out of the arriving
+   * account's sign-in (HOO-2757).
+   *
+   * An ended session runs no teardown, on purpose, so its threads and its
+   * running turn are still here when someone else signs in, and the dump that
+   * follows would upload them into that account. `PgThreadFence.settle` moves
+   * them aside for their own account's next sign-in, and puts back the
+   * arriving account's, if it was the one fenced.
+   *
+   * The turn stops and the thread closes first, so nothing writes into a
+   * thread while it moves: its request is aborted, an approval it waits on is
+   * denied, and `closeThread` persists nothing afterwards. Also in a tab that
+   * finds the move already made by another tab and its thread among the
+   * fenced. Not `PgAssistant.clear`: with a thread open the panel holds
+   * nothing unsaved, and with none open what it holds is the arriving user's
+   * typing.
+   *
+   * @returns whether the panel's thread was closed
+   */
+  const leaveAnotherAccountsThreads = async () => {
+    const userId = PgSession.get()?.id;
+    if (!userId) return false;
+    const open = PgAssistant.threadId;
+    const leaving =
+      (await PgThreadFence.isOwnedByAnother(userId)) ||
+      (!!open && (await PgThreadFence.isFenced(open)));
+    if (leaving) {
+      PgAssistant.stopTurn();
+      PgAssistant.closeThread();
+      await PgAssistant.whenPersisted();
+    }
+    await PgThreadFence.settle(userId);
+    return leaving;
   };
 
   /**

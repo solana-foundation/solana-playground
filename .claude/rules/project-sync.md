@@ -275,6 +275,18 @@ when a session reads a file matching the `paths` in the frontmatter.
   reconcile off; `PgSyncBase` and `PgSyncClaim` read the signed-in id only, and
   `settleLocalDeletes` stands down: a delete made meanwhile cannot reach the account,
   so the project comes back on the next sign-in with its mark and chat. The chat effect leaves the thread open: closing it would cut a running turn.
+- **Chat threads have an owner on the device, and another account's are
+  fenced.** `/.config/chats-owner.json` (`model/thread-fence.ts`) names the
+  account whose threads `/.config/chats` holds. A sign-in by anyone else first
+  stops the turn and closes the open thread, then `PgThreadFence.settle` moves
+  every thread and its workspace into `/.config/chats-fenced/<userId>/` and
+  empties the index, before the dump (HOO-2757: an ended session's threads
+  uploaded into the next account). Out of the folder, because `threadIds`,
+  `pushAll` and the index migration all read it. `push` refuses a thread a
+  fence names, since a lagging tab can write it back; the next `settle` fences
+  it again. The fenced account's next sign-in puts its threads back, merged
+  into a thread that took the workspace meanwhile. Only a whole hand-over
+  (`forget`'s wholesale branch) clears the owner.
 - **Persistence failures are reported, not swallowed.** `chat-storage`,
   `chat-sync`, `project-sync` and `project-restore` all catch, because a lost
   write must not take the panel down. Every failure still goes through
