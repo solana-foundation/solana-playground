@@ -1,3 +1,5 @@
+import { isMissing } from "@/shared/lib/is-missing";
+
 import {
   removeConfigDir,
   removeConfigFile,
@@ -48,11 +50,6 @@ const fencedPathOf = (userId: string, threadId: string) =>
   `${dirOf(userId)}/${encodeURIComponent(threadId)}${SUFFIX}`;
 const livePathOf = (threadId: string) =>
   `/.config/chats/${encodeURIComponent(threadId)}${SUFFIX}`;
-
-const isMissing = (error: unknown) => {
-  const e = error as { code?: string; message?: string };
-  return e?.code === "ENOENT" || !!e?.message?.includes("ENOENT");
-};
 
 /** A file's content, `undefined` when there is none; other failures throw */
 const readRaw = async (path: string): Promise<string | undefined> => {
@@ -310,10 +307,7 @@ export class PgThreadFence {
       Object.entries(index).map(([workspaceId, id]) => [id, workspaceId])
     );
     const threadIds = [...new Set([...workspaceOf.keys(), ...stored])];
-    if (!threadIds.length) {
-      await PgThreadIndex.clear();
-      return true;
-    }
+    if (!threadIds.length) return PgThreadFence._clearIndex();
 
     // Rewritten over an unreadable record, it would lose the threads it named
     const record = await PgThreadFence._readRecord(userId);
@@ -333,8 +327,19 @@ export class PgThreadFence {
     );
     if (!moved.every(Boolean)) return false;
 
+    return PgThreadFence._clearIndex();
+  }
+
+  /**
+   * Empty the index, and say whether it is empty. `PgThreadIndex.clear`
+   * reports its own failure and returns nothing, and an index left naming
+   * the old account's threads would reopen one in the new account's panel,
+   * whose messages would then be fenced as the old account's.
+   */
+  private static async _clearIndex(): Promise<boolean> {
     await PgThreadIndex.clear();
-    return true;
+    PgThreadIndex.reload();
+    return Object.keys(await PgThreadIndex.all()).length === 0;
   }
 
   /**
@@ -645,6 +650,24 @@ if (import.meta.vitest) {
       expect(await PgChatStorage.threadIds()).toEqual([]);
       await PgThreadFence.settle("ada");
       expect(idsOf(await PgChatStorage.read(threadId))).toEqual([item(2).id]);
+    });
+
+    it("does not settle when the index cannot be emptied", async () => {
+      await PgThreadFence.settle("ada");
+      await chat("w1", [item(1)]);
+      const remove = PgFs.removeFile.bind(PgFs);
+      vi.spyOn(PgFs, "removeFile").mockImplementation(async (path) => {
+        if (
+          path.endsWith("/index.json") &&
+          path.startsWith("/.config/chats/")
+        ) {
+          throw new Error("EIO");
+        }
+        return remove(path);
+      });
+
+      expect(await PgThreadFence.settle("bob")).toBe(false);
+      expect(await PgThreadFence.isOwnedByAnother("bob")).toBe(true);
     });
   });
 }
