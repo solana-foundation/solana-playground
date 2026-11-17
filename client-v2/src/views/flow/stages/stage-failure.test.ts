@@ -68,4 +68,32 @@ describe("toldByStage", () => {
     reportButtonFailure("build")(error);
     expect(toast).not.toHaveBeenCalled();
   });
+
+  // A deploy refused for sign-in puts the prompt on Build, not on Deploy
+  it("a deploy refused for sign-in is not toasted as well", () => {
+    mocks.flow = {
+      build: "done",
+      deploy: "active",
+      buildFailure: { kind: "signed-out", message: "Sign in" },
+    };
+    const toast = vi.spyOn(PgView, "setToast").mockImplementation(() => "");
+    const error = Object.assign(new Error("Sign in"), { reason: "signed-out" });
+    expect(() => toldByStage("deploy")(error)).toThrow(error);
+    reportButtonFailure("deploy")(error);
+    expect(toast).not.toHaveBeenCalled();
+  });
+
+  // Build's prompt from earlier says nothing about a deploy that broke now
+  it("a deploy failing otherwise under Build's sign-in prompt is toasted", () => {
+    mocks.flow = {
+      build: "done",
+      deploy: "active",
+      buildFailure: { kind: "signed-out", message: "Sign in" },
+    };
+    const toast = vi.spyOn(PgView, "setToast").mockImplementation(() => "");
+    const error = new Error("RPC down");
+    expect(() => toldByStage("deploy")(error)).toThrow(error);
+    reportButtonFailure("deploy")(error);
+    expect(toast).toHaveBeenCalledOnce();
+  });
 });
