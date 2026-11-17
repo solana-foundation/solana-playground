@@ -110,6 +110,9 @@ the browser, behind the same approval gates.
   clicks, which holds the agent loop open. That is how "propose automatically,
   apply explicitly" is enforced in the loop itself, identically for every
   provider, rather than by the transport inspecting a call before it runs.
+  A tool of an MCP server the user added waits on the same card, which names
+  the tool, the server's host and the arguments; a declined call reaches no
+  server. The gateway's own documentation servers run without a card.
 - Project context comes from what the client already holds: `PgExplorer` for
   files and the open tabs, `PgProgramInfo` for the IDL and program ID,
   `PgGlobal` for build and deploy state. Every turn carries the
