@@ -139,7 +139,8 @@ export const session = (): Disposable => {
       // Unsettled, the panel stays closed. The old account's thread is still
       // indexed, so a project switch can open it before a later sign-in
       // settles; accepted for a full or failing store (see the change's
-      // design.md), because nothing uploads meanwhile
+      // design.md), because `push` uploads nothing until a settle records
+      // this account as the owner
       const reopen = fence.left && fence.settled;
       const wanted =
         workspaceId &&

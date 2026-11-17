@@ -165,14 +165,15 @@ export class PgChatSync {
   static async push(threadId: string): Promise<PushOutcome> {
     if (!(await PgChatSync._ready())) return "failed";
 
-    // Not this account's to upload: the device's threads still belong to
-    // another account until the sign-in's `PgThreadFence.settle` has fenced
-    // them, and a fenced thread can be written back by a tab that had it
-    // open. Failing it keeps it out of a sign-out's `forget` too.
+    // Only once the sign-in's `PgThreadFence.settle` has recorded the folder
+    // as this account's: until then it may hold another account's threads,
+    // and an owner that failed to write leaves them unowned for whoever signs
+    // in next. A fenced thread can still be written back by a tab that had it
+    // open. Failing either keeps it out of a sign-out's `forget` too.
     const userId = PgSession.get()?.id;
     if (
       !userId ||
-      (await PgThreadFence.isOwnedByAnother(userId)) ||
+      !(await PgThreadFence.isOwnedBy(userId)) ||
       (await PgThreadFence.isFenced(threadId))
     ) {
       return "failed";
@@ -566,13 +567,16 @@ if (import.meta.vitest) {
     };
 
     /** Only `id` matters to sync; the rest of the session user is display */
-    const signedIn = () =>
-      PgSession.refreshWith({
+    /** Signed in, with the sign-in's settle done, as `adopt` does it */
+    const signedIn = async () => {
+      await PgSession.refreshWith({
         id: "u1",
         name: undefined,
         image: undefined,
         login: undefined,
       });
+      await PgThreadFence.settle("u1");
+    };
 
     /**
      * The spy standing in for `fetch`, reinstalled for each test.
@@ -617,6 +621,7 @@ if (import.meta.vitest) {
 
       beforeEach(async () => {
         await PgChatStorage.clear();
+        await PgThreadFence.clearOwner();
         await PgThreadIndex.clear();
         PgSession.reset();
         PgSyncClient.reset();
@@ -627,8 +632,9 @@ if (import.meta.vitest) {
         respondingWith(() =>
           Promise.resolve({ ok: true, json: async () => ({ written: 1 }) })
         );
-        await PgThreadFence.settle("someone-else");
         await signedIn();
+        await PgThreadFence.clearOwner();
+        await PgThreadFence.settle("someone-else");
         await PgChatStorage.write(threadId, [item(1)]);
 
         const outcome = await PgChatSync.push(threadId);
@@ -638,6 +644,17 @@ if (import.meta.vitest) {
         expect(
           fetchMock.mock.calls.some(([, init]) => init?.method === "POST")
         ).toBe(false);
+      });
+
+      it("refuses a thread before the sign-in has recorded its owner", async () => {
+        respondingWith(() =>
+          Promise.resolve({ ok: true, json: async () => ({ written: 1 }) })
+        );
+        await signedIn();
+        await PgThreadFence.clearOwner();
+        await PgChatStorage.write(threadId, [item(1)]);
+
+        expect(await PgChatSync.push(threadId)).toBe("failed");
       });
 
       it("does nothing when signed out", async () => {
@@ -1048,6 +1065,7 @@ if (import.meta.vitest) {
 
       beforeEach(async () => {
         await PgChatStorage.clear();
+        await PgThreadFence.clearOwner();
         await PgThreadIndex.clear();
         PgSession.reset();
         PgSyncClient.reset();
@@ -1300,6 +1318,7 @@ if (import.meta.vitest) {
 
       beforeEach(async () => {
         await PgChatStorage.clear();
+        await PgThreadFence.clearOwner();
         await PgThreadIndex.clear();
         PgSession.reset();
         PgSyncClient.reset();
@@ -1354,6 +1373,7 @@ if (import.meta.vitest) {
 
       beforeEach(async () => {
         await PgChatStorage.clear();
+        await PgThreadFence.clearOwner();
         await PgThreadIndex.clear();
         PgSession.reset();
         PgSyncClient.reset();

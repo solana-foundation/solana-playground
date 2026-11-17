@@ -136,6 +136,16 @@ export class PgThreadFence {
   }
 
   /**
+   * Whether `/.config/chats` is recorded as `userId`'s, which only `settle`
+   * records. `push` uploads nothing else: an owner that is another account,
+   * nobody, or unreadable means the sign-in has not settled the folder yet.
+   */
+  static async isOwnedBy(userId: string): Promise<boolean> {
+    const owner = await PgThreadFence._readOwner();
+    return owner.kind === "user" && owner.userId === userId;
+  }
+
+  /**
    * Whether a fenced account's record names this thread, or the records
    * cannot be read. A push of one is refused: a tab that still had it open
    * can write it back into `/.config/chats` before it learns of the new
@@ -183,8 +193,24 @@ export class PgThreadFence {
       }
       if (!(await PgThreadFence._refenceStragglers())) return false;
       await PgThreadFence._restore(userId);
+      await PgThreadFence._dropFencedFromCache();
       return true;
     });
+  }
+
+  /**
+   * Re-read the index when this tab's copy still names a fenced thread:
+   * another tab fenced it, and the panel must not be handed it again. Only
+   * then, because a re-read can drop an entry this tab minted and has not
+   * written yet, and the workspace would mint a second thread.
+   */
+  private static async _dropFencedFromCache() {
+    const records = (await PgThreadFence._readRecords()) ?? [];
+    const fenced = new Set(
+      records.flatMap(({ record }) => Object.keys(record))
+    );
+    const cached = Object.values(await PgThreadIndex.all());
+    if (cached.some((id) => fenced.has(id))) PgThreadIndex.reload();
   }
 
   /**
@@ -722,6 +748,22 @@ if (import.meta.vitest) {
       vi.spyOn(PgFs, "writeFile").mockRejectedValue(new Error("QuotaExceeded"));
 
       expect(await PgThreadFence.settle("ada")).toBe(false);
+    });
+
+    it("drops a thread another tab fenced from this tab's index", async () => {
+      await PgThreadFence.settle("ada");
+      const threadId = await chat("w1", [item(1)]);
+      const stale = { w1: threadId };
+      await PgThreadFence.settle("bob");
+      // This tab still holds Ada's entry from before the other tab's fence
+      await writeConfigFile("/.config/chats/index.json", JSON.stringify({}));
+      PgThreadIndex.reload();
+      await PgThreadIndex.set("w1", stale.w1);
+      await writeConfigFile("/.config/chats/index.json", JSON.stringify({}));
+
+      await PgThreadFence.settle("bob");
+
+      expect(await PgThreadIndex.get("w1")).toBeNull();
     });
   });
 }
