@@ -36,7 +36,7 @@ has never been run end to end as one pass ([Known gaps](#known-gaps)).
 
 1. **One-time setup is done**: [One-time setup](#one-time-setup), and for
    production the runbook's steps 1 to 6.
-2. **Production env vars**, scoped to Production. The runbook's
+2. **Production env vars**, scoped to Production. Production's values are set in Doppler, whose sync writes Vercel's Production environment; a value set in Vercel by hand is overwritten by the next sync. The runbook's
    [Production environment](production-runbook.md#production-environment)
    lists every one; those of this guide are in
    [Assistant default backend](#assistant-default-backend) and
@@ -204,7 +204,7 @@ Add the Vercel deployment origin to the server's [`PG_CLIENT_URLS`](https://gith
 
 ## Deploy
 
-- **Automatic:** push. The Git integration builds `client-v2`, the dashboard's Root Directory. A push to the Production Branch deploys to production; a push to `master-production` or to a `scope/*`, `integration/*` or `new-face-polish-<n>` branch deploys a preview (any other branch is skipped), reachable at its per-commit URL and at the branch's alias, both of which sign in ([Sign-in on previews](#sign-in-on-previews)).
+- **Automatic:** push. The Git integration builds `client-v2`, the dashboard's Root Directory. A push to the Production Branch deploys to production; a push to `master-production` or to a `scope/*`, `integration/*` or `new-face-polish-<n>` branch deploys a preview (any other branch is skipped), reachable at its per-commit URL and at the branch's alias. On staging both sign in; a preproduction preview has no proxy to sign in through ([Sign-in on previews](#sign-in-on-previews)).
 - **Local preview:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-preview`. Promote later with `vercel promote <url> --prod`.
 - **Local production:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-production`. The target prints the branch and commit, asks for a typed `yes`, and then runs `vercel build --prod` and `vercel deploy --prebuilt --prod`. Run `migrate-production-db` first when migrations are pending. It deploys to the project `VERCEL_DEPLOY_PROJECT_ID` names, as the fast deploy does; [Migrations](#migrations) shows how to name the production project for one run from a staging checkout.
 - **Local production, fast:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-prod-fast`. Rebuilds from the working tree in ~5 minutes by skipping `installCommand` (rustup + `wasm/build.sh`, about an hour). It refuses to run unless a previous full build left `client-v2/node_modules` and the real `wasm/*/pkg` packages, not the stubs, on disk. It deploys whatever is in the working tree, committed or not.
@@ -215,7 +215,7 @@ A Git-integration build with no cache does not finish inside Vercel's [build tim
 
 To pick up only changed **server-side** variables (anything `api/*.mjs` reads), no rebuild is needed: re-run `npx vercel@<version> deploy --prebuilt --prod --archive=tgz` on the existing `.vercel/output`, with the version pinned as `VERCEL_CLI` in `Makefile.vercel`. Variables are attached to functions when a deployment is created. This works only while `.vercel/output` is the build of the commit production runs; once a push to `master` has deployed a newer commit, a full build is needed instead (runbook, [Deploying production](production-runbook.md#deploying-production)). `REACT_APP_*` are inlined into the bundle and do need a rebuild.
 
-`deploy-client-to-vercel-preview` resolves this git branch's Neon branch first, before building, and passes it as `-e DATABASE_URL=<pooled url>` so the deployment overrides the project-level variable. Resolving first is deliberate: a Neon failure should not cost a full wasm build.
+`deploy-client-to-vercel-preview` resolves the preview's database first, before building, and passes it with `-e` so the deployment overrides the project-level variables: with `DB_PROVIDER=url` (the default) this git branch's Neon branch as `DATABASE_URL=<pooled url>`, with `DB_PROVIDER=cloud-sql` a database of its own on the preview instance ([Preview databases](preview-databases.md)). Resolving first is deliberate: a database failure should not cost a full wasm build.
 
 `--archive=tgz` is not optional. The prebuilt output is about 16k files and the upload API rejects more than 15000 (`files should NOT have more than 15000 items`), so the tree goes up as a single tarball.
 
@@ -601,7 +601,8 @@ after a suspected leak:
 
 1. Create a new key at the upstream (the Nous dashboard, or the Gateway on the
    fallback) with the same spend limits as the old one.
-2. Set it in Vercel for Production and Preview, replacing the old value.
+2. Set it for Production (in Doppler, whose sync writes Vercel) and for
+   Preview (in Vercel), replacing the old value.
 3. Redeploy, and send one turn as a signed-in user: the upstream's dashboard
    shows its spend under the new key.
 4. Revoke the old key. After a leak, do this first and accept the minutes of
@@ -900,4 +901,4 @@ database behind it, use the per-commit URL `preview.yml` posts on the PR.
 
 ## Endpoint routing
 
-- Every server route → the hardcoded Solana Foundation server URL in `client-v2/src/settings/server/server.ts` (also user-overridable via the `server.endpoint` setting), so forks can point at their own backend.
+- The build server is the deployment's `REACT_APP_SERVER_URL` (`src/settings/server/default-endpoint.ts`). Unset, it defaults to `http://localhost:8080` and the browser console warns. A user can override it with the `server.endpoint` setting.
