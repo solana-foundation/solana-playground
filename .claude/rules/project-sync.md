@@ -286,7 +286,12 @@ when a session reads a file matching the `paths` in the frontmatter.
   fence names, since a lagging tab can write it back; the next `settle` fences
   it again. The fenced account's next sign-in puts its threads back, merged
   into a thread that took the workspace meanwhile. Only a whole hand-over
-  (`forget`'s wholesale branch) clears the owner.
+  (`forget`'s wholesale branch) clears the owner. `push` uploads only when
+  the owner is the signed-in account (`claimUnowned` records it over a folder
+  nobody owns, which retries a failed owner write), and a sign-in whose
+  `settle` fails skips the chat adoption and dump; every doubt about the
+  owner or a record fails closed. Never drop the owner gate from `push` as
+  redundant with `settle`: it is what holds when `settle` could not write.
 - **Persistence failures are reported, not swallowed.** `chat-storage`,
   `chat-sync`, `project-sync` and `project-restore` all catch, because a lost
   write must not take the panel down. Every failure still goes through

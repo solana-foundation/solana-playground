@@ -136,13 +136,24 @@ export class PgThreadFence {
   }
 
   /**
-   * Whether `/.config/chats` is recorded as `userId`'s, which only `settle`
-   * records. `push` uploads nothing else: an owner that is another account,
-   * nobody, or unreadable means the sign-in has not settled the folder yet.
+   * Record `userId` as the owner of a folder nobody owns, under the lock;
+   * an owner already recorded is left as it is.
+   *
+   * The retry for a sign-in whose owner write failed: `push` refuses every
+   * thread until an owner is recorded, and a sign-out with none recorded
+   * would leave this account's threads unowned for whoever signs in next.
+   * If the store refuses this write as well, nothing on this device can say
+   * whose the threads are; that is accepted, see the archived change's
+   * design.md.
+   *
+   * @returns whether the folder is `userId`'s now
    */
-  static async isOwnedBy(userId: string): Promise<boolean> {
-    const owner = await PgThreadFence._readOwner();
-    return owner.kind === "user" && owner.userId === userId;
+  static async claimUnowned(userId: string): Promise<boolean> {
+    return withSyncLock(async () => {
+      const owner = await PgThreadFence._readOwner();
+      if (owner.kind === "none") return PgThreadFence._writeOwner(userId);
+      return owner.kind === "user" && owner.userId === userId;
+    });
   }
 
   /**

@@ -166,14 +166,14 @@ export class PgChatSync {
     if (!(await PgChatSync._ready())) return "failed";
 
     // Only once the sign-in's `PgThreadFence.settle` has recorded the folder
-    // as this account's: until then it may hold another account's threads,
-    // and an owner that failed to write leaves them unowned for whoever signs
-    // in next. A fenced thread can still be written back by a tab that had it
+    // as this account's: until then it may hold another account's threads.
+    // A folder nobody owns is claimed here, which retries a sign-in whose
+    // owner write failed. A fenced thread can still be written back by a tab that had it
     // open. Failing either keeps it out of a sign-out's `forget` too.
     const userId = PgSession.get()?.id;
     if (
       !userId ||
-      !(await PgThreadFence.isOwnedBy(userId)) ||
+      !(await PgThreadFence.claimUnowned(userId)) ||
       (await PgThreadFence.isFenced(threadId))
     ) {
       return "failed";
@@ -646,13 +646,33 @@ if (import.meta.vitest) {
         ).toBe(false);
       });
 
-      it("refuses a thread before the sign-in has recorded its owner", async () => {
+      it("claims a folder nobody owns before it uploads from it", async () => {
         respondingWith(() =>
           Promise.resolve({ ok: true, json: async () => ({ written: 1 }) })
         );
         await signedIn();
         await PgThreadFence.clearOwner();
         await PgChatStorage.write(threadId, [item(1)]);
+
+        expect(await PgChatSync.push(threadId)).toBe("pushed");
+        expect(await PgThreadFence.isOwnedByAnother("u2")).toBe(true);
+      });
+
+      it("refuses a thread while no owner can be recorded", async () => {
+        respondingWith(() =>
+          Promise.resolve({ ok: true, json: async () => ({ written: 1 }) })
+        );
+        await signedIn();
+        await PgThreadFence.clearOwner();
+        await PgChatStorage.write(threadId, [item(1)]);
+        const write = PgFs.writeFile.bind(PgFs);
+        vi.spyOn(PgFs, "writeFile").mockImplementation(
+          // eslint-disable-next-line max-params -- `PgFs.writeFile`'s own signature
+          async (path, data, opts) => {
+            if (path.endsWith("chats-owner.json")) throw new Error("Quota");
+            return write(path, data, opts);
+          }
+        );
 
         expect(await PgChatSync.push(threadId)).toBe("failed");
       });

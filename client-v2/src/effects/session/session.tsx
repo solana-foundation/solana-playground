@@ -259,6 +259,11 @@ export const session = (): Disposable => {
     // reason to skip the other.
     let handed: HandOver | null = null;
     try {
+      // A sign-in whose owner write failed left these threads unowned; a
+      // sign-out that keeps any of them must leave them named, or the next
+      // account's sign-in takes them as its own
+      const userId = PgSession.get()?.id;
+      if (userId) await PgThreadFence.claimUnowned(userId);
       handed = await PgChatSync.pushAll();
     } catch (e) {
       report("hand over conversations", e);
