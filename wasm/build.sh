@@ -57,7 +57,6 @@ all_packages=(
     "seahorse-compile"
     "solana-cli"
     "spl-token-cli"
-    "sugar-cli"
 )
 
 # Get script directory (which is wasm/), and root directory (which is one level higher).

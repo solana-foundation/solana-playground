@@ -31,7 +31,7 @@ test("stubbedPackages names only the stubs", () => {
   assert.deepEqual(
     stubbedPackages([
       { name: "solana-cli", manifest: { version: WASM_STUB_VERSION } },
-      { name: "sugar-cli", manifest: { version: "0.1.0" } },
+      { name: "spl-token-cli", manifest: { version: "0.1.0" } },
     ]),
     ["solana-cli"]
   );

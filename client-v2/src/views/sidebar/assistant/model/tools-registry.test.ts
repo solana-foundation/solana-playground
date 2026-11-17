@@ -26,6 +26,7 @@ const recordingBridge = () => {
     applyPatch: async () => void changes.push("applyPatch"),
     build: async () => void changes.push("build"),
     deploy: async () => void changes.push("deploy"),
+    watchConnection: () => () => false,
     // eslint-disable-next-line unicorn/no-null -- `quoteDeploy`'s `cost` is `number | null`
     quoteDeploy: async () => ({
       cost: null,

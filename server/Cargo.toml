@@ -20,6 +20,7 @@ anyhow = "1.0.102"
 axum = "0.8.9"
 blake3 = "1.8.7"
 dotenv = "0.15.0"
+libc = "0.2.186"
 regex = "1.12.3"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
