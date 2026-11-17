@@ -822,6 +822,7 @@ dependencies = [
  "axum",
  "blake3",
  "dotenv",
+ "libc",
  "regex",
  "serde",
  "serde_json",

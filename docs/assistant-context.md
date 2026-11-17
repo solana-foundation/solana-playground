@@ -110,6 +110,9 @@ the browser, behind the same approval gates.
   clicks, which holds the agent loop open. That is how "propose automatically,
   apply explicitly" is enforced in the loop itself, identically for every
   provider, rather than by the transport inspecting a call before it runs.
+  A tool of an MCP server the user added waits on the same card, which names
+  the tool, the server's host and the arguments; a declined call reaches no
+  server. The gateway's own documentation servers run without a card.
 - Project context comes from what the client already holds: `PgExplorer` for
   files and the open tabs, `PgProgramInfo` for the IDL and program ID,
   `PgGlobal` for build and deploy state. Every turn carries the
@@ -321,8 +324,8 @@ Honesty rule for the demo — never present a mocked step as working.
   through the same gateway and is listed for everyone, signed in or not. Each
   server and each skill has a checkbox in the Sources tab; one switched off
   offers nothing to the next turn, and the choice survives a reload.
-- **Real, stubbed only on request:** Rust intellisense and the `solana`,
-  `spl-token`, `sugar` terminal commands. A deployment always ships
+- **Real, stubbed only on request:** Rust intellisense and the `solana` and
+  `spl-token` terminal commands. A deployment always ships
   the real packages. Local UI work may stub them with `USE_WASM_STUBS=true` to
   skip the WASM build; a stub throws a message pointing at
   `yarn --cwd client-v2 setup`.
@@ -345,6 +348,14 @@ Deploys, runs and calls on devnet cost SOL, paid by the user's Playground
 wallet. When someone has none, or shows you an airdrop error, tell them the
 ways below. You explain them; you have no tool that airdrops or sends SOL, so
 never say you did.
+
+The project state names the Playground wallet's public key, the address of
+any wallet connected through the wallet chip, and which of them signs. Use the
+signing wallet's address for `<address>` below and in commands for the user's
+own wallet, unless the user names another. You never get a secret key or the
+address of the user's RPC, so never ask for either. `Cluster: custom` means an
+RPC whose network the Playground does not know, or has not read yet: do not
+assume a network, a faucet or an airdrop for it; ask the user.
 
 - **Airdrop.** The `airdrop` terminal command, or Get SOL on the wallet chip
   in the console bar, asks the network's faucet: 5 SOL at once on devnet, 1 on

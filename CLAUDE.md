@@ -160,10 +160,11 @@ Asked to build something in the client, look in `openspec/changes/` first.
   (`client-v2/docs/deploy-client-vercel.md`, "wasm-bindgen"). A bump changes
   the pin and the lockfile together.
 - **The wasm packages are real unless `USE_WASM_STUBS=true` says
-  otherwise.** Five of the six local `wasm/*/pkg` deps compile from Rust, and
+  otherwise.** Four of the five local `wasm/*/pkg` deps compile from Rust, and
   `yarn install` refuses to run while those directories are missing. The fork
   has no `wasm/anchor-cli`, since the terminal's `anchor` command is TypeScript
-  (`client-v2/src/commands/anchor`), and no `wasm/playnet` or
+  (`client-v2/src/commands/anchor`), no `wasm/sugar-cli`, taken out until its
+  subcommands are validated on Devnet (HOO-2866), and no `wasm/playnet` or
   `wasm/pkgs/playnet`, since Playnet's binary was built from Solana forks the
   repository does not hold; an upstream sync that changes these folders keeps
   them deleted.
@@ -178,10 +179,10 @@ Asked to build something in the client, look in `openspec/changes/` first.
   either target folder, since both would share one folder again. `setup-wasm.sh` writes the stubs
   (`wasm/stub-packages.sh`) only under `USE_WASM_STUBS=true`, which the `:with-stubs` scripts and
   the manual `client-v2-with-stubs.yml` set; the stubs make Rust intellisense and the `solana`/
-  `spl-token`/`sugar` terminal commands throw. `yarn start`, `yarn dev`,
+  `spl-token` terminal commands throw. `yarn start`, `yarn dev`,
   `yarn dev-cra` (which `vercel dev` runs) and `yarn test-e2e` refuse stubs
   nobody asked for, `vercel-install.sh` refuses the variable, and the
-  Vercel build fails on a bundle that carries a stub or lacks any of the five
+  Vercel build fails on a bundle that carries a stub or lacks any of the four
   real packages (`REAL_WASM_MARKERS` in `client-v2/scripts/wasm-stubs.mjs`);
   `openspec/specs/client-v2-build/spec.md` holds these requirements. yarn 1 copies a `file:`
   package again only when its folder is missing, so `setup-wasm.sh` clears
