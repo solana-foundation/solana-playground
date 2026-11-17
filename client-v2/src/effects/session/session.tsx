@@ -97,7 +97,7 @@ export const session = (): Disposable => {
       // Unsettled, the threads here may be another account's, so none is
       // adopted or uploaded. The chat effect settles again on the next
       // project switch, and opens no thread until that works.
-      // TODO(HOO-2757 follow-up): a settle that succeeds on such a retry does
+      // TODO(HOO-1849): a settle that succeeds on such a retry does
       // not run this adoption and dump; they wait for the next sign-in, and
       // nothing tells the user chats are not syncing meanwhile
       if (fence.settled) {

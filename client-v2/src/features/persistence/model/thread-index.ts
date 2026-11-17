@@ -8,8 +8,8 @@ import {
 import { PgFs } from "../../../utils/explorer/fs";
 import { PgChatStorage } from "./chat-storage";
 import { report } from "./diagnostics";
+import { readFencedIds } from "./fence-records";
 import { withSyncLock } from "./sync-lock";
-import { PgThreadFence } from "./thread-fence";
 
 /**
  * Which conversation is open on which workspace.
@@ -509,7 +509,7 @@ export class PgThreadIndex {
     // under a fresh id, no fence would know it, and the next sign-in would
     // upload another account's messages. `PgThreadFence.settle` moves it
     // back. Records that cannot be read adopt nothing; the files wait.
-    const fenced = await PgThreadFence.fencedIds();
+    const fenced = await readFencedIds();
     if (!fenced) return [];
     return unindexed
       .filter(({ id }) => !fenced.has(id))

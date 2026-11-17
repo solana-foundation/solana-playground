@@ -9,6 +9,17 @@ import { PgFs } from "../../../utils/explorer/fs";
 import { decodeThread, mergeThreads } from "./chat-codec";
 import { PgChatStorage } from "./chat-storage";
 import { report } from "./diagnostics";
+import {
+  dirOf,
+  FENCED_DIR,
+  type FenceRecord,
+  readFencedIds,
+  readRaw,
+  readRecord,
+  readRecords,
+  recordPathOf,
+  SUFFIX,
+} from "./fence-records";
 import { withSyncLock } from "./sync-lock";
 import { PgThreadIndex } from "./thread-index";
 
@@ -36,33 +47,10 @@ const INDEX_PATH = "/.config/chats/index.json";
 /** The account whose threads `/.config/chats` holds */
 const OWNER_PATH = "/.config/chats-owner.json";
 
-/** Another account's threads, one folder per account */
-const FENCED_DIR = "/.config/chats-fenced";
-
-const SUFFIX = ".json";
-
-/**
- * Thread id -> where it was open. `workspaceId` is absent for a thread no
- * index entry named.
- */
-type FenceRecord = Record<string, { workspaceId?: string }>;
-
-const dirOf = (userId: string) => `${FENCED_DIR}/${encodeURIComponent(userId)}`;
-const recordPathOf = (userId: string) => `${dirOf(userId)}/index${SUFFIX}`;
 const fencedPathOf = (userId: string, threadId: string) =>
   `${dirOf(userId)}/${encodeURIComponent(threadId)}${SUFFIX}`;
 const livePathOf = (threadId: string) =>
   `/.config/chats/${encodeURIComponent(threadId)}${SUFFIX}`;
-
-/** A file's content, `undefined` when there is none; other failures throw */
-const readRaw = async (path: string): Promise<string | undefined> => {
-  try {
-    return await PgFs.readToString(path);
-  } catch (e) {
-    if (isMissing(e)) return undefined;
-    throw e;
-  }
-};
 
 /** A copy's items, or `undefined` for bytes that are not JSON */
 const parseRaw = (raw: string) => {
@@ -74,7 +62,7 @@ const parseRaw = (raw: string) => {
   }
 };
 
-// TODO(HOO-2757 follow-up): the copy dropped here, and items `decodeThread`
+// TODO(HOO-1849): the copy dropped here, and items `decodeThread`
 // cannot read, are gone for good; keeping them aside needs a quarantine
 // folder of its own
 /**
@@ -98,19 +86,6 @@ const mergeRawFor = (threadId: string) => (kept: string, incoming: string) => {
     return incoming;
   }
   return JSON.stringify(mergeThreads(keptItems, incomingItems));
-};
-
-/** A record's bytes as one, `undefined` when they are not */
-const parseRecord = (raw: string): FenceRecord | undefined => {
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed as FenceRecord;
-    }
-  } catch {
-    // The caller reports it and rebuilds the record
-  }
-  return undefined;
 };
 
 /**
@@ -181,21 +156,9 @@ export class PgThreadFence {
    * account.
    */
   static async isFenced(threadId: string): Promise<boolean> {
-    const records = await PgThreadFence._readRecords();
+    const records = await readRecords();
     if (!records) return true;
     return records.some(({ record }) => threadId in record);
-  }
-
-  /**
-   * Every thread id a fence record names, or `undefined` when the records
-   * cannot be read. For the index migration, which must not adopt a fenced
-   * thread a lagging tab wrote back: renamed to a fresh id, no record would
-   * name it, and the next sign-in would upload it into the arriving account.
-   */
-  static async fencedIds(): Promise<Set<string> | undefined> {
-    const records = await PgThreadFence._readRecords();
-    if (!records) return undefined;
-    return new Set(records.flatMap(({ record }) => Object.keys(record)));
   }
 
   /**
@@ -237,7 +200,7 @@ export class PgThreadFence {
    * folder still recorded as another account's, and the next fence would
    * file it as that account's.
    */
-  // TODO(HOO-2757 follow-up): per-tab memory, never invalidated by another
+  // TODO(HOO-1849): per-tab memory, never invalidated by another
   // tab's sign-out or sign-in; see `_fenceAll`
   static isSettledFor(userId: string): boolean {
     return PgThreadFence._settled === userId;
@@ -297,7 +260,7 @@ export class PgThreadFence {
    * written yet, and the workspace would mint a second thread.
    */
   private static async _dropFencedFromCache() {
-    const fenced = (await PgThreadFence.fencedIds()) ?? new Set<string>();
+    const fenced = (await readFencedIds()) ?? new Set<string>();
     const cached = Object.values(await PgThreadIndex.all());
     if (cached.some((id) => fenced.has(id))) PgThreadIndex.reload();
   }
@@ -324,7 +287,7 @@ export class PgThreadFence {
    * threads, and a name left over them would have the next sign-in fence
    * this account's threads as the old account's.
    */
-  // TODO(HOO-2757 follow-up): when the removal fails too, the old owner stays
+  // TODO(HOO-1849): when the removal fails too, the old owner stays
   // named over this account's next threads; a lagging tab writing then is a
   // third fault, so a fail-closed marker waits for a report of it
   private static async _writeOwnerOverEmpty(userId: string): Promise<boolean> {
@@ -367,105 +330,6 @@ export class PgThreadFence {
   }
 
   /**
-   * Every fenced account's record, or `undefined` when any of them, or the
-   * folder, cannot be read: the callers refuse rather than guess.
-   */
-  private static async _readRecords(): Promise<
-    { userId: string; record: FenceRecord }[] | undefined
-  > {
-    let names: string[];
-    try {
-      names = await PgFs.readDir(FENCED_DIR);
-    } catch (e) {
-      if (isMissing(e)) return [];
-      report("list fenced chats", e);
-      return undefined;
-    }
-    const records = await Promise.all(
-      names.map(async (name) => {
-        let userId: string;
-        try {
-          userId = decodeURIComponent(name);
-        } catch (e) {
-          // Not a folder the fence writes, so no account's record: skipped,
-          // since refusing on it would refuse every push and settle for good
-          report(`list fenced chats: skipped ${name}`, e);
-          return "skipped" as const;
-        }
-        const record = await PgThreadFence._readRecord(userId);
-        return record && { userId, record };
-      })
-    );
-    if (records.some((r) => r === undefined)) return undefined;
-    return records.filter(
-      (r): r is { userId: string; record: FenceRecord } =>
-        r !== undefined && r !== "skipped"
-    );
-  }
-
-  /**
-   * `userId`'s record, `{}` when it has none, `undefined` when it cannot be
-   * read. A record whose bytes are not one is rebuilt from the threads in
-   * its folder.
-   */
-  private static async _readRecord(
-    userId: string
-  ): Promise<FenceRecord | undefined> {
-    let raw: string | undefined;
-    try {
-      raw = await readRaw(recordPathOf(userId));
-    } catch (e) {
-      report(`read fenced chats of ${userId}`, e);
-      return undefined;
-    }
-    if (raw === undefined) return {};
-    const record = parseRecord(raw);
-    if (record) return record;
-    report(
-      `read fenced chats of ${userId}: not a record`,
-      new Error("corrupt")
-    );
-    return PgThreadFence._rebuildRecord(userId);
-  }
-
-  /**
-   * A record from the thread files in `userId`'s folder, written over one
-   * that will never parse. Refusing on it instead, as on a read that
-   * failed, refused every thread of every account and failed every `settle`
-   * after it for good. The workspaces it named are lost: those threads come
-   * back unnamed, each adopted as a workspace of its own.
-   */
-  private static async _rebuildRecord(
-    userId: string
-  ): Promise<FenceRecord | undefined> {
-    let names: string[];
-    try {
-      names = await PgFs.readDir(dirOf(userId));
-    } catch (e) {
-      report(`rebuild fenced chats of ${userId}`, e);
-      return undefined;
-    }
-    const record: FenceRecord = {};
-    for (const name of names) {
-      if (!name.endsWith(SUFFIX) || name === `index${SUFFIX}`) continue;
-      try {
-        record[decodeURIComponent(name.slice(0, -SUFFIX.length))] = {};
-      } catch (e) {
-        // Not a name the fence writes: no thread id to restore it under, and
-        // a throw here would fail every settle and push after it
-        report(`rebuild fenced chats of ${userId}: skipped ${name}`, e);
-      }
-    }
-    try {
-      await writeConfigFile(recordPathOf(userId), JSON.stringify(record));
-    } catch (e) {
-      // Answered from memory meanwhile; the next read rebuilds it again
-      report(`rebuild fenced chats of ${userId}`, e);
-    }
-    return record;
-  }
-
-  /**
    * Move every thread in `/.config/chats` into `userId`'s fence, and empty
    * the index: everything there was that account's.
    *
@@ -485,7 +349,7 @@ export class PgThreadFence {
     // Nothing can be fenced from a folder that cannot be listed
     if (stored === null) return false;
 
-    // TODO(HOO-2757 follow-up): a thread a lagging tab of the old account
+    // TODO(HOO-1849): a thread a lagging tab of the old account
     // mints after this listing is in no record and stays in the folder as
     // the new owner's. That tab's gate (`isSettledFor`) is its own memory,
     // and nothing re-reads the session on a switch, so a tab that has not
@@ -498,7 +362,7 @@ export class PgThreadFence {
     if (!threadIds.length) return PgThreadFence._clearIndex();
 
     // Rewritten over an unreadable record, it would lose the threads it named
-    const record = await PgThreadFence._readRecord(userId);
+    const record = await readRecord(userId);
     if (!record) return false;
     for (const id of threadIds) {
       record[id] ??= { workspaceId: workspaceOf.get(id) };
@@ -570,7 +434,7 @@ export class PgThreadFence {
     const stored = await PgChatStorage.threadIds();
     if (stored === null) return false;
     if (!stored.length) return true;
-    const records = await PgThreadFence._readRecords();
+    const records = await readRecords();
     if (!records) return false;
     let moved = true;
     for (const { userId, record } of records) {
@@ -598,10 +462,10 @@ export class PgThreadFence {
    * fenced; with none left the folder goes. A rewrite that fails leaves the
    * restored threads named, and `push` refuses them until the next settle.
    */
-  // TODO(HOO-2757 follow-up): rewrite the record per thread, so a failed
+  // TODO(HOO-1849): rewrite the record per thread, so a failed
   // rewrite cannot leave restored threads refused while `settle` says true
   private static async _restore(userId: string) {
-    const record = await PgThreadFence._readRecord(userId);
+    const record = await readRecord(userId);
     if (!record) return;
     const threadIds = Object.keys(record);
     if (!threadIds.length) return;
@@ -639,7 +503,7 @@ export class PgThreadFence {
     }
   }
 
-  // TODO(HOO-2757 follow-up): merged into the thread the panel has open, the
+  // TODO(HOO-1849): merged into the thread the panel has open, the
   // panel's next persist can write its memory over the merge (offline, with
   // the fenced account back on a workspace that took another thread)
   /** One fenced thread back into `/.config/chats`; throws when it is not */
@@ -677,7 +541,7 @@ if (import.meta.vitest) {
     .vitest;
   type ChatItem = import("../../../views/sidebar/assistant/store").ChatItem;
 
-  // TODO(HOO-2757 follow-up): fail-closed branches still untested here: an
+  // TODO(HOO-1849): fail-closed branches still untested here: an
   // unreadable owner, `claimUnowned` at sign-out, a partial restore and a
   // failed record rewrite, the merge cases of `_putBack`
   describe("features/persistence/model/thread-fence", () => {
