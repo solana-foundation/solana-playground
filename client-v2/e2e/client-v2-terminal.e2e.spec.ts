@@ -70,6 +70,15 @@ test.describe("client-v2-terminal", () => {
     );
   });
 
+  test("client-v2-terminal: Typing sugar", async ({ seededPage: page }) => {
+    await openConsole(page);
+    await runInTerminal(page, "sugar --help");
+
+    await expect(terminalText(page)).toContainText(
+      "`sugar` is not a command. Type `help` to see commands."
+    );
+  });
+
   test("client-v2-terminal: Build offline", async ({
     seededPage: page,
     context,
