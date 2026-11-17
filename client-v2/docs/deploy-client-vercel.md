@@ -6,37 +6,49 @@ Three things deploy `client-v2`:
 - **`preview.yml`** deploys a preview of a PR that carries the `preview` label, built on a GitHub runner, with a database of its own ([Preview databases](preview-databases.md), and [Neon preview databases](neon.md) while the Neon path remains). A ticket branch gets a preview this way or from a local `make` deploy.
 - **The `Makefile.vercel` targets** build wherever `make` runs, also with a database of its own per preview. They pin `client-v2` themselves, whatever the dashboard holds ([Which client gets deployed](#which-client-gets-deployed)).
 
-Every Makefile target acts on the Vercel project `VERCEL_DEPLOY_PROJECT_ID` names, and the targets listed in [One-time setup](#one-time-setup) step 5 refuse a checkout linked to any other project. The team keeps that variable on its staging project, so `make deploy-client-to-vercel-preview` delivers a build from a laptop there, separate from the production project the Git integration deploys. To migrate or deploy that production project from a laptop, set its ID for the run, as [Migrations](#migrations) shows. The root `Makefile` includes `client-v2/Makefile.vercel`, so every target runs from the repository root as `make <target>`, the same as `make -f client-v2/Makefile.vercel <target>`; `make help` lists them.
+## Environments
+
+This guide uses three names:
+
+| Name | What it is | Database |
+| --- | --- | --- |
+| Production | The Production environment of the Foundation's Vercel project, built from `master` of `solana-foundation/solana-playground`. `https://playground.solana.com` is its domain; `https://solana-playground-two.vercel.app` is the project's internal domain for the same releases | Cloud SQL (`DB_PROVIDER=cloud-sql`) |
+| Preproduction | The Preview environment of the same project. These previews exist and are rarely used | The `cloud-sql` provider on a preview database, never production's ([Preview databases](preview-databases.md)) |
+| Staging | The developers' own Vercel project, `https://solana-playground-teal.vercel.app`, with its Production and Preview environments | Neon. Only staging uses Neon |
+
+The [production runbook](production-runbook.md) sets up production and is the operator's reference for it. Where this guide and the runbook describe the same step, the runbook decides for production.
+
+Every Makefile target acts on the Vercel project `VERCEL_DEPLOY_PROJECT_ID` names, and the targets listed in [One-time setup](#one-time-setup) step 5 refuse a checkout linked to any other project. A developer's `client-v2/.env` names the staging project, so `make deploy-client-to-vercel-preview` delivers a build from a laptop to staging. A production operator's `client-v2/.env` names the production project (runbook, step 1), and the production targets need no override there. A developer who migrates or deploys production from a staging checkout sets the production project's ID for the run, as [Migrations](#migrations) shows. The root `Makefile` includes `client-v2/Makefile.vercel`, so every target runs from the repository root as `make <target>`, the same as `make -f client-v2/Makefile.vercel <target>`; `make help` lists them.
 
 ## Release checklist: `client-v2` to production
 
-The Foundation's production on Cloud SQL is set up by the [production runbook](production-runbook.md) instead; this
-checklist describes a project whose production database is on Neon.
-
 Production builds `client-v2` from `master`
-([settings](#verified-vercel-project-settings)), so every push to `master` is a
-release. Steps 1, 3, 4 and 7 are one-time setup for a new project. A release that
-brings a migration runs 5, 6, 8 and 9 in that order, with 5 and 6 from the
-branch being released, before it merges: the migrations come from the checkout,
-so `master` does not hold them yet. Step 2 is setup too, and repeats whenever a
-release brings a new variable: set it before step 8. Each step assumes the ones above it. The list has
-never been run end to end as one pass ([Known gaps](#known-gaps)).
+([settings](#verified-vercel-project-settings)) and reads Cloud SQL, so every
+push to `master` is a release. The [production runbook](production-runbook.md)
+sets the project up once; this checklist is the order of one release, with the
+setup steps a new project needs. Steps 1, 3, 4 and 7 are one-time setup. A
+release that brings a migration runs 5, 6, 8 and 9 in that order, with 5 and 6
+from the branch being released, before it merges: dbmate applies the migrations
+of the checkout it runs in, and `master` gets them only with the merge. Step 2
+is setup too, and repeats whenever a release brings a variable production does
+not have: set it before step 8. Each step assumes the steps before it. The list
+has never been run end to end as one pass ([Known gaps](#known-gaps)).
 
-1. **One-time setup is done** — [below](#one-time-setup).
-2. **Production env vars**, scoped to Production —
+1. **One-time setup is done**: [One-time setup](#one-time-setup), and for
+   production the runbook's steps 1 to 6.
+2. **Production env vars**, scoped to Production. The runbook's
+   [Production environment](production-runbook.md#production-environment)
+   lists every one; those of this guide are in
    [Assistant default backend](#assistant-default-backend) and
    [Conversation and project sync](#conversation-and-project-sync):
-   - `DATABASE_URL` — the pooled URL of production's Neon database, the same one
-     `migrate-production-db` migrates. It is in a Neon project of its own,
-     never the preview project ([Neon preview databases](neon.md)). After the
-     move to Cloud SQL, `DB_PROVIDER=cloud-sql` and the `CLOUD_SQL_*` and
-     `GCP_*` variables replace it ([Cloud SQL for client-v2](cloud-sql.md),
-     steps 6 and 7).
-   - `AUTH_OAUTH_PROXY_SECRET` — the same value as on Preview, and never equal
-     to either `AUTH_SECRET` ([Sign-in on previews](#sign-in-on-previews)).
+   - `DB_PROVIDER=cloud-sql`, with the `CLOUD_SQL_*` and `GCP_*` variables
+     ([Cloud SQL for client-v2](cloud-sql.md), steps 6 and 7). Production
+     sets no `DATABASE_URL`: that variable belongs to the `url` provider,
+     which only staging uses.
    - `SYNC_ENABLED=true`.
-   - `AUTH_SECRET` — generated for production, never reused from a preview.
-   - `AUTH_BASE_URL` — the production origin. **Required here, not optional:**
+   - `AUTH_SECRET`: generated for production, never reused from staging or a
+     preview.
+   - `AUTH_BASE_URL`: the production origin. **Required here, not optional:**
      without it `resolveBaseURL()` (`src/features/auth/model/auth.mjs`) falls
      back to Vercel's hostnames for the deployment, its per-deployment URL
      and branch alias, and the production domain is neither: sign-in there
@@ -44,24 +56,26 @@ never been run end to end as one pass ([Known gaps](#known-gaps)).
      `api/agent.mjs`, `api/mcp.mjs`, `api/projects.mjs` and
      `api/conversations.mjs` answer its writes with `403`. A production build with `PG_AI_API_KEY` fails
      without it (`scripts/check-agent-env.mjs`).
-   - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — see step 3.
+   - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`: see step 3.
    - `SENTRY_AUTH_TOKEN`: a production build fails without it
      (`scripts/upload-sourcemaps.mjs`). A local `vercel build` pulls a
      Sensitive variable as an empty value, which fails the same way, so a
      production built locally needs it stored as a variable that is not
      Sensitive.
    - `PG_AI_*`: set only after sign-in (`AUTH_SECRET`, `GITHUB_CLIENT_ID`,
-     `GITHUB_CLIENT_SECRET`, `DATABASE_URL`) and the [firewall](firewall.md)
+     `GITHUB_CLIENT_SECRET`, the database variables) and the [firewall](firewall.md)
      rules. `/api/agent` answers only signed-in users, and a production build
      fails when the key is set without sign-in or `AUTH_BASE_URL`
      (`scripts/check-agent-env.mjs`).
 3. **GitHub OAuth app for production.** Its callback URL is
    `<AUTH_BASE_URL>/api/auth/callback/github`. A GitHub OAuth app takes a
-   single callback, so previews have no app of their own: they sign in through
-   the host's, by the [OAuth proxy](#sign-in-on-previews).
+   single callback, so a preview has no app of its own. Staging's previews
+   sign in through staging's Production deployment, by the
+   [OAuth proxy](#sign-in-on-previews).
 4. **Build server CORS.** `PG_CLIENT_URLS` on the build server includes the
    production origin.
-5. **Dry run on a preview**, from the branch being released:
+5. **Dry run on staging**, from the branch being released, with
+   `client-v2/.env` naming the staging project:
 
    ```sh
    make -f client-v2/Makefile.vercel migrate-preview-db
@@ -69,32 +83,33 @@ never been run end to end as one pass ([Known gaps](#known-gaps)).
    ```
 
    This uses that git branch's Neon branch, `preview/<git-branch>`, cut from
-   the preview Neon project, so the dry run runs on preview data. On the preview URL:
-   `/api/sync` answers `{"enabled":true,"db":"ok"}`, sign-in works, and a
-   project edited in one browser shows up in a second.
-6. **Migrate production**, from the same checkout, with the ID of the project
-   the Git integration deploys, not the staging project
-   `VERCEL_DEPLOY_PROJECT_ID` holds ([Migrations](#migrations) shows the link
-   and the variable). The build serving production keeps running until step 8,
-   so the migration must work with that build too:
+   staging's Neon project, so the dry run runs on staging data. On the
+   preview URL: `/api/sync` answers `{"enabled":true,"db":"ok"}`, sign-in
+   works, and a project edited in one browser shows up in a second.
+6. **Migrate production**, from the same checkout, linked to the production
+   project. An operator whose `client-v2/.env` names it runs the command as it
+   stands; from a staging checkout, set the production project's ID for the
+   run ([Migrations](#migrations)). The build serving production keeps running
+   until step 8, so the migration must work with that build too:
 
    ```sh
    make -f client-v2/Makefile.vercel migrate-production-db
    ```
 
    A deployment that ships ahead of its migration runs against a schema
-   missing what it expects — and `/api/sync` still reports `db: "ok"`, because
+   missing what it expects, and `/api/sync` still reports `db: "ok"`, because
    it checks reachability, not schema.
 7. **Dashboard settings.** Production Branch `master`; Root Directory
-   `client-v2`. Both are set already
-   ([settings](#verified-vercel-project-settings)); check them on a new project.
+   `client-v2` ([settings](#verified-vercel-project-settings)). Check both on
+   a new project.
 8. **Deploy.** Merge to `master`. With nothing to merge, redeploy the latest
    `master` commit from the dashboard.
 9. **Smoke test production** the same way as step 5.
 
 Rolling back the deployment (`vercel promote <previous-url> --prod`) does not
-roll back the schema. Migrations are additive so far, so the previous build
-runs against the newer schema; revisit this once one is not.
+roll back the schema. A migration is written so the build already deployed
+keeps working on the new schema, so the previous build runs against it; a
+migration that cannot keep that rule needs its own rollback plan.
 
 ## Verified Vercel project settings
 
@@ -110,8 +125,8 @@ The Production Branch row was confirmed on 2026-10-19.
 
 ### Commands (`vercel.json`)
 
-- `installCommand`: `bash scripts/vercel-install.sh`, which installs rustup, runs `wasm/build.sh`, then `yarn install`. The wasm build comes first because `client-v2/package.json` depends on `file://../wasm/*/pkg`, and those directories exist only once `wasm-pack` has run.
-- `buildCommand`: `bash scripts/vercel-build.sh`, a script because Vercel rejects a `buildCommand` over 256 characters. It runs `scripts/check-agent-env.mjs` ([Assistant default backend](#assistant-default-backend)) and `scripts/check-unstable-env.mjs`, then `yarn build:bundle`, then `scripts/wasm-stubs.mjs check-build build`, which fails a build that carries the wasm stubs. `yarn build:bundle`, not `yarn build`, which would compile the wasm packages a second time and miss the install step's cache.
+- `installCommand`: `bash scripts/vercel-install.sh`, which installs rustup, runs `wasm/build.sh`, then `yarn install`. The wasm build comes first because `client-v2/package.json` depends on bare local paths: `../wasm/<name>/pkg` for each package built from Rust, which exists only once `wasm-pack` has run, and `../wasm/pkgs/rustfmt`, which is committed.
+- `buildCommand`: `bash scripts/vercel-build.sh`, a script because Vercel rejects a `buildCommand` over 256 characters. It runs `scripts/check-agent-env.mjs` ([Assistant default backend](#assistant-default-backend)) and `scripts/check-unstable-env.mjs`, then `yarn build:bundle`, then `scripts/wasm-stubs.mjs check-build build`, which fails a build that carries a wasm stub or lacks a real package's marker (`bundleProblems`). `yarn build:bundle`, not `yarn build`, which would compile the wasm packages a second time and miss the install step's cache.
 
 ## How long a function may run
 
@@ -132,12 +147,12 @@ On legacy, 15 s cuts a long answer off mid-sentence. On Fluid, a smaller
 value lowers a limit that is already right: 60 would cause the truncation it
 was meant to fix. 300 is right in both modes.
 
-**Open:** nobody has checked which mode this project runs (Settings →
-Functions). Once someone does, the number can be chosen on that evidence.
+Production runs Fluid compute: the runbook's step 1 turns it on (Settings →
+Functions). A project set up another way is checked on that page.
 
 A cut-off stream is not silent: `api/agent.mjs` aborts the upstream request
-when the browser goes away, and reports a failed stream as an SSE `error`
-event.
+when the browser goes away, and `sayCutShort` ends a failed stream with a
+`data:` frame carrying `{ error }`, with no `event:` line.
 
 ## Which client gets deployed
 
@@ -156,7 +171,7 @@ All three paths build `client-v2`, each from its own setting:
 1. Create the project. Framework: Other. Root Directory: `client-v2`.
 2. Build Machine: Enhanced on Enterprise; default on Pro.
 3. Production Branch: `master`. Ignored Build Step: leave it; `vercel.json`'s `ignoreCommand` overrides it.
-4. A Vercel token, only if you need one — see [Tokens](#tokens). Local deploys do not: the Makefile targets fall back to your `vercel login` session.
+4. A Vercel token, only if you need one: see [Tokens](#tokens). Local deploys do not: the Makefile targets fall back to your `vercel login` session.
 5. Set `VERCEL_DEPLOY_PROJECT_ID` in `client-v2/.env` to the Project ID (`prj_…`) from the project's Settings → General. Two teams each have a project named `solana-playground`, so these targets stop unless `.vercel/project.json` links this project:
    - `vercel-link-preview` and `vercel-link-production`, and the preview and full production deploys, which run them first: the project check, then the login check (`vercel whoami`, see [Tokens](#tokens)).
    - `deploy-client-to-vercel-prod-fast` and `migrate-production-db`: the project check only.
@@ -182,7 +197,7 @@ All three paths build `client-v2`, each from its own setting:
    make vercel-link
    ```
 
-   No token is needed. The target runs `vercel link --yes --team "$VERCEL_DEPLOY_TEAM" --project "$VERCEL_DEPLOY_PROJECT_ID"` in a temporary directory under `.vercel/`. It accepts only a `prj_` ID, because a project name could make `vercel link --yes` create a project in the team. It copies only `orgId` and `projectId` into `.vercel/project.json`, and copies only `orgId` and `projectId` into `.vercel/project.json`, because `vercel link` also writes a `.env.local` with an OIDC token and edits `.gitignore` in the directory it links.
+   No token is needed. The target runs `vercel link --yes --team "$VERCEL_DEPLOY_TEAM" --project "$VERCEL_DEPLOY_PROJECT_ID"` in a temporary directory under `.vercel/`. It accepts only a `prj_` ID, because a project name could make `vercel link --yes` create a project in the team. It copies only `orgId` and `projectId` into `.vercel/project.json`, because `vercel link` also writes a `.env.local` with an OIDC token and edits `.gitignore` in the directory it links.
 9. Neon: set `NEON_API_KEY` and `NEON_PROJECT_ID` in `client-v2/.env` and on GitHub (a secret and a variable); see [Neon preview databases](neon.md#configuration).
 
 Add the Vercel deployment origin to the server's [`PG_CLIENT_URLS`](https://github.com/solana-playground/solana-playground/blob/cd5555155c61572c8c49fb351890519af9e493ef/.env.example#L3) environment variable or CORS will reject every request.
@@ -191,14 +206,14 @@ Add the Vercel deployment origin to the server's [`PG_CLIENT_URLS`](https://gith
 
 - **Automatic:** push. The Git integration builds `client-v2`, the dashboard's Root Directory. A push to the Production Branch deploys to production; a push to `master-production` or to a `scope/*`, `integration/*` or `new-face-polish-<n>` branch deploys a preview (any other branch is skipped), reachable at its per-commit URL and at the branch's alias, both of which sign in ([Sign-in on previews](#sign-in-on-previews)).
 - **Local preview:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-preview`. Promote later with `vercel promote <url> --prod`.
-- **Local production:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-production`. The target prints the branch and commit, asks for a typed `yes`, and then runs `vercel build --prod` and `vercel deploy --prebuilt --prod`. Run `migrate-production-db` first when migrations are pending. Like the fast deploy below, it deploys to the project `VERCEL_DEPLOY_PROJECT_ID` names; [Migrations](#migrations) shows how to name the Git-integration production project for one run.
-- **Local production, fast:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-prod-fast`. Rebuilds from the working tree in ~5 minutes by skipping `installCommand` (rustup + `wasm/build.sh`, about an hour). It refuses to run unless a previous full build left `client-v2/node_modules` and the real — not stubbed — `wasm/*/pkg` packages on disk. It deploys whatever is in the working tree, committed or not.
+- **Local production:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-production`. The target prints the branch and commit, asks for a typed `yes`, and then runs `vercel build --prod` and `vercel deploy --prebuilt --prod`. Run `migrate-production-db` first when migrations are pending. It deploys to the project `VERCEL_DEPLOY_PROJECT_ID` names, as the fast deploy does; [Migrations](#migrations) shows how to name the production project for one run from a staging checkout.
+- **Local production, fast:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-prod-fast`. Rebuilds from the working tree in ~5 minutes by skipping `installCommand` (rustup + `wasm/build.sh`, about an hour). It refuses to run unless a previous full build left `client-v2/node_modules` and the real `wasm/*/pkg` packages, not the stubs, on disk. It deploys whatever is in the working tree, committed or not.
 
 `vercel-link-preview` or `vercel-link-production` runs automatically as a prerequisite of the preview and full production targets.
 
 A Git-integration build with no cache does not finish inside Vercel's [build time limit](https://vercel.com/docs/builds#limits-and-resources). A local build has no such limit, and it reuses the Rust state of earlier local builds (see [Build cache](#build-cache)).
 
-To pick up only changed **server-side** variables (anything `api/*.mjs` reads), no rebuild is needed: re-run `npx vercel@<version> deploy --prebuilt --prod --archive=tgz` on the existing `.vercel/output`, with the version pinned as `VERCEL_CLI` in `Makefile.vercel`. Variables are attached to functions when a deployment is created. `REACT_APP_*` are inlined into the bundle and do need a rebuild.
+To pick up only changed **server-side** variables (anything `api/*.mjs` reads), no rebuild is needed: re-run `npx vercel@<version> deploy --prebuilt --prod --archive=tgz` on the existing `.vercel/output`, with the version pinned as `VERCEL_CLI` in `Makefile.vercel`. Variables are attached to functions when a deployment is created. This works only while `.vercel/output` is the build of the commit production runs; once a push to `master` has deployed a newer commit, a full build is needed instead (runbook, [Deploying production](production-runbook.md#deploying-production)). `REACT_APP_*` are inlined into the bundle and do need a rebuild.
 
 `deploy-client-to-vercel-preview` resolves this git branch's Neon branch first, before building, and passes it as `-e DATABASE_URL=<pooled url>` so the deployment overrides the project-level variable. Resolving first is deliberate: a Neon failure should not cost a full wasm build.
 
@@ -261,7 +276,7 @@ Every `REACT_APP_*` variable a build sees is public: every visitor can read it i
 | `REACT_APP_LOG_LEVEL` | the console log level |
 | `REACT_APP_VERCEL_GIT_COMMIT_SHA`, `REACT_APP_VERCEL_ENV` | set by `scripts/vercel-build.sh`, which also unsets `REACT_APP_VERCEL_OBSERVABILITY_CLIENT_CONFIG`, added by Vercel for `@vercel/analytics` and `@vercel/speed-insights`, which the client does not install; never set them in the project |
 
-Every other variable stays on the server, read by `api/*.mjs` through `src/shared/config/server-env.mjs` and the build scripts; mark each credential among them **Sensitive** in Vercel.
+Every other variable stays on the server, read by `api/*.mjs` through `src/shared/config/server-env.mjs` and the build scripts. Mark a credential **Sensitive** in Vercel unless a local build or `migrate-production-db` reads it: a pull holds a Sensitive variable as empty, so `SENTRY_AUTH_TOKEN` and the database variables stay readable, or the local production build and the migration fail (runbook, step 1).
 
 Two checks in `scripts/public-env.mjs` cover both sides:
 
@@ -345,7 +360,7 @@ back, and an `AGENT_*` that differs from its set `PG_AI_*` twin is ignored, with
 To rename a project: add each `PG_AI_*` with the old value, for Production and
 Preview, and redeploy. Every build logs
 `check-agent-env: deprecated AGENT_* names still set: …`; delete the names it
-lists, redeploy, and the line is gone. Until then, any step below that sets,
+lists, redeploy, and the line is gone. Until then, any step in this section that sets,
 rotates or unsets a `PG_AI_*` variable applies to its `AGENT_*` twin too. The
 fallback is removed once no deployment sets them.
 
@@ -391,7 +406,7 @@ Gateway](#fallback-vercel-ai-gateway)). Three limits stack:
 
 - **The keys' spend limits, the ceiling.** Each tier spends through its own
   Nous key, each with a daily and a monthly spend limit set in the Nous
-  dashboard, outside our code, so they hold even when the ledger below is
+  dashboard, outside our code, so they hold even when the per-user ledger is
   wrong. Past its limit a key is refused with `402`
   `key_spend_limit_reached`. The daily limit is a rolling window that starts
   with the key's first request, not a fixed hour. The prepaid balance, with
@@ -421,8 +436,8 @@ turns stay in the US with no routing field.
    added, and `/api/agent` reports it to Sentry as the `api:agent` error
    `upstream credit balance is empty`. Nous has no API for the balance or a
    key's limit; read both in the dashboard.
-3. Set the variables below in Vercel, for Production and Preview.
-   `PG_AI_BASE_URL` and `PG_AI_MODEL` stay unset, on the Nous defaults.
+3. Set the variables of the "Value on Nous" table in Vercel, for Production
+   and Preview. `PG_AI_BASE_URL` and `PG_AI_MODEL` stay unset, on the Nous defaults.
 
 | Variable | Value on Nous |
 | --- | --- |
@@ -449,7 +464,7 @@ A malformed number falls back to its default and logs `server-env: ...`.
 `master` ([Conversation and project sync](#conversation-and-project-sync)).
 The keys and the merge can come in either order: without
 `PG_AI_NEWCOMER_API_KEY`, newcomers spend through `PG_AI_API_KEY`, and the
-ledger and caps apply already.
+ledger and caps apply either way.
 
 #### Fallback: Vercel AI Gateway
 
@@ -478,7 +493,8 @@ worst-case turn. Every request to the Gateway is restricted to
    Budget Manager sees the setting.
 4. Set the team's monthly budget at $1,500 (both keys at their daily budget for
    25 days). It needs sign-off before it is set.
-5. Set the variables below in Vercel, for Production and Preview.
+5. Set the variables of the "Value on the Gateway" table in Vercel, for
+   Production and Preview.
 
 | Variable | Value on the Gateway |
 | --- | --- |
@@ -641,7 +657,8 @@ before this existed.
 
 | Variable | Meaning |
 | --- | --- |
-| `DATABASE_URL` | Postgres connection string. **Must be a pooled endpoint.** A serverless function opens a connection per invocation and will exhaust `max_connections` against a direct one. TLS is required and the certificate verified unless the URL sets `sslmode` — so a provider needing a looser mode has to say so in the URL, where it is visible in review |
+| `DB_PROVIDER` | Which database provider the functions open (`providers/<name>.mjs` in `src/features/persistence/model/`). Unset means `url`. Production and preproduction set `cloud-sql`, with the `CLOUD_SQL_*` and `GCP_*` variables of [Cloud SQL for client-v2](cloud-sql.md); staging leaves it on `url` |
+| `DATABASE_URL` | Read only when `DB_PROVIDER` is `url`: staging. Postgres connection string. **Must be a pooled endpoint.** A serverless function opens a connection per invocation and will exhaust `max_connections` against a direct one. TLS is required and the certificate verified unless the URL sets `sslmode`, so a provider needing a looser mode has to say so in the URL, where it is visible in review |
 | `SYNC_ENABLED` | Kill switch. Only the exact string `true` enables sync; unset or anything else keeps the app local-only |
 | `AUTH_SECRET` | Better Auth signing secret. Generate one per environment; rotating it signs everyone out |
 | `AUTH_BASE_URL` | The deployment's own origin, e.g. `https://example.vercel.app`. Better Auth builds the OAuth callback from it, so a wrong value breaks sign-in with no error at the browser |
@@ -697,13 +714,18 @@ The user never sees the platform's error.
 
 ### Migrations
 
-**Migrations are never applied by a function.** A preview from `preview.yml` or
-the Makefile gets its own Neon branch, so its schema is its own problem. A
-Git-triggered preview runs on the Preview-scoped `DATABASE_URL`, which nothing
-here migrates. A labelled PR's preview is migrated by
-`preview.yml` on every deploy (see
-[Previews from a PR label](neon.md#previews-from-a-pr-label)); a preview
-deployed by hand is migrated by hand:
+**Migrations are never applied by a function.** Who applies them depends on
+the database:
+
+| Database | Migrated by |
+| --- | --- |
+| Production's, on Cloud SQL | A person, with `migrate-production-db`, before the merge to `master` |
+| Preproduction's shared `solpg_preview` | `preview-shared-db.yml`, on every push to `master` that changes `client-v2/db/migrations/**`, once the repository variable `PREVIEW_DB_PROVIDER` is `cloud-sql` |
+| A labelled PR's own preview database | `preview.yml`, on every deploy ([Preview databases](preview-databases.md), [Previews from a PR label](neon.md#previews-from-a-pr-label)) |
+| A preview deployed by hand | A person, with `migrate-preview-db` |
+| Staging's Preview-scoped `DATABASE_URL` | Nothing in this repository |
+
+A preview deployed by hand:
 
 ```sh
 make -f client-v2/Makefile.vercel migrate-preview-db
@@ -712,26 +734,35 @@ make -f client-v2/Makefile.vercel migrate-preview-db
 What that target does to the preview's Neon branch, and why it asks for no
 confirmation, is in [Neon preview databases](neon.md#a-branch-per-git-branch).
 
-The shared database behind the project-level `DATABASE_URL` still needs its own
-schema, and that one serves production:
+Production's database:
 
 ```sh
 make -f client-v2/Makefile.vercel migrate-production-db
 ```
 
-It pulls the **Production** environment's `DATABASE_URL_UNPOOLED` into
-`.vercel/.env.production.local` and migrates that. It never uses the preview
-pull: that one resolves for the checked-out git branch, so it can name a
-preview branch's database. Once it did: run from an integration branch, the target
-checked that branch's Neon branch and reported nothing pending while
-production's `main` had no schema at all.
+It pulls the **Production** environment into `.vercel/.env.production.local`
+and migrates the database that environment's `DB_PROVIDER` names:
+
+- `cloud-sql`, production's: `CLOUD_SQL_DATABASE` on `CLOUD_SQL_INSTANCE`,
+  through the Cloud SQL Auth Proxy as the operator's own gcloud identity
+  ([Cloud SQL for client-v2](cloud-sql.md)). It prints the database and its
+  instance.
+- `url` or unset, staging's: `DATABASE_URL_UNPOOLED`. It prints the host.
+
+It never uses the preview pull. The preview pull resolves for the checked-out
+git branch, so on a branch with branch-scoped Preview variables it names that
+branch's database: run from such a branch, the target once reported nothing
+pending while production's database had no schema at all (the comment above
+`migrate-production-db` in `Makefile.vercel`).
 
 It refuses to run unless the linked project is the one
-`VERCEL_DEPLOY_PROJECT_ID` names ([One-time setup](#one-time-setup)).
-The team keeps that variable on its staging project, so the production
-database the Git integration deploys against is migrated only with that
-project's ID set for the run, and the checkout linked to it. Linking also needs
-the team that owns that project, which is not the staging team:
+`VERCEL_DEPLOY_PROJECT_ID` names ([One-time setup](#one-time-setup)). An
+operator whose `client-v2/.env` names the production project runs the
+command as it stands, as the runbook's
+[Migrations](production-runbook.md#migrations) does. A developer whose
+`client-v2/.env` names staging sets the production project's ID for the run,
+with the checkout linked to it. Linking also needs the team that owns that
+project, which is not staging's team:
 
 ```sh
 VERCEL_DEPLOY_TEAM=<production team> VERCEL_DEPLOY_PROJECT_ID=prj_… make vercel-link
@@ -741,24 +772,23 @@ make vercel-link
 
 Skip the first `vercel-link` when `.vercel/project.json` already links that
 project. Only linking reads the team, so the migration takes the project ID
-alone. The last one links the staging project back, since the targets in
+alone. The last command links the staging project back, since the targets in
 [One-time setup](#one-time-setup) step 5 refuse a link to another project.
 `deploy-client-to-vercel-production`, `deploy-client-to-vercel-prod-fast`,
 and `vercel-link-production` take the production project's ID the same way.
 
-`migrate-production-db` prints the host first,
-then the pending migrations, then asks for a typed `yes`. With nothing
-pending it does not ask, so the prompt never becomes something to click
-through.
+`migrate-production-db` prints which database it acts on first, then the
+pending migrations, then asks for a typed `yes`. With nothing pending it does
+not ask, so the prompt never becomes something to click through.
 
-**Nothing migrates production automatically.** The only real databases CI
-migrates are labelled PRs' preview branches. `yarn db-migrate` in
-`client-v2.yml` runs against a throwaway service container: it proves the
-history replays from scratch and touches nothing real. The Git integration
-deploys `master` to production with no hook before or after. A person runs
-`migrate-production-db` from a laptop, and the order is theirs to keep:
-migrate first, then merge to `master`. A deployment that ships ahead of its
-migration runs against a schema missing the columns it expects.
+**Nothing migrates production automatically.** `yarn db-migrate` in
+`reusable-client-v2.yml`, which `client-v2.yml` calls, runs against a
+throwaway service container: it proves the history replays from scratch and
+touches nothing real. The Git integration deploys `master` to production with
+no hook before or after. A person runs `migrate-production-db`, and the order
+is theirs to keep: migrate first, then merge to `master`. A deployment that
+ships ahead of its migration runs against a schema missing the columns it
+expects.
 
 `/api/sync` checks only that the database answers (`select 1`). A database it
 cannot reach answers `{"enabled":false,"db":"unreachable"}`, and the client
@@ -768,20 +798,27 @@ answers `db: "ok"` whatever its schema, so an unmigrated one still reports
 
 ### Sign-in on previews
 
-A preview's origin changes on every deployment and a GitHub OAuth app takes one
-callback, so previews sign in through the host's app with Better Auth's OAuth
-proxy (`oauthProxyPlugins` in `src/features/auth/model/auth.mjs`). The host is
-the Production deployment, `https://solana-playground-teal.vercel.app`. A
-preview sends GitHub to the host's callback; the host trades the code for the
-profile and redirects back to the preview with it encrypted; the preview
-creates the user and the session in the database it runs with.
+This section describes staging. A preview's origin changes on every
+deployment and a GitHub OAuth app takes one callback, so staging's previews
+sign in through the host's app with Better Auth's OAuth proxy
+(`oauthProxyPlugins` in `src/features/auth/model/auth.mjs`). The host is
+staging's Production deployment, `https://solana-playground-teal.vercel.app`,
+not production. A preview sends GitHub to the host's callback; the host trades
+the code for the profile and redirects back to the preview with it encrypted;
+the preview creates the user and the session in the database it runs with.
 
-Set once in the Vercel dashboard:
+Set once in the staging project's Vercel dashboard:
 
-- **Production:** `AUTH_OAUTH_PROXY_SECRET`.
-- **Preview:** `AUTH_OAUTH_PROXY_URL=https://solana-playground-teal.vercel.app`,
-  the same `AUTH_OAUTH_PROXY_SECRET`, and the host's `GITHUB_CLIENT_ID` and
+- **Staging's Production environment:** `AUTH_OAUTH_PROXY_SECRET`.
+- **Staging's Preview environment:**
+  `AUTH_OAUTH_PROXY_URL=https://solana-playground-teal.vercel.app`, the same
+  `AUTH_OAUTH_PROXY_SECRET`, and the host's `GITHUB_CLIENT_ID` and
   `GITHUB_CLIENT_SECRET`.
+
+Production sets neither proxy variable (runbook,
+[Sync and sign-in](production-runbook.md#sync-and-sign-in)). Without
+`AUTH_OAUTH_PROXY_SECRET` a deployment runs no proxy at all, so production is
+no host, and a preproduction preview has no proxy to sign in through.
 
 Only a deployment with `VERCEL_ENV=preview` and a proxy URL naming another
 origin completes a proxied sign-in. Every other one is the host and drops the
@@ -790,19 +827,20 @@ and on the host those endpoints would turn a forged payload into a session. The
 host must run this code before any preview can sign in.
 
 Whoever holds one preview's environment holds `AUTH_OAUTH_PROXY_SECRET`, and
-with it can forge a session on any preview. Two rules keep that away from real
-accounts:
+with it can forge a session on any preview of that project. Two rules keep
+that away from real accounts:
 
-- **No preview reaches production's data.** A preview from `preview.yml` or the
-  Makefile runs on a branch of the preview Neon project
-  ([The parent branch](neon.md#the-parent-branch)). A Git-triggered preview
-  runs on the Preview-scoped `DATABASE_URL`, which names a database in that
-  project too, never production's.
-- **Production's `AUTH_SECRET` is used nowhere else.** It signs production's
-  session cookies. The proxy secret is the same on production and every
-  preview, so it must never equal production's `AUTH_SECRET`, or the preview's
-  either, since one key would then decrypt what was sealed for the other's
-  purpose.
+- **No preview reaches production's data.** Staging's previews run on Neon:
+  one from `preview.yml` or the Makefile on a branch of staging's Neon project
+  ([The parent branch](neon.md#the-parent-branch)), a Git-triggered one on the
+  Preview-scoped `DATABASE_URL`, which names a database in that project too.
+  Preproduction's previews run on the preview Cloud SQL instance, and the
+  `cloud-sql` provider refuses the production database name outside
+  Production ([Preview databases](preview-databases.md)).
+- **Production's `AUTH_SECRET` is used nowhere else**, and no `AUTH_SECRET`
+  doubles as the proxy secret. The proxy secret is the same on the host and
+  every preview, so it never equals the host's `AUTH_SECRET` or a preview's,
+  since one key would then decrypt what was sealed for the other's purpose.
 
 A user signed in on a preview has no `login`: the proxy forwards only Better
 Auth's own user fields, so `mapProfileToUser` does not reach it. The header
@@ -837,9 +875,9 @@ its session reads as signed out, and `isAllowedOrigin` answers its writes with
 `500` from `/api/auth`, and "try again" from the routes that read the session.
 Production is unaffected: `AUTH_BASE_URL` wins, and it is the one origin there.
 
-A labelled PR from an integration branch has two deployments per push: the
-Git integration's, on the Preview-scoped `DATABASE_URL`, and `preview.yml`'s,
-on the PR's Neon branch. The branch alias follows whichever deployed last. A
+On staging, a labelled PR from an integration branch has two deployments per
+push: the Git integration's, on the Preview-scoped `DATABASE_URL`, and
+`preview.yml`'s, on the PR's Neon branch. The branch alias follows whichever deployed last. A
 ticket branch's PR has only `preview.yml`'s, since the Git integration skips it. To be sure of the
 database behind it, use the per-commit URL `preview.yml` posts on the PR.
 
@@ -852,8 +890,8 @@ database behind it, use the per-commit URL `preview.yml` posts on the PR.
   checked by hand.
 - **The release checklist has not been run end to end as one pass.**
 - The deployed-preview reachability of `DATABASE_URL` has not been verified;
-  everything so far has run against a local container.
-- **A Git-triggered preview has no Neon branch of its own.** It runs with the
+  every check of it ran against a local container.
+- **A Git-triggered staging preview has no Neon branch of its own.** It runs with the
   project's Preview-scoped variables. Only `preview.yml` and the Makefile cut a
   Neon branch and pass it as `DATABASE_URL`
   ([Neon preview databases](neon.md)).
