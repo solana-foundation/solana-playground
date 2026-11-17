@@ -187,6 +187,18 @@ export class PgThreadFence {
   }
 
   /**
+   * Every thread id a fence record names, or `undefined` when the records
+   * cannot be read. For the index migration, which must not adopt a fenced
+   * thread a lagging tab wrote back: renamed to a fresh id, no record would
+   * name it, and the next sign-in would upload it into the arriving account.
+   */
+  static async fencedIds(): Promise<Set<string> | undefined> {
+    const records = await PgThreadFence._readRecords();
+    if (!records) return undefined;
+    return new Set(records.flatMap(({ record }) => Object.keys(record)));
+  }
+
+  /**
    * Make `/.config/chats` hold `userId`'s threads only, ahead of its sign-in
    * dump: another owner's threads are fenced, any thread a fence names that
    * reappeared is fenced again, and `userId`'s own fenced threads come back.
@@ -285,10 +297,7 @@ export class PgThreadFence {
    * written yet, and the workspace would mint a second thread.
    */
   private static async _dropFencedFromCache() {
-    const records = (await PgThreadFence._readRecords()) ?? [];
-    const fenced = new Set(
-      records.flatMap(({ record }) => Object.keys(record))
-    );
+    const fenced = (await PgThreadFence.fencedIds()) ?? new Set<string>();
     const cached = Object.values(await PgThreadIndex.all());
     if (cached.some((id) => fenced.has(id))) PgThreadIndex.reload();
   }
@@ -975,6 +984,39 @@ if (import.meta.vitest) {
       );
 
       expect(await PgThreadFence.settle("bob")).toBe(false);
+    });
+
+    it("keeps a thread a lagging tab wrote back out of the index migration", async () => {
+      await PgThreadFence.settle("ada");
+      const threadId = await chat("w1", [item(1)]);
+      await PgThreadFence.settle("bob");
+      await PgChatStorage.write(threadId, [item(1), item(2)]);
+
+      // The next page load: the migration adopts every unindexed file
+      PgThreadIndex.reload();
+      await PgThreadIndex.all();
+
+      expect(await PgChatStorage.threadIds()).toEqual([threadId]);
+      expect(Object.values(await PgThreadIndex.all())).toEqual([]);
+      expect(await PgThreadFence.settle("bob")).toBe(true);
+      expect(await PgChatStorage.threadIds()).toEqual([]);
+    });
+
+    it("adopts no thread while the fence records cannot be read", async () => {
+      await PgThreadFence.settle("ada");
+      const threadId = await chat("w1", [item(1)]);
+      await PgThreadFence.settle("bob");
+      await PgChatStorage.write(threadId, [item(2)]);
+      vi.spyOn(PgFs, "readDir").mockImplementation(async (path) => {
+        if (path === FENCED_DIR) throw new Error("EIO");
+        return [`${encodeURIComponent(threadId)}.json`];
+      });
+
+      PgThreadIndex.reload();
+      await PgThreadIndex.all();
+      vi.restoreAllMocks();
+
+      expect(await PgChatStorage.threadIds()).toEqual([threadId]);
     });
 
     it("keeps the thread that decodes when a fenced copy is not JSON", async () => {

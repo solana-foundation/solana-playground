@@ -9,6 +9,7 @@ import { PgFs } from "../../../utils/explorer/fs";
 import { PgChatStorage } from "./chat-storage";
 import { report } from "./diagnostics";
 import { withSyncLock } from "./sync-lock";
+import { PgThreadFence } from "./thread-fence";
 
 /**
  * Which conversation is open on which workspace.
@@ -499,10 +500,19 @@ export class PgThreadIndex {
     const known = new Set(Object.values(index));
     // Not in the index, so each of these files is named after its workspace
     // whatever the name looks like
-    return names
+    const unindexed = names
       .filter((name) => name.endsWith(SUFFIX))
       .map((name) => ({ name, id: nameToId(name) }))
-      .filter(({ id }) => id !== "index" && !known.has(id))
+      .filter(({ id }) => id !== "index" && !known.has(id));
+    if (!unindexed.length) return [];
+    // Except a thread a fence names, which a lagging tab wrote back: adopted
+    // under a fresh id, no fence would know it, and the next sign-in would
+    // upload another account's messages. `PgThreadFence.settle` moves it
+    // back. Records that cannot be read adopt nothing; the files wait.
+    const fenced = await PgThreadFence.fencedIds();
+    if (!fenced) return [];
+    return unindexed
+      .filter(({ id }) => !fenced.has(id))
       .map(({ name, id }) => ({ name, id, threadId: uuid() }));
   }
 }

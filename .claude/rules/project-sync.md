@@ -284,7 +284,9 @@ when a session reads a file matching the `paths` in the frontmatter.
   uploaded into the next account). Out of the folder, because `threadIds`,
   `pushAll` and the index migration all read it. `push` refuses a thread a
   fence names, since a lagging tab can write it back; the next `settle` fences
-  it again. The fenced account's next sign-in puts its threads back, merged
+  it again. `PgThreadIndex._adoptable` skips such a file too (`fencedIds`), and
+  adopts nothing while the records cannot be read: adopted under a fresh id, no
+  fence would know it and the next sign-in would upload it. The fenced account's next sign-in puts its threads back, merged
   into a thread that took the workspace meanwhile. The owner is cleared by a whole hand-over
   (`forget`'s wholesale branch), and by a `settle` that emptied the folder but
   could not write the new owner, so no name stays over nobody's threads. `push` uploads only when
