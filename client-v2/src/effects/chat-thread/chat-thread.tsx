@@ -43,14 +43,14 @@ export const chatThread = (): Disposable => {
    * comparing thread ids; now that the id has to be looked up first, the
    * guard has to live here, ahead of the close below.
    */
-  let openedFor: string | null = null;
+  let openedFor: string | undefined;
 
   const open = async () => {
     const workspaceId = PgExplorer.currentWorkspaceId;
     // No workspace means nowhere to persist to. Closing rather than leaving
     // the last thread open stops it collecting messages that belong nowhere.
     if (!workspaceId) {
-      openedFor = null;
+      openedFor = undefined;
       return PgAssistant.closeThread();
     }
     if (openedFor === workspaceId) return;
@@ -71,7 +71,7 @@ export const chatThread = (): Disposable => {
       const settled = await PgThreadFence.settle(userId);
       if (PgExplorer.currentWorkspaceId !== workspaceId) return;
       if (!settled) {
-        openedFor = null;
+        openedFor = undefined;
         return;
       }
     }
@@ -185,7 +185,7 @@ export const chatThread = (): Disposable => {
     // cut a running turn and deny its approvals, over a failed upload
     if (PgSession.expiredUser) return;
 
-    openedFor = null;
+    openedFor = undefined;
     void open().catch((e) => report("open thread after sign-out", e));
   };
 
