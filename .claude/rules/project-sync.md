@@ -285,8 +285,9 @@ when a session reads a file matching the `paths` in the frontmatter.
   `pushAll` and the index migration all read it. `push` refuses a thread a
   fence names, since a lagging tab can write it back; the next `settle` fences
   it again. The fenced account's next sign-in puts its threads back, merged
-  into a thread that took the workspace meanwhile. Only a whole hand-over
-  (`forget`'s wholesale branch) clears the owner. `push` uploads only when
+  into a thread that took the workspace meanwhile. The owner is cleared by a whole hand-over
+  (`forget`'s wholesale branch), and by a `settle` that emptied the folder but
+  could not write the new owner, so no name stays over nobody's threads. `push` uploads only when
   the owner is the signed-in account (`claimUnowned` records it over a folder
   nobody owns, which retries a failed owner write), and holds the sync lock
   from that check to its last POST, so another tab's `settle` cannot fence

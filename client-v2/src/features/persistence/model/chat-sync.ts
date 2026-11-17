@@ -1,5 +1,6 @@
 // TODO(ui-migration 1.4): a feature importing a feature; chat sync runs only for a signed-in session
 import { PgSession } from "@/features/auth";
+import { timeoutSignal } from "@/shared/lib/timeout-signal";
 
 import type { ChatItem } from "../../../views/sidebar/assistant/store";
 import { batchPush, MAX_BATCH_BYTES } from "./chat-batch.mjs";
@@ -9,7 +10,7 @@ import { DELETED_REASON, isDeletedScope } from "./deleted.mjs";
 import { report } from "./diagnostics";
 import { sha256 } from "./snapshot";
 import { PgSyncClient } from "./sync-client";
-import { withSyncLock } from "./sync-lock";
+import { LOCKED_REQUEST_MS, withSyncLock } from "./sync-lock";
 import { PgThreadFence } from "./thread-fence";
 import { PgThreadIndex } from "./thread-index";
 
@@ -272,6 +273,9 @@ export class PgChatSync {
         credentials: "include",
         headers: { "content-type": "application/json" },
         body,
+        // Sent under the sync lock (`push`): a stalled request would hold
+        // every tab's sync with it
+        signal: timeoutSignal(LOCKED_REQUEST_MS),
       });
       if (response.ok) return "pushed";
       // Not a failure: the server has decided about this thread, and the
@@ -753,6 +757,12 @@ if (import.meta.vitest) {
         }
 
         expect(heldAtPost).toEqual([true]);
+        // Bounded, as every request under the lock: a stalled POST would
+        // hold every tab's sync
+        const post = fetchMock.mock.calls.find(
+          ([, init]) => init?.method === "POST"
+        );
+        expect(post?.[1].signal).toBeInstanceOf(AbortSignal);
       });
 
       it("does nothing when signed out", async () => {

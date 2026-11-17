@@ -74,6 +74,9 @@ const parseRaw = (raw: string) => {
   }
 };
 
+// TODO(HOO-2757 follow-up): the copy dropped here, and items `decodeThread`
+// cannot read, are gone for good; keeping them aside needs a quarantine
+// folder of its own
 /**
  * Both copies of a thread as one, newest copy of each item winning.
  *
@@ -152,9 +155,10 @@ export class PgThreadFence {
    * Record `userId` as the owner of a folder nobody owns, under the lock;
    * an owner already recorded is left as it is.
    *
-   * The retry for a sign-in whose owner write failed: `push` refuses every
-   * thread until an owner is recorded, and a sign-out with none recorded
-   * would leave this account's threads unowned for whoever signs in next.
+   * The retry for a sign-in whose owner write failed: `push` claims the
+   * folder this way before every upload, and refuses the thread when the
+   * claim fails, and a sign-out with none recorded would leave this
+   * account's threads unowned for whoever signs in next.
    * If the store keeps refusing this one file while thread writes still
    * land, nothing on this device can say whose the threads are, and the
    * next account's sign-in takes them; accepted, since every push and the
@@ -221,6 +225,8 @@ export class PgThreadFence {
    * folder still recorded as another account's, and the next fence would
    * file it as that account's.
    */
+  // TODO(HOO-2757 follow-up): per-tab memory, never invalidated by another
+  // tab's sign-out or sign-in; see `_fenceAll`
   static isSettledFor(userId: string): boolean {
     return PgThreadFence._settled === userId;
   }
@@ -426,11 +432,17 @@ export class PgThreadFence {
       report(`rebuild fenced chats of ${userId}`, e);
       return undefined;
     }
-    const record: FenceRecord = Object.fromEntries(
-      names
-        .filter((name) => name.endsWith(SUFFIX) && name !== `index${SUFFIX}`)
-        .map((name) => [decodeURIComponent(name.slice(0, -SUFFIX.length)), {}])
-    );
+    const record: FenceRecord = {};
+    for (const name of names) {
+      if (!name.endsWith(SUFFIX) || name === `index${SUFFIX}`) continue;
+      try {
+        record[decodeURIComponent(name.slice(0, -SUFFIX.length))] = {};
+      } catch (e) {
+        // Not a name the fence writes: no thread id to restore it under, and
+        // a throw here would fail every settle and push after it
+        report(`rebuild fenced chats of ${userId}: skipped ${name}`, e);
+      }
+    }
     try {
       await writeConfigFile(recordPathOf(userId), JSON.stringify(record));
     } catch (e) {
@@ -460,11 +472,12 @@ export class PgThreadFence {
     // Nothing can be fenced from a folder that cannot be listed
     if (stored === null) return false;
 
-    // Not a problem here: a thread a lagging tab of the old account mints
-    // after this listing is in no record, but minting needs a workspace
-    // switch in that tab, and a switch there reads the session first; the
-    // owner is the new account by then, so `push` refuses nothing it should
-    // not, and the thread is that tab's new account's anyway.
+    // TODO(HOO-2757 follow-up): a thread a lagging tab of the old account
+    // mints after this listing is in no record and stays in the folder as
+    // the new owner's. That tab's gate (`isSettledFor`) is its own memory,
+    // and nothing re-reads the session on a switch, so a tab that has not
+    // yet seen the other account's sign-in can still mint; it needs a second
+    // tab and a switch there inside the sign-in.
     const workspaceOf = new Map(
       Object.entries(index).map(([workspaceId, id]) => [id, workspaceId])
     );
@@ -806,6 +819,17 @@ if (import.meta.vitest) {
 
       expect(await PgThreadFence.settle("ada")).toBe(true);
       expect(idsOf(await PgChatStorage.read(threadId))).toEqual([item(1).id]);
+    });
+
+    it("skips a file name that does not decode when it rebuilds a record", async () => {
+      await PgThreadFence.settle("ada");
+      const threadId = await chat("w1", [item(1)]);
+      await PgThreadFence.settle("bob");
+      await writeConfigFile(`${dirOf("ada")}/%E0%A4%A.json`, "{}");
+      await writeConfigFile(recordPathOf("ada"), "{broken");
+
+      expect(await PgThreadFence.isFenced(threadId)).toBe(true);
+      expect(await PgThreadFence.settle("bob")).toBe(true);
     });
 
     it("refuses every thread while the fenced folder cannot be listed", async () => {
