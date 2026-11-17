@@ -16,7 +16,7 @@ server stayed open, builds hit a 60 s ceiling, and nothing was logged.
 is set; one audit row per build; the same build bytes and errors the client
 sees today.
 
-**Non-Goals:** rate or size limits (HOO-2418), a guest allowance, changing
+**Non-Goals:** per-user build limits (HOO-2907), a guest allowance, changing
 `Local`, `SolPg` or a custom server, the share routes.
 
 ## Decisions

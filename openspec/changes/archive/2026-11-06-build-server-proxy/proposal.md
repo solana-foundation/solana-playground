@@ -64,7 +64,7 @@ None.
 - Rollout, outside this PR: set `PG_BUILD_SERVER_API_KEY` on Vercel and
   `PG_API_KEY` on App Engine, run the migration on production, redeploy the
   server. Sergey Prokhorov and Alexander own Vercel and GCP configuration.
-- Out of scope: rate limits and size limits (HOO-2418), share routes
+- Out of scope: per-user build limits (HOO-2907), share routes
   (`/new`, `/share`, which production sends to `api.solpg.io`), a guest
   allowance, the D-9 smoke build against the server (HOO-2413 will need the
   key).
