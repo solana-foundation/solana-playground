@@ -97,6 +97,19 @@ const mergeRawFor = (threadId: string) => (kept: string, incoming: string) => {
   return JSON.stringify(mergeThreads(keptItems, incomingItems));
 };
 
+/** A record's bytes as one, `undefined` when they are not */
+const parseRecord = (raw: string): FenceRecord | undefined => {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as FenceRecord;
+    }
+  } catch {
+    // The caller reports it and rebuilds the record
+  }
+  return undefined;
+};
+
 /**
  * Who owns `/.config/chats`. `unreadable` is kept apart from `none`, because
  * reading a failure as "nobody" would hand another account's threads to
@@ -179,26 +192,57 @@ export class PgThreadFence {
    * sign-in tries again, and `push` refuses every thread while the owner is
    * not the signed-in account.
    *
+   * Records the outcome for `isSettledFor`, and never rejects: a throw
+   * reads as `false`.
+   *
    * @returns whether `/.config/chats` is `userId`'s now; `false` means the
    * caller must not adopt or upload the threads there
    */
-  static async settle(userId: string): Promise<boolean> {
-    const settled = await PgThreadFence._settle(userId);
-    PgThreadFence._unsettled = settled ? undefined : userId;
+  static settle(userId: string): Promise<boolean> {
+    // One at a time in this tab: the sync lock does not order callers within
+    // a tab, and a second `settle` reading the owner before the first wrote
+    // it would fence the arriving account's restored threads as the old
+    // account's
+    const settled = PgThreadFence._settling.then(() =>
+      PgThreadFence._settleRecorded(userId)
+    );
+    PgThreadFence._settling = settled;
     return settled;
   }
 
   /**
-   * Whether this tab's last `settle` failed for `userId`. While it holds, no
-   * thread may open on this device for that account: one minted then would
-   * be written into a folder still recorded as another account's, and the
-   * next fence would file it as that account's.
+   * Whether this tab's last `settle` made `/.config/chats` `userId`'s.
+   *
+   * The chat effect opens no thread for a signed-in account until this
+   * holds. Kept as the account a settle succeeded for, not as a failure
+   * flag, so the gate is closed from the moment another account signs in
+   * until its settle has finished, and stays closed after a settle that
+   * failed or threw: a thread opened or minted then would be written into a
+   * folder still recorded as another account's, and the next fence would
+   * file it as that account's.
    */
-  static isUnsettledFor(userId: string): boolean {
-    return PgThreadFence._unsettled === userId;
+  static isSettledFor(userId: string): boolean {
+    return PgThreadFence._settled === userId;
   }
 
-  private static _unsettled: string | undefined;
+  /** The account this tab's last `settle` succeeded for */
+  private static _settled: string | undefined;
+
+  /** The tail of this tab's `settle` calls, which never rejects */
+  private static _settling: Promise<unknown> = Promise.resolve();
+
+  /** `_settle`, with its outcome recorded for `isSettledFor` */
+  private static async _settleRecorded(userId: string): Promise<boolean> {
+    let settled = false;
+    try {
+      settled = await PgThreadFence._settle(userId);
+    } catch (e) {
+      // The sync lock or storage threw: unsettled, exactly as a refusal
+      report(`settle chats for ${userId}`, e);
+    }
+    PgThreadFence._settled = settled ? userId : undefined;
+    return settled;
+  }
 
   private static async _settle(userId: string): Promise<boolean> {
     return withSyncLock(async () => {
@@ -265,6 +309,9 @@ export class PgThreadFence {
    * threads, and a name left over them would have the next sign-in fence
    * this account's threads as the old account's.
    */
+  // TODO(HOO-2757 follow-up): when the removal fails too, the old owner stays
+  // named over this account's next threads; a lagging tab writing then is a
+  // third fault, so a fail-closed marker waits for a report of it
   private static async _writeOwnerOverEmpty(userId: string): Promise<boolean> {
     if (await PgThreadFence._writeOwner(userId)) return true;
     await PgThreadFence.clearOwner();
@@ -337,23 +384,60 @@ export class PgThreadFence {
       : undefined;
   }
 
-  /** `userId`'s record, `{}` when it has none, `undefined` when unreadable */
+  /**
+   * `userId`'s record, `{}` when it has none, `undefined` when it cannot be
+   * read. A record whose bytes are not one is rebuilt from the threads in
+   * its folder.
+   */
   private static async _readRecord(
     userId: string
   ): Promise<FenceRecord | undefined> {
+    let raw: string | undefined;
     try {
-      const raw = await readRaw(recordPathOf(userId));
-      if (raw === undefined) return {};
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        return parsed as FenceRecord;
-      }
-      report(`read fenced chats of ${userId}: not a record`, raw);
-      return undefined;
+      raw = await readRaw(recordPathOf(userId));
     } catch (e) {
       report(`read fenced chats of ${userId}`, e);
       return undefined;
     }
+    if (raw === undefined) return {};
+    const record = parseRecord(raw);
+    if (record) return record;
+    report(
+      `read fenced chats of ${userId}: not a record`,
+      new Error("corrupt")
+    );
+    return PgThreadFence._rebuildRecord(userId);
+  }
+
+  /**
+   * A record from the thread files in `userId`'s folder, written over one
+   * that will never parse. Refusing on it instead, as on a read that
+   * failed, refused every thread of every account and failed every `settle`
+   * after it for good. The workspaces it named are lost: those threads come
+   * back unnamed, each adopted as a workspace of its own.
+   */
+  private static async _rebuildRecord(
+    userId: string
+  ): Promise<FenceRecord | undefined> {
+    let names: string[];
+    try {
+      names = await PgFs.readDir(dirOf(userId));
+    } catch (e) {
+      report(`rebuild fenced chats of ${userId}`, e);
+      return undefined;
+    }
+    const record: FenceRecord = Object.fromEntries(
+      names
+        .filter((name) => name.endsWith(SUFFIX) && name !== `index${SUFFIX}`)
+        .map((name) => [decodeURIComponent(name.slice(0, -SUFFIX.length)), {}])
+    );
+    try {
+      await writeConfigFile(recordPathOf(userId), JSON.stringify(record));
+    } catch (e) {
+      // Answered from memory meanwhile; the next read rebuilds it again
+      report(`rebuild fenced chats of ${userId}`, e);
+    }
+    return record;
   }
 
   /**
@@ -367,9 +451,11 @@ export class PgThreadFence {
    * @returns whether every thread is out; `false` keeps the owner as it is
    */
   private static async _fenceAll(userId: string): Promise<boolean> {
-    // Read past this tab's cache: another tab may have written the map
-    PgThreadIndex.reload();
-    const index = await PgThreadIndex.all();
+    // Read past this tab's cache: another tab may have written the map. A
+    // map that cannot be read is not an empty one: fenced on it, every thread
+    // would lose its workspace and the real map would be cleared
+    const index = await PgThreadIndex.reloadOrFail();
+    if (!index) return false;
     const stored = await PgChatStorage.threadIds();
     // Nothing can be fenced from a folder that cannot be listed
     if (stored === null) return false;
@@ -490,9 +576,12 @@ export class PgThreadFence {
     const threadIds = Object.keys(record);
     if (!threadIds.length) return;
 
-    // Past this tab's cache: another tab may have given a workspace a thread
-    PgThreadIndex.reload();
-    const index = await PgThreadIndex.all();
+    // Past this tab's cache: another tab may have given a workspace a thread.
+    // Unreadable, the threads stay fenced for the next sign-in: put back on
+    // a guessed empty map, each would go back unnamed and `set` would write
+    // that guess over the real map
+    const index = await PgThreadIndex.reloadOrFail();
+    if (!index) return;
     const left: FenceRecord = {};
     for (const threadId of threadIds) {
       const workspaceId = record[threadId]?.workspaceId;
@@ -537,8 +626,8 @@ export class PgThreadFence {
       await PgThreadIndex.set(workspaceId, threadId);
       // `set` reports a failed write and returns nothing, and a file put
       // back with no entry would be adopted as a workspace of its own
-      PgThreadIndex.reload();
-      if ((await PgThreadIndex.get(workspaceId)) !== threadId) {
+      const written = await PgThreadIndex.reloadOrFail();
+      if (written?.[workspaceId] !== threadId) {
         throw new Error(`index entry for ${workspaceId} was not written`);
       }
     }
@@ -576,6 +665,8 @@ if (import.meta.vitest) {
     afterEach(() => vi.restoreAllMocks());
 
     beforeEach(async () => {
+      // A fresh tab: no account settled yet
+      Reflect.set(PgThreadFence, "_settled", undefined);
       await PgChatStorage.clear();
       await PgThreadIndex.clear();
       await PgThreadFence.clearOwner();
@@ -703,13 +794,121 @@ if (import.meta.vitest) {
       expect(await PgChatStorage.threadIds()).toEqual([]);
     });
 
-    it("refuses every thread while a fence record cannot be read", async () => {
+    it("rebuilds a fence record that is not JSON from the threads in its folder", async () => {
       await PgThreadFence.settle("ada");
-      await chat("w1", [item(1)]);
+      const threadId = await chat("w1", [item(1)]);
       await PgThreadFence.settle("bob");
       await writeConfigFile(recordPathOf("ada"), "{broken");
 
+      expect(await PgThreadFence.isFenced(uuidOf(9))).toBe(false);
+      expect(await PgThreadFence.isFenced(threadId)).toBe(true);
+      expect(await PgThreadFence.settle("bob")).toBe(true);
+
+      expect(await PgThreadFence.settle("ada")).toBe(true);
+      expect(idsOf(await PgChatStorage.read(threadId))).toEqual([item(1).id]);
+    });
+
+    it("refuses every thread while the fenced folder cannot be listed", async () => {
+      await PgThreadFence.settle("ada");
+      await chat("w1", [item(1)]);
+      await PgThreadFence.settle("bob");
+      vi.spyOn(PgFs, "readDir").mockRejectedValue(new Error("EIO"));
+
       expect(await PgThreadFence.isFenced(uuidOf(9))).toBe(true);
+    });
+
+    describe("an index that cannot be read", () => {
+      const failIndexReads = () => {
+        const read = PgFs.readToString.bind(PgFs);
+        vi.spyOn(PgFs, "readToString").mockImplementation(async (path) => {
+          if (path === INDEX_PATH) throw new Error("EIO");
+          return read(path);
+        });
+      };
+
+      it("does not fence on it", async () => {
+        await PgThreadFence.settle("ada");
+        const threadId = await chat("w1", [item(1)]);
+        failIndexReads();
+
+        expect(await PgThreadFence.settle("bob")).toBe(false);
+        vi.restoreAllMocks();
+
+        expect(await PgThreadFence.isOwnedByAnother("bob")).toBe(true);
+        PgThreadIndex.reload();
+        expect(await PgThreadIndex.get("w1")).toBe(threadId);
+      });
+
+      it("keeps the threads fenced rather than put them back unnamed", async () => {
+        await PgThreadFence.settle("ada");
+        const threadId = await chat("w1", [item(1)]);
+        await PgThreadFence.settle("bob");
+        await PgThreadFence.clearOwner();
+        failIndexReads();
+
+        await PgThreadFence.settle("ada");
+        vi.restoreAllMocks();
+
+        expect(await PgThreadFence.isFenced(threadId)).toBe(true);
+        expect(await PgChatStorage.threadIds()).toEqual([]);
+        await PgThreadFence.settle("ada");
+        expect(await PgThreadIndex.get("w1")).toBe(threadId);
+      });
+    });
+
+    describe("the tab's settled account", () => {
+      it("is none before a settle and the account after one", async () => {
+        expect(PgThreadFence.isSettledFor("ada")).toBe(false);
+
+        await PgThreadFence.settle("ada");
+
+        expect(PgThreadFence.isSettledFor("ada")).toBe(true);
+        expect(PgThreadFence.isSettledFor("bob")).toBe(false);
+      });
+
+      it("is not the account whose settle failed", async () => {
+        await PgThreadFence.settle("ada");
+        await chat("w1", [item(1)]);
+        vi.spyOn(PgFs, "writeFile").mockRejectedValue(new Error("Quota"));
+
+        expect(await PgThreadFence.settle("bob")).toBe(false);
+
+        expect(PgThreadFence.isSettledFor("bob")).toBe(false);
+        expect(PgThreadFence.isSettledFor("ada")).toBe(false);
+      });
+
+      it("is not the account whose settle threw", async () => {
+        await PgThreadFence.settle("ada");
+        vi.spyOn(PgChatStorage, "threadIds").mockRejectedValue(
+          new Error("lock")
+        );
+
+        expect(await PgThreadFence.settle("bob")).toBe(false);
+        expect(PgThreadFence.isSettledFor("bob")).toBe(false);
+      });
+    });
+
+    it("runs one settle at a time in a tab", async () => {
+      await PgThreadFence.settle("ada");
+      await chat("w1", [item(1)]);
+      let running = 0;
+      let overlapped = false;
+      const threadIds = PgChatStorage.threadIds.bind(PgChatStorage);
+      vi.spyOn(PgChatStorage, "threadIds").mockImplementation(async () => {
+        running++;
+        overlapped ||= running > 1;
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        running--;
+        return threadIds();
+      });
+
+      await Promise.all([
+        PgThreadFence.settle("bob"),
+        PgThreadFence.settle("bob"),
+      ]);
+
+      expect(overlapped).toBe(false);
+      expect(PgThreadFence.isSettledFor("bob")).toBe(true);
     });
 
     it("does not settle while a straggler stays in the folder", async () => {

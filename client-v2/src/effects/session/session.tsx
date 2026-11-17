@@ -95,7 +95,11 @@ export const session = (): Disposable => {
         report("fence chats", e);
       }
       // Unsettled, the threads here may be another account's, so none is
-      // adopted or uploaded; the next sign-in settles again
+      // adopted or uploaded. The chat effect settles again on the next
+      // project switch, and opens no thread until that works.
+      // TODO(HOO-2757 follow-up): a settle that succeeds on such a retry does
+      // not run this adoption and dump; they wait for the next sign-in, and
+      // nothing tells the user chats are not syncing meanwhile
       if (fence.settled) {
         // Before the dump: it would upload a thread minted while signed out
         // as a conversation of its own, and the account's would never be
@@ -135,12 +139,10 @@ export const session = (): Disposable => {
       const workspaceId = PgExplorer.currentWorkspaceId;
       const open = PgAssistant.threadId;
       // A thread fenced from under the panel leaves the workspace with none:
-      // a fresh one opens, and `openThread` adopts the account's own
-      // Unsettled, the panel stays closed. The old account's thread is still
-      // indexed, so a project switch can open it before a later sign-in
-      // settles; accepted for a full or failing store (see the change's
-      // design.md), because `push` uploads nothing until a settle records
-      // this account as the owner
+      // a fresh one opens, and `openThread` adopts the account's own.
+      // Unsettled, the panel stays closed, and the chat effect opens no
+      // thread until a settle for this account succeeds
+      // (`PgThreadFence.isSettledFor`)
       const reopen = fence.left && fence.settled;
       const wanted =
         workspaceId &&

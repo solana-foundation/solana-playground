@@ -62,12 +62,15 @@ export const chatThread = (): Disposable => {
     // left. With no thread open, `loadThread` adopts it instead.
     PgAssistant.closeThread();
 
-    // The sign-in could not fence another account's threads: a thread opened
-    // or minted now would land in that account's folder and be fenced as its
-    // own. Settled again here, so a project switch retries; until it works
-    // the panel holds what is typed in memory, as with no project open.
+    // Until this tab has settled the signed-in account, `/.config/chats` may
+    // still be another account's: a thread opened or minted now would be
+    // read from, or written into, that account's folder and fenced as its
+    // own. So the first open after a sign-in or a load waits for the settle,
+    // and one that failed or threw is tried again on the next switch; until
+    // it works the panel holds what is typed in memory, as with no project
+    // open.
     const userId = PgSession.get()?.id;
-    if (userId && PgThreadFence.isUnsettledFor(userId)) {
+    if (userId && !PgThreadFence.isSettledFor(userId)) {
       const settled = await PgThreadFence.settle(userId);
       if (PgExplorer.currentWorkspaceId !== workspaceId) return;
       if (!settled) {
@@ -170,7 +173,14 @@ export const chatThread = (): Disposable => {
     if (document.visibilityState === "hidden") flushUnlessRunning();
   };
 
-  void open();
+  const openOrReport = () =>
+    open().catch((e) => {
+      // Forget the workspace, so the next switch tries again
+      openedFor = undefined;
+      report("open thread", e);
+    });
+
+  void openOrReport();
 
   // Sign-out's teardown closes the thread, and nothing else would open one:
   // the workspace has not changed, so `open` stands down on `openedFor`. The
@@ -186,14 +196,14 @@ export const chatThread = (): Disposable => {
     if (PgSession.expiredUser) return;
 
     openedFor = undefined;
-    void open().catch((e) => report("open thread after sign-out", e));
+    void openOrReport();
   };
 
   const subscriptions = [
     PgExplorer.onDidSwitchWorkspace(() => {
       // The outgoing thread's, not the incoming one's
       flush();
-      void open();
+      void openOrReport();
     }),
     PgAssistant.onDidChange(onChange),
     PgSession.onDidChange(onSessionChange),

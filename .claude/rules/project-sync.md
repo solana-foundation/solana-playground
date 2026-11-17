@@ -288,12 +288,20 @@ when a session reads a file matching the `paths` in the frontmatter.
   into a thread that took the workspace meanwhile. Only a whole hand-over
   (`forget`'s wholesale branch) clears the owner. `push` uploads only when
   the owner is the signed-in account (`claimUnowned` records it over a folder
-  nobody owns, which retries a failed owner write), and a sign-in whose
-  `settle` fails skips the chat adoption and dump, and the chat effect opens
-  no thread until a retried `settle` succeeds (`isUnsettledFor`), since a
-  thread minted meanwhile would be fenced as the old owner's; every doubt about the
-  owner or a record fails closed. Never drop the owner gate from `push` as
-  redundant with `settle`: it is what holds when `settle` could not write.
+  nobody owns, which retries a failed owner write), and holds the sync lock
+  from that check to its last POST, so another tab's `settle` cannot fence
+  the thread in between. A sign-in whose `settle` fails or throws skips the
+  chat adoption and dump. The chat effect opens no thread for a signed-in
+  account until this tab's `settle` for it has succeeded (`isSettledFor`):
+  from the sign-in or the page load until the settle finishes, and after one
+  that failed or threw, retrying on the next switch, since a thread opened or
+  minted meanwhile would be fenced as the old owner's. A tab runs one
+  `settle` at a time. Every doubt about the owner, a record or the index
+  fails closed: the fence reads the index with `reloadOrFail`, never `all`,
+  which reads a failure as an empty map. A record whose bytes do not parse
+  is rebuilt from the thread files in its folder, without their workspaces.
+  Never drop the owner gate from `push` as redundant with `settle`: it is
+  what holds when `settle` could not write.
 - **Persistence failures are reported, not swallowed.** `chat-storage`,
   `chat-sync`, `project-sync` and `project-restore` all catch, because a lost
   write must not take the panel down. Every failure still goes through

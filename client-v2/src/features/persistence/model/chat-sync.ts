@@ -9,6 +9,7 @@ import { DELETED_REASON, isDeletedScope } from "./deleted.mjs";
 import { report } from "./diagnostics";
 import { sha256 } from "./snapshot";
 import { PgSyncClient } from "./sync-client";
+import { withSyncLock } from "./sync-lock";
 import { PgThreadFence } from "./thread-fence";
 import { PgThreadIndex } from "./thread-index";
 
@@ -164,18 +165,29 @@ export class PgChatSync {
   /** @returns how the push ended -- see `PushOutcome` */
   static async push(threadId: string): Promise<PushOutcome> {
     if (!(await PgChatSync._ready())) return "failed";
+    // Under the sync lock from the owner check to the last POST: another
+    // tab's `PgThreadFence.settle` runs under it, and could otherwise fence
+    // the thread after the check while the copy read before still went up
+    return withSyncLock(() => PgChatSync._pushOwned(threadId));
+  }
 
-    // Only once the sign-in's `PgThreadFence.settle` has recorded the folder
-    // as this account's: until then it may hold another account's threads.
-    // A folder nobody owns is claimed here, which retries a sign-in whose
-    // owner write failed. A fenced thread can still be written back by a tab that had it
-    // open. Failing either keeps it out of a sign-out's `forget` too.
+  /** `push`, under the sync lock */
+  private static async _pushOwned(threadId: string): Promise<PushOutcome> {
+    // Only while the folder is recorded as this account's: the owner is
+    // written by the sign-in's `PgThreadFence.settle`, or claimed here when
+    // nobody owns the folder, which retries a sign-in whose owner write
+    // failed. Under another owner the folder may hold that account's
+    // threads. A fenced thread can still be written back by a tab that had
+    // it open. Refused either way, which keeps it out of a sign-out's
+    // `forget` too.
     const userId = PgSession.get()?.id;
-    if (
-      !userId ||
-      !(await PgThreadFence.claimUnowned(userId)) ||
-      (await PgThreadFence.isFenced(threadId))
-    ) {
+    if (!userId) return "failed";
+    if (!(await PgThreadFence.claimUnowned(userId))) {
+      PgChatSync._reportRefusal("the chat folder is another account's");
+      return "failed";
+    }
+    if (await PgThreadFence.isFenced(threadId)) {
+      PgChatSync._reportRefusal("a fence names the thread");
       return "failed";
     }
 
@@ -232,6 +244,19 @@ export class PgChatSync {
     // only what the server holds, so this one must not read as `pushed`
     return oversized.length ? "failed" : "pushed";
   }
+
+  /**
+   * Say once per reason that pushes are refused: a refusal repeats on every
+   * turn, and would crowd every other failure out of the diagnostics.
+   */
+  private static _reportRefusal(reason: string) {
+    if (PgChatSync._refusalsReported.has(reason)) return;
+    PgChatSync._refusalsReported.add(reason);
+    report(`push refused: ${reason}`, new Error(reason));
+  }
+
+  /** Every reason `_reportRefusal` has reported */
+  private static _refusalsReported = new Set<string>();
 
   /** `<threadId>:<itemId>` of every item `push` has reported as too large */
   private static _oversizedReported = new Set<string>();
@@ -675,6 +700,59 @@ if (import.meta.vitest) {
         );
 
         expect(await PgChatSync.push(threadId)).toBe("failed");
+      });
+
+      it("refuses a thread a fence names", async () => {
+        respondingWith(() =>
+          Promise.resolve({ ok: true, json: async () => ({ written: 1 }) })
+        );
+        await signedIn();
+        await PgChatStorage.write(threadId, [item(1)]);
+        vi.spyOn(PgThreadFence, "isFenced").mockResolvedValue(true);
+
+        expect(await PgChatSync.push(threadId)).toBe("failed");
+        expect(
+          fetchMock.mock.calls.some(([, init]) => init?.method === "POST")
+        ).toBe(false);
+      });
+
+      it("holds the sync lock from the owner check to the upload", async () => {
+        // Another tab's settle could otherwise fence the thread between the
+        // check and the POST, and the stale copy would still go up
+        let isHeld = false;
+        const locks = {
+          // eslint-disable-next-line layers/curry-order -- `LockManager.request`'s own signature
+          request: async (_name: string, grant: () => Promise<void>) => {
+            isHeld = true;
+            try {
+              await grant();
+            } finally {
+              isHeld = false;
+            }
+          },
+        };
+        Object.defineProperty(navigator, "locks", {
+          value: locks,
+          configurable: true,
+        });
+        const heldAtPost: boolean[] = [];
+        respondingWith(() => {
+          heldAtPost.push(isHeld);
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ written: 1 }),
+          });
+        });
+        try {
+          await signedIn();
+          await PgChatStorage.write(threadId, [item(1)]);
+
+          expect(await PgChatSync.push(threadId)).toBe("pushed");
+        } finally {
+          Reflect.deleteProperty(navigator, "locks");
+        }
+
+        expect(heldAtPost).toEqual([true]);
       });
 
       it("does nothing when signed out", async () => {
