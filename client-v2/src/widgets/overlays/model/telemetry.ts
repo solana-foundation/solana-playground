@@ -9,4 +9,12 @@ type OverlayEvents = {
   overlay_toast_shown: { name: string };
 };
 
-export const overlayTelemetry = createTracker<OverlayEvents>();
+/**
+ * Free text, opted in: no type lists the values, so the owner decides
+ * whether to keep it (HOO-2752)
+ */
+type OverlayFreeText = {
+  name: "the kebab-case name each dialog or toast passes where it opens; no list of them exists";
+};
+
+export const overlayTelemetry = createTracker<OverlayEvents, OverlayFreeText>();

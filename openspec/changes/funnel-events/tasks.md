@@ -1,49 +1,55 @@
 # Tasks
 
-The team implements these on `scope/users-work-2`. Every task is HOO-2411
-unless it says "ticket to file", and each is one PR. Task 1.1 goes first;
-the others depend on it and may run at the same time, except 4.2, which
+The team implements these on `scope/interface-3` (`scope/users-work-2` and `scope/interface-2` have landed in `master`), except 1.1 and group 5,
+which go to foundation `master` in one PR. Every task is HOO-2411 unless it
+names another ticket or says "ticket to file", and each is one PR. Task 1.1
+goes first; the others depend on it and may run at the same time, except 4.2, which
 depends on 4.1. Each task declares, describes and emits its events, with
 memory-provider tests (one per branch, `it.each` for a table), and replaces
 its rows' `pending (funnel-events)` mark in the funnel table with the slice.
 
 ## 1. The funnel check
 
-- [ ] 1.1 Extend `src/app/slice-structure.test.ts` with the funnel check of
+- [x] 1.1 Extend `src/app/slice-structure.test.ts` with the funnel check of
       [design.md](design.md): collect every name declared through
-      `createTracker<...>()` under `features/`, `widgets/` and `entities/`,
-      read the Events column of the table in
+      `createTracker<...>()` anywhere under `src/`, legacy roots included,
+      read the Events and Failure events columns of the table in
       `openspec/specs/client-v2-funnels/spec.md` (or this change's delta
-      while that file does not exist), and fail with the missing names when
-      a row's Source is neither `GA4` nor `pending (...)`. Satisfies
+      while that file does not exist), fail with the missing names when
+      a row's Source is neither `GA4` nor `pending (...)`, and fail with the
+      step when its Failure events cell names no event and is not
+      `none: <why>`. HOO-2598. Satisfies
       `client-v2-funnels`, "Each funnel step names its events and the code
-      that sends them". Verify by renaming a declared event and by removing
-      a `pending` mark, each failing with the name, both reverted; and that
-      `yarn run check` passes
+      that sends them". Verify by renaming a declared event, by removing
+      a `pending` mark and by emptying a Failure events cell, each failing
+      with the name or the step, all reverted; and that `yarn run check`
+      passes
 
 ## 2. Project files
 
-- [ ] 2.1 Add `features/project-files` with prefix `project` and the
-      error-to-reason mapping, `GithubImportError` in `utils/github.ts` and
-      a named empty-conversion error in `utils/framework.ts`. Satisfies
+- [x] 2.1 Add `features/project-files` with prefix `project` and the
+      error-to-reason mapping, with `GithubImportError` and `ConversionError`
+      in the dependency-free `utils/import-error.ts` (thrown from
+      `utils/github.ts` and `utils/framework.ts`). Satisfies
       `client-v2-project-files`, "The slice declares the project events" and
-      "Import failures carry an enumerated reason": declare, describe and
-      emit, with memory-provider tests, one per reason (depends on 1.1)
-- [ ] 2.2 Send the import events from `ImportGithub` and `Example`
+      "Import failures carry an enumerated reason": declare and describe the
+      events, one mapping test per reason and a reason assertion at each
+      throw site; sending, and the memory-provider tests, are 2.2 to 2.4
+- [x] 2.2 Send the import events from `ImportGithub` and `Example`
       (`ImportGithub.tsx`), `ImportFs` (`ImportFs.tsx`) and `ImportTemporary`
       (`ImportTemporary.tsx`). Satisfies "A GitHub import is counted", "A
       file import is counted" and "A temporary project's import is
       counted": declare, describe and emit, with memory-provider tests,
       including nothing sent for a closed program choice; clear the import
       row's mark (depends on 2.1)
-- [ ] 2.3 Send `project_viewed` and `project_view_failed` from the
+- [x] 2.3 Send `project_viewed` and `project_view_failed` from the
       `github` route (`routes/github/github.tsx`). Satisfies "A project
       opened from a GitHub link is counted": declare, describe and emit,
       with memory-provider tests; clear the GitHub link row's mark (depends
       on 2.1)
-- [ ] 2.4 Send the export events from `convertAndExport` and
-      `exportWithoutChanges` (`ExportWorkspace.tsx`) and from `Project`
-      (`widgets/settings-page/ui/SettingsPage.tsx`). Satisfies "An export is
+- [x] 2.4 Send the export events from `convertAndExport` and
+      `exportWithoutChanges` (`ExportWorkspace.tsx`) and from `ExportProject`
+      (`widgets/settings-page/ui/ExportProject.tsx`). Satisfies "An export is
       counted with where it started" and "The settings page's export is
       counted": declare, describe and emit, with memory-provider tests,
       including the conversion fallback; clear the export row's mark
@@ -51,7 +57,7 @@ its rows' `pending (funnel-events)` mark in the funnel table with the slice.
 
 ## 3. Run
 
-- [ ] 3.1 Add `features/run` with prefix `run`; make `PgJsRuntime.execute`
+- [x] 3.1 Add `features/run` with prefix `run`; make `PgJsRuntime.execute`
       (`utils/js-runtime/js-runtime.ts`) report whether a file failed and
       throw a named error when another run is in progress; send the events
       from `processCommon` (`commands/run-and-test/run-and-test.ts`).
@@ -79,6 +85,39 @@ its rows' `pending (funnel-events)` mark in the funnel table with the slice.
       failure. Satisfies "A stage deploy whose wallet does not connect is
       counted": declare, describe and emit, with memory-provider tests
       that a stage deploy sends each event once (depends on 4.1)
+
+## 5. Main-flow steps in legacy roots (HOO-2598)
+
+One PR into foundation `master` with 1.1; plan:
+[plans/5-main-flow-events.md](plans/5-main-flow-events.md). Each task declares, describes and
+emits its events with memory-provider tests, one per branch.
+
+- [x] 5.1 Add `features/program-build` with prefix `build` (`wbdi-flow` 1.1,
+      events only) and send `build_started`, `build_succeeded` and
+      `build_failed` from the `build` command (`commands/build/build.ts`).
+      Satisfies `client-v2-build`, "Build events": tests for each
+      `framework`, each `reason`, a stop and an empty program file (depends
+      on 1.1)
+- [x] 5.2 Add `features/program-interact` with prefix `interact` and send
+      `interact_sent`, `interact_succeeded` and `interact_failed` from
+      `runCall` (`views/flow/stages/run-call.ts`). Satisfies
+      `client-v2-interact`, "Instruction call events": tests for a landed
+      call, a failed transaction, an unknown confirmation, a send that
+      throws, and `custom` (depends on 1.1)
+- [x] 5.3 Declare `assistant_patch_written` and
+      `assistant_patch_write_failed` in `widgets/assistant` and send them
+      from the `write_file` tool (`views/sidebar/assistant/model/tools.ts`).
+      Satisfies `client-v2-assistant-usage`, "An approved patch is reported
+      once it is written": tests for a write, a limit refusal, another
+      failure and a denial (depends on 1.1)
+
+## 6. Fund
+
+- [x] 6.1 Send `fund_airdropped {via, cluster}` from the `airdrop` command
+      (`commands/airdrop/airdrop.ts`) once the balance rises, with `via` set
+      by each caller through `withAirdropVia` (`commands/airdrop/via.ts`).
+      Satisfies `client-v2-wallet-funding`, "A faucet airdrop is counted"
+      (HOO-2751; depends on 1.1)
 
 ## Workflow follow-up
 

@@ -22,9 +22,11 @@ site, and the project's rules send agents to them.
   `src/app/slice-structure.test.ts` fails on a listed name no tracker
   declares that is not pending.
 - New slice `features/project-files`, prefix `project`. Events added:
-  `project_imported {source}`, `project_import_failed {source, reason}`,
-  `project_viewed`, `project_view_failed {reason}`, `project_exported {from,
-  converted}`, `project_export_failed {from}`.
+  `project_imported {via}`, `project_import_failed {via, reason}`,
+  `project_viewed`, `project_view_failed {reason}`, `project_exported {via,
+  converted, profile, files}`, `project_export_failed {via, profile}`
+  (`via`, not `source` or `from`: one trigger name, decided with HOO-2752 on
+  10 Nov 2026).
 - New slice `features/run`, prefix `run`. Events added:
   `run_finished {kind, outcome}` and `run_errored {kind, reason}`.
 - `features/deploy` counts every deploy from the `deploy` command that the
@@ -38,7 +40,26 @@ site, and the project's rules send agents to them.
   None of these events has reached `master` or production, so no recorded
   data changes meaning. `deploy_sol_needed_shown` and `deploy_backup_*` do
   not change.
-- No event is renamed or removed in any other slice.
+- The funnel table gains a Failure events column, and the check reads
+  trackers anywhere under `src/`, legacy roots included (HOO-2598).
+- New slices `features/program-build` (prefix `build`) and
+  `features/program-interact` (prefix `interact`), with the names
+  `wbdi-flow` gives them. Events added: `build_started {framework}`,
+  `build_succeeded {framework, has_idl}`, `build_failed {framework, reason}`
+  from the `build` command; `interact_sent {cluster}`,
+  `interact_succeeded {cluster}`, `interact_failed {cluster, phase}` from
+  `runCall`.
+- `widgets/assistant` adds `assistant_patch_written` and
+  `assistant_patch_write_failed {reason}`, sent from the `write_file` tool.
+- `features/project-export` stops sending `export_downloaded` and
+  `export_failed`, which have reached `master`: `project_exported` and
+  `project_export_failed` replace them with the same `profile` and `files`,
+  plus `via`. GA4 reports on the old names stop getting data from the
+  release that carries this, and their recorded data keeps its meaning.
+  `export_convert_failed` does not change. `settings_key_deleted` is removed:
+  Settings sends `assistant_key_deleted {via: "settings"}` instead, one event
+  for the key's deletion from either place (HOO-2752). No other event in
+  another slice is renamed or removed.
 - `openspec/config.yaml` and `client-v2/CLAUDE.md` extend the telemetry rule
   to the legacy roots and point agents at the funnel table.
 
@@ -52,10 +73,21 @@ site, and the project's rules send agents to them.
   viewed from a GitHub link, or exported.
 - `client-v2-run`: the events sent when tests or a client script run.
 
+### Modified Capabilities (HOO-2598)
+
+- `client-v2-build`: "Build events".
+- `client-v2-interact`: "Instruction call events".
+- `client-v2-assistant-usage`: "An approved patch is reported once it is
+  written".
+
 ### Modified Capabilities
 
+- `client-v2-wallet-funding`: "A faucet airdrop is counted" adds `fund_airdropped {via, cluster}` from the `airdrop` command, so the funnel's "Fund the wallet" step counts airdrops as well as transfers (HOO-2751).
 - `client-v2-deploy`: "Deploy events" counts every deploy, whatever started
   it, and its parameters follow the merged design.
+- `project-export`: "The export reports what it did" keeps
+  `export_convert_failed` and leaves the zip's outcome to the caller, which
+  counts it through `features/project-files`.
 
 ## Impact
 
@@ -79,18 +111,25 @@ site, and the project's rules send agents to them.
     keep them firing.
   - `client-v2/CLAUDE.md`: a paragraph after the slice telemetry rule points
     at the funnel table and extends the rule to the legacy roots.
-- Users see no change. The events reach GA4 only where
-  `REACT_APP_GA_MEASUREMENT_ID` is set; the deploy, run and import paths
-  behave as before, pause and resume included.
+- Users see one change: a GitHub import whose request gets no answer says
+  "GitHub did not answer the request for …. Check the connection and try
+  again." instead of the browser's "Failed to fetch" (HOO-2751, task 2.1).
+  The events reach GA4 only where `REACT_APP_GA_MEASUREMENT_ID` is set; the
+  deploy, run and import paths otherwise behave as before, pause and resume
+  included.
 - Page views come from GA4's Enhanced Measurement ("page changes based on
   browser history events"), switched on in GA4 admin (HOO-2409), with no
   code.
 - Out of scope:
-  - Build, IDL, and Interact events: `wbdi-flow` owns them. Its "Deploy
-    telemetry" requirement is aligned with these names in a follow-up (ticket
-    to file); this change does not edit `wbdi-flow`.
+  - IDL events and the Build and Interact screens' control events:
+    `wbdi-flow` owns them. Its "Deploy telemetry" requirement is aligned with these names in a follow-up (ticket
+    to file). This change edits `wbdi-flow` in two places only: its
+    "Interact telemetry" gains `interact_succeeded`, and its Build
+    telemetry and task 1.1 point at this change's "Build events" and task
+    5.1, which now send them.
   - Tutorial events (`tutorial-flow-v2` on `scope/tutorial-flow-2`) and
-    assistant turn events (`assistant-usage-events`, #62).
+    assistant turn events (`assistant-usage-events`, #62). Both are on
+    `master` now, and the funnel table lists them.
   - Sharing, which is also left out of the funnel table. client-v2 has no
     server share route or Share dialog (`drop-server-share` removed both),
     and gist sharing is measured by its own spec, `gist-sharing`.

@@ -12,6 +12,14 @@ const log = createLogger("new-project:start");
 /** What `PgExplorer.isWorkspaceNameValid` lets through, as the field says it */
 const NAME_RULE = "Use letters, numbers, spaces, - or _.";
 
+/**
+ * The frameworks a new project can start from: all but Seahorse, which is
+ * deprecated upstream and no longer offered for new projects. It stays a
+ * framework: Seahorse projects, tutorials, import and export still work
+ */
+const isOfferedForNew = (framework: { name: FrameworkName }) =>
+  framework.name !== "Seahorse";
+
 const defaultName = (framework: FrameworkName) =>
   `${framework.toLowerCase()}-project`;
 
@@ -43,8 +51,9 @@ const StartFromScratch = ({
   onRunning,
   onFailed,
 }: StartFromScratchProps) => {
+  const offered = PgFramework.all.filter(isOfferedForNew);
   const [framework, setFramework] = useState<FrameworkName | undefined>(
-    PgFramework.all[0]?.name
+    offered[0]?.name
   );
   const [name, setName] = useState("");
   const [start, setStart] = useState<Start>({ state: "idle" });
@@ -97,7 +106,7 @@ const StartFromScratch = ({
 
   return (
     <BaseStartFromScratch
-      frameworks={PgFramework.all.map((f) => ({
+      frameworks={offered.map((f) => ({
         name: f.name,
         icon: f.icon,
         circle: f.circleImage,

@@ -90,7 +90,7 @@ const ProgramKeypair = () => {
       reportButtonFailure("save the program keypair")(error);
       return;
     }
-    programKeypairTelemetry.track("keypair_exported", { from });
+    programKeypairTelemetry.track("keypair_exported", { via: from });
   };
 
   const importFile = async (file: File) => {

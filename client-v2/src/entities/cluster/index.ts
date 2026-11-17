@@ -2,7 +2,7 @@ export {
   buildConnectionWith,
   fetchClusterByGenesisHash,
   getConnectionFor,
-  getReadBufferConnectionFor,
+  getNativeConnectionFor,
   getUnretriedConnectionFor,
   UnknownClusterError,
 } from "./api/connection";
@@ -17,6 +17,7 @@ export {
   clusterName,
   CLUSTERS,
   clustersFor,
+  currentMonikerOf,
   Endpoint,
   findClusterWith,
   isCluster,

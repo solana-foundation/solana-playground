@@ -1,0 +1,93 @@
+# Proposal
+
+## Why
+
+The stable build server builds programs with Anchor 1.1.2 (change `stable-anchor-1-1-2`), and the terminal's
+`anchor` command runs a WebAssembly build of Anchor's CLI at 0.29. Its `idl init` parses the project's IDL as the
+0.29 format and sends Anchor's legacy IDL instructions to the program. An Anchor 1.1.2 program handles those
+instructions only under `#[program(legacy_idl)]`, and Anchor 1.1.2's own CLI publishes an IDL through the Program
+Metadata program. A user who deploys from the Playground can therefore publish the program's IDL only from their own
+machine. The failure is read from the source of `wasm/anchor-cli` and `anchor-syn` 1.1.2; it is not reproduced on a
+cluster. Ticket: to file.
+
+## What Changes
+
+- `anchor idl` is handled in TypeScript and offers the subcommands of Anchor 1.1.2's CLI, with their arguments and
+  options: `init`, `upgrade`, `fetch`, `close`, `create-buffer`, `set-buffer-authority`, `write-buffer`, `convert`,
+  `type`, `build`, and `fetch-historical`. Anchor 1.1.2 runs the Program Metadata command-line client for the seven
+  on-chain subcommands; the Playground calls the same program's JavaScript client.
+- `init` and `upgrade` write an IDL to the program's canonical Program Metadata account (seed `idl`) on the selected
+  cluster, creating the account or replacing an earlier IDL, with one wallet approval. Anchor 1.1.2's CLI writes the
+  same account, and Explorer reads it. `fetch` prints the account's IDL, `close` closes the account and returns its
+  rent, and the three buffer subcommands publish an IDL through a buffer account.
+- The Playground differs from Anchor's CLI in four points. The cluster is the selected one and the wallet the
+  connected one, so `--provider.cluster`, `--provider.wallet`, and `--commitment` are not accepted. A path names a
+  file of the project. `--filepath` is optional: without it the command uses the latest IDL uploaded to the project,
+  because the stable build server returns none. A subcommand that sends a transaction is refused on Mainnet
+  (the refusal #131 adds for `anchor idl` writes).
+- `init` and `upgrade` send nothing when there is no IDL in the Anchor 0.30+ format to upload, or when the connected
+  wallet is not the program's upgrade authority.
+- **BREAKING** `anchor idl build`, `fetch-historical`, `convert`, and `type`, and the whole `anchor legacy-idl` group,
+  end with one line saying the Playground terminal does not support them yet. A browser has no Rust compiler, the
+  stable build server returns no IDL, and `fetch-historical` has no JavaScript client. `convert`, `type`, and the
+  legacy IDL account exist only as Rust inside Anchor, and the Playground carries over no program built before Anchor
+  0.30; porting them would copy Anchor's code into TypeScript.
+- **BREAKING** `anchor idl authority`, `erase-authority`, `set-authority`, and `set-buffer` end as unknown
+  subcommands. Anchor 1.1.2's `anchor idl` has none of them: they act on Anchor's legacy IDL account.
+- **BREAKING** An IDL in the Anchor 0.29 format is not uploaded.
+- A feature slice `program-idl` (event prefix `idl`) holds the on-chain subcommands; its upload comes from the
+  HOO-2486 spike. It adds six events: `idl_upload_started`, `idl_uploaded`, and `idl_upload_failed` for `init` and
+  `upgrade`, and `idl_command_started`, `idl_command_succeeded`, and `idl_command_failed` for the other subcommands.
+  This change's requirements define their parameters, and the `wbdi-flow` change names the two upload requirements.
+  No event is renamed or removed.
+- Mainnet's cluster key is `mainnet`, not `mainnet-beta`, so every event that carries the Playground's cluster
+  sends `cluster: "mainnet"` for Mainnet: `fund_sent`, `fund_airdropped`, and the `deploy_*` events. A dashboard sees
+  Mainnet as `mainnet-beta` in events sent before this change merges and as `mainnet` after; a query over both
+  periods filters on both values.
+- `client-v2` stops loading `@solana-playground/anchor-cli`, and `wasm/anchor-cli` is deleted. The real wasm packages
+  go from six to five, and no wasm build compiles Anchor 0.29. For the user, a cold `yarn setup` and a cold Vercel
+  build compile one package fewer.
+- `cicd.yml` passes `build: false` to `reusable-checks.yml`, as `ci.yml` does. `client/` depends on the deleted
+  package, so no workflow builds it. For a release, the server deploy starts without the `client/` build, which takes
+  more than 20 minutes.
+- No funnel step's code is touched: the funnel table names no `anchor` code.
+
+## Capabilities
+
+### New Capabilities
+
+- `client-v2-program-idl`: how the terminal's `anchor idl` publishes, reads, and manages a program's IDL as Anchor
+  1.1.2's CLI does: its subcommands, where the Playground differs from that CLI, when a subcommand refuses, and the
+  events it sends. The `wbdi-flow` change adds its own requirements to the same capability.
+
+### Modified Capabilities
+
+- `client-v2-build`: the real wasm packages are the ones `WASM_PACKAGES` names, without `anchor-cli`; the
+  requirements stop stating a count.
+- `mainnet-deploy-warning`: the refusal of `anchor idl` writes on mainnet covers the six subcommands that send a
+  transaction: `init`, `upgrade`, `close`, `create-buffer`, `set-buffer-authority`, and `write-buffer`. This modifies
+  the requirement #131 added to `master` (`e1af2dfc2`).
+- `client-v2-wallet-funding`: "Funding is measured" lists `mainnet` as Mainnet's `fund_sent` cluster.
+- `client-v2-terminal`: every command receives its arguments split at spaces, a run of spaces separating as one, so
+  `anchor idl init <PROGRAM_ID>  --filepath idl.json` with two spaces runs as it does with one.
+
+## Impact
+
+- **Code:** `client-v2/src/features/program-idl` (new), `client-v2/src/commands/anchor`, `client-v2/src/utils/package.ts`, `client-v2/package.json`, `client-v2/scripts/wasm-stubs.sh`,
+  `client-v2/scripts/wasm-stubs.mjs`, `client-v2/bench/BUNDLE.md`, `wasm/anchor-cli` (deleted), `wasm/Cargo.toml`,
+  `wasm/Cargo.lock`, `wasm/build.sh`, `wasm/stub-packages.sh`, `.github/workflows/cicd.yml`,
+  `.github/workflows/reusable-checks.yml` (the comment on its `build` input), `CLAUDE.md`, `docs/testing.md`.
+- **Dependency:** `@solana-program/program-metadata` 0.11.0, which needs `@solana/kit` 8.5.0 or later; `client-v2`
+  has 8.6.0.
+- **Order:** the `anchor` command work follows #131 (HOO-2737), which edits the same file and owns the mainnet
+  refusal.
+- **`client/`:** not edited. Its `package.json` names `../wasm/anchor-cli/pkg`, so it no longer installs, and the
+  compose services built from `client/Dockerfile` (`client`, `client-prod`, `client-standalone`) no longer build.
+  #126 removes those services.
+- **Upstream sync:** a sync that changes `wasm/anchor-cli` upstream conflicts with the deletion; the folder stays
+  deleted.
+- **Out of scope:** the Deploy stage's upload button (`wbdi-flow` task 3.5) and the Flow view's read of an on-chain
+  IDL (`wbdi-flow` task 3.2), which reuses this change's read; an implementation of `anchor idl build`,
+  `fetch-historical`, `convert`, and `type`; programs built before Anchor 1.1.2 and Anchor 1.1.2's deprecated
+  `anchor legacy-idl` group; every other group of Anchor's CLI, which the terminal has never offered; removing
+  `client/` or the `build` job of `reusable-checks.yml`.

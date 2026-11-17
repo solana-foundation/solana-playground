@@ -13,8 +13,8 @@ type ProgramKeypairEvents = {
   keypair_imported: NoParams;
   /** An imported file was not a keypair; nothing changed. */
   keypair_import_refused: { reason: KeypairFileRefusal };
-  /** The keypair file was handed to the browser to save, from `from`. */
-  keypair_exported: { from: KeypairExportFrom };
+  /** The keypair file was handed to the browser to save; `via` is where it was saved from. */
+  keypair_exported: { via: KeypairExportFrom };
   /** "Change program id" set a custom program id. */
   keypair_custom_id_set: NoParams;
   /** "Remove custom id" removed the custom program id. */

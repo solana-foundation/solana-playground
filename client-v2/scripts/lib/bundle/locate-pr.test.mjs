@@ -167,7 +167,7 @@ const CONTRACT = [
     "bundle-info-comment.yml runs on the workflow client-v2.yml names",
     async () => [
       (await workflow("bundle-info-comment.yml")).match(
-        /workflow_run:\n\s+workflows: \[(.+)\]/
+        /workflow_run:.*\n\s+workflows: \[(.+)\]/
       )?.[1],
       (await workflow("client-v2.yml")).match(/^name: (.+)$/m)?.[1],
     ],

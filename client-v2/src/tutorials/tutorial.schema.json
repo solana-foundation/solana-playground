@@ -555,6 +555,11 @@
                 "$ref": "#/definitions/callArg"
               },
               "minItems": 1
+            },
+            "creates": {
+              "description": "The account the instruction creates with Anchor's `init`, as the IDL names it. Give it on a one-time call that is not the step's goal: when the account already exists (a second pass with the same wallet), the card says so and the lesson goes on instead of stopping on the refusal.",
+              "type": "string",
+              "minLength": 1
             }
           }
         }

@@ -378,7 +378,7 @@ test.describe("Connect a model", () => {
       await dialog.locator("#assistant-api-key").fill("sk-fake-key");
       await dialog
         .locator("#assistant-base-url")
-        .fill("http://mock-llm.test/v1");
+        .fill("https://mock-llm.test/v1");
       await dialog.locator("#assistant-model").fill("mock-model");
       await expect(connect).toBeInViewport({ ratio: 1 });
 
@@ -693,7 +693,7 @@ test.describe("The thread", () => {
     );
     expect(answered).toHaveLength(1);
     expect(answered[0]).toContain("kind: patch");
-    expect(answered[0]).toContain("answer: allow");
+    expect(answered[0]).toContain("decision: allow");
   });
 });
 

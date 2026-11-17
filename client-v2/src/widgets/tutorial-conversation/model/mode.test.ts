@@ -1,7 +1,6 @@
 /* eslint-disable layers/curry-order, unicorn/no-null -- tutorial flow v2 predates these rules; cleanup tracked from SF#94 */
 import { PgConversation } from "@/features/tutorial-conversation";
 
-import { BEGIN_INVITATION } from "./context";
 import { tutorialMode } from "./mode";
 
 vi.mock("@/features/tutorial-conversation", () => ({
@@ -30,6 +29,19 @@ vi.mock("@/utils/explorer", () => ({
 }));
 vi.mock("@/views/sidebar/assistant/store", () => ({
   PgAssistant: { addToolCall: vi.fn() },
+}));
+vi.mock("@/utils/tutorial", () => ({
+  PgTutorial: {
+    all: [
+      {
+        name: "Hello Anchor",
+        docPages: {
+          "program-structure.md":
+            "# Program Structure\n\n## #[account] attribute\n",
+        },
+      },
+    ],
+  },
 }));
 
 const conversation = vi.mocked(PgConversation);
@@ -105,9 +117,16 @@ describe("the tutorial's assistant mode", () => {
     expect(openMenu).toHaveBeenCalledTimes(1);
   });
 
-  it("has the menu invite the learner to begin before Start, and only then", async () => {
+  it("says the learner is not in a tutorial, now as in the context, when no lesson is open", () => {
+    conversation.view.mockReturnValue(null);
+    const mode = tutorialMode({ openMenu: vi.fn() });
+    expect(mode.now?.()).toBe("The learner is not in a tutorial right now.");
+    expect(mode.context()).toBe("The learner is not in a tutorial right now.");
+  });
+
+  it("answers the menu with no state, which the history would keep after it changed", async () => {
     liveIs(false);
-    expect(await toolOf("open_menu").run({})).toContain(BEGIN_INVITATION);
+    expect(await toolOf("open_menu").run({})).toBe("The menu is open.");
     liveIs(true);
     expect(await toolOf("open_menu").run({})).toBe("The menu is open.");
   });

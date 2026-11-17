@@ -45,6 +45,12 @@ rules:
     - Each telemetry event a change adds or renames is described in a
       requirement of its slice's spec, giving the name, when it fires, and
       each parameter with its allowed values
+    - A new capability's Purpose opens with one line, `**Area:** <where a
+      person meets it, or which part of the system it governs> (<layer>)`,
+      the layer being client-v2 UI, client-v2 API, build, server or CI. An
+      existing spec may gain the line by a direct edit of
+      openspec/specs/<capability>/spec.md, since archive ignores a Purpose
+      in a delta when the spec already has one
   tasks:
     - Each task names its Linear ticket or says "ticket to file"
     - Each task says which tasks it depends on when the order matters

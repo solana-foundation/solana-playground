@@ -23,7 +23,10 @@ const label = (step: DeployStep, state: DeployRunState) => {
   return state.upgrade ? "Upgrading" : "Deploying";
 };
 
-/** The running deploy's steps, each done, running or waiting */
+/**
+ * The running deploy's steps, each done, running or waiting. While the run
+ * waits on a connected wallet, the running step names the approval it asks.
+ */
 const BaseDeployProgress = ({ state }: BaseDeployProgressProps) => {
   const steps = ORDER.filter((s) => s !== "funding" || state.funds);
   const at = state.step ? steps.indexOf(state.step) : -1;
@@ -51,6 +54,13 @@ const BaseDeployProgress = ({ state }: BaseDeployProgressProps) => {
           >
             <StatusDot variant={STATUS_DOT[status]} />
             {label(step, state)}
+            {status === "running" && state.approval && (
+              <span className="text-muted-foreground">
+                {state.approval.n === "close"
+                  ? ` · Approve in ${state.approval.wallet} to close the buffer`
+                  : ` · Approve in ${state.approval.wallet} (${state.approval.n} of 2)`}
+              </span>
+            )}
           </li>
         );
       })}

@@ -1,6 +1,7 @@
 import { InfoIcon } from "lucide-react";
 import { FC, useState } from "react";
 
+import { trackImport, trackImportFailure } from "@/features/project-files";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { FieldError } from "@/shared/ui/field";
 import { ModalFrame } from "@/widgets/overlays";
@@ -46,6 +47,7 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
         setImportError("");
       }
     } catch (e) {
+      trackImportFailure("files", e);
       // Something thrown that is not an `Error` must still say it failed
       const message =
         e instanceof Error && e.message
@@ -66,7 +68,10 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
       buttonProps={{
         text: "Import",
         onSubmit: guard(async () => {
-          await PgExplorer.createWorkspace(name, { files });
+          await trackImport(
+            () => PgExplorer.createWorkspace(name, { files }),
+            "files"
+          );
           return IMPORTED;
         }),
         disabled: !files || !!nameError || !!importError,

@@ -61,6 +61,22 @@ const isResizeObserverLoopNotice = (event: ErrorEvent) =>
   event.message === RESIZE_OBSERVER_LOOP_NOTICE;
 
 /**
+ * Reports a failure that nothing above handles, as the global handler does
+ * an unhandled rejection: a warning for one marked with `markExpected`, else
+ * a panic. For a promise with nowhere to go (the terminal's Enter), which
+ * would otherwise reach the browser's console as "Uncaught (in promise)".
+ *
+ * @param reason what the promise rejected with
+ */
+export const reportUnhandled = (reason: unknown) => {
+  if (typeof reason === "object" && reason !== null && expected.has(reason)) {
+    log.warn(`Expected failure: ${nameOf(reason)}`);
+  } else {
+    log.panic(reason, { unhandled: true });
+  }
+};
+
+/**
  * Sends uncaught errors and unhandled rejections to `panic`, except the
  * ResizeObserver loop notice, which is dropped, and a rejection marked with
  * `markExpected`, which is logged at `warn`; returns the uninstaller
@@ -71,14 +87,8 @@ export const installGlobalHandlers = () => {
     // A cross-origin script error carries only a message, no `error`
     log.panic(event.error ?? event.message, { unhandled: true });
   };
-  const onRejection = (event: PromiseRejectionEvent) => {
-    const { reason } = event;
-    if (typeof reason === "object" && reason !== null && expected.has(reason)) {
-      log.warn(`Expected failure: ${nameOf(reason)}`);
-    } else {
-      log.panic(reason, { unhandled: true });
-    }
-  };
+  const onRejection = (event: PromiseRejectionEvent) =>
+    reportUnhandled(event.reason);
 
   globalThis.addEventListener("error", onError);
   globalThis.addEventListener("unhandledrejection", onRejection);

@@ -184,15 +184,15 @@ listed. No event SHALL carry the message or the handle.
 
 - `feedback_opened`: the form opened. No parameters.
 - `feedback_sent`: Sentry accepted a feedback. `rating`, one of `1` to `5`,
-  or `none` when no star was chosen.
+  absent when no star was chosen.
 - `feedback_failed`: a send was rejected. No parameters.
 - `feedback_github_clicked`: a GitHub link was opened. `link`, one of `idea`
-  or `bug`; `from`, one of `menu` or `form`.
+  or `bug`; `via`, one of `menu` or `form`.
 
 #### Scenario: A sent feedback (manual)
 
 - **WHEN** the user opens the form and sends it with no star
-- **THEN** `feedback_opened` and then `feedback_sent` with rating `none` are
+- **THEN** `feedback_opened` and then `feedback_sent` with no `rating` are
   tracked
 
 #### Scenario: A failed send (manual)
@@ -204,5 +204,5 @@ listed. No event SHALL carry the message or the handle.
 #### Scenario: A link from the menu
 
 - **WHEN** the user picks "Report a bug" in the menu
-- **THEN** `feedback_github_clicked` with link `bug` and from `menu` is
+- **THEN** `feedback_github_clicked` with link `bug` and via `menu` is
   tracked

@@ -4,8 +4,8 @@ interface GlobalState {
   buildLoading: boolean;
   deployState: "ready" | "loading" | "paused" | "cancelled";
   /**
-   * An `anchor idl` write runs in the terminal. The WASM CLI reads the
-   * endpoint again for each transaction, so the network must hold still.
+   * An `anchor idl` write runs in the terminal. Every transaction of it goes
+   * to the network it started on, so the selected network must hold still.
    */
   isIdlWriting: boolean;
 }

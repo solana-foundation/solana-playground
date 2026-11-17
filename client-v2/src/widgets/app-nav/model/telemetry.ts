@@ -30,9 +30,9 @@ type NavEvents = {
   nav_project_action_failed: { action: ProjectAction };
   /**
    * The phone's "Continue on a computer" sheet opened from the menu page;
-   * `signedIn` is whether account sync carries the project to the computer.
+   * `signed_in` is whether account sync carries the project to the computer.
    */
-  nav_handoff_opened: { signedIn: boolean };
+  nav_handoff_opened: { signed_in: boolean };
   /** The sheet's link reached the clipboard ("Copy link" read "Copied") */
   nav_handoff_link_copied: NoParams;
   /** The browser's share sheet took the link; a share the user closed is not sent */

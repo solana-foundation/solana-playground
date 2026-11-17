@@ -174,7 +174,7 @@ New project dialog's Tutorials list SHALL use the same card, with the "<level> Â
 
 The catalog SHALL send `catalog_filtered` with `page` `tutorials` and
 `framework` (`all`, `Anchor`, `Seahorse` or `Native`) when the framework
-filter changes, and `catalog_banner_opened` with `state` (`fresh`,
+filter changes, and `catalog_banner_opened` with `banner_state` (`fresh`,
 `started` or `completed`) when the banner's action opens its tutorial; a failed
 open from the banner SHALL send `catalog_open_failed` with `page`
 `tutorials` and be reported, as a card's does.

@@ -46,10 +46,12 @@ const LESSONS = prototype as Record<"lumberjack" | "zeroCopy", Lesson>;
 const TUTORIALS = Object.fromEntries(
   readdirSync(__dirname, { withFileTypes: true })
     .filter((e) => e.isDirectory() && !/^[_.]/.test(e.name))
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
     .filter((e) => existsSync(join(__dirname, e.name, "tutorial.json")))
     .map((e) => [
       e.name,
       JSON.parse(
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
         readFileSync(join(__dirname, e.name, "tutorial.json"), "utf8")
       ) as TutorialDefinition,
     ])

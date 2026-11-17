@@ -103,7 +103,7 @@ const Handoff = () => {
     if (next) {
       setLink(linkHere());
       navTelemetry.track("nav_handoff_opened", {
-        signedIn: account.status === "signed-in",
+        signed_in: account.status === "signed-in",
       });
     }
     setOpen(next);

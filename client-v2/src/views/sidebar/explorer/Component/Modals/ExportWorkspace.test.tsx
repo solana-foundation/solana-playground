@@ -1,11 +1,17 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
+import type { ExportProfile } from "@/features/project-files";
 import {
   initLogger,
   memoryProvider as logMemory,
   resetLogger,
 } from "@/shared/lib/logger";
+import {
+  initTelemetry,
+  memoryProvider as telemetryMemory,
+  resetTelemetry,
+} from "@/shared/lib/telemetry";
 import { Modal } from "@/shared/ui/modal";
 import {
   ModalIdContext,
@@ -25,15 +31,22 @@ const utils = vi.hoisted(() => ({
 }));
 vi.mock("../../../../../utils", () => utils);
 
-// The slice's flow and events are tested in the slice
-const slice = vi.hoisted(() => {
-  class DownloadError extends Error {}
+// The slice's flow and its conversion event are tested in the slice; the
+// export's outcome events are `project-files`'s, sent by the dialog and read
+// here from the memory provider
+const slice = await vi.hoisted(async () => {
+  const { TEST_ENDPOINT } = await import("@/test-utils/endpoints.mjs");
+  class DownloadError extends Error {
+    constructor(readonly profile: ExportProfile, message: string) {
+      super(message);
+    }
+  }
   return {
     DEFAULT_KEYPAIR_PATH: "~/.config/solana/id.json",
     KEYPAIR_VARIABLE: "SOLANA_KEYPAIR",
     RPC_URL_VARIABLE: "SOLANA_RPC_URL",
     // The mapping is the slice's and tested there
-    exportedEndpoint: () => "https://api.devnet.solana.com",
+    exportedEndpoint: () => TEST_ENDPOINT.DEVNET,
     DownloadError,
     exportAsIs: vi.fn(),
     exportConverted: vi.fn(),
@@ -47,16 +60,24 @@ vi.mock("../../../../../components/Markdown", () => ({ default: () => null }));
 import { ExportWorkspace } from "./ExportWorkspace";
 
 let logs: ReturnType<typeof logMemory>;
+let sent: ReturnType<typeof telemetryMemory>;
 beforeEach(() => {
   logs = logMemory();
   initLogger({ providers: [logs] });
-  slice.exportAsIs.mockReset().mockResolvedValue(undefined);
-  slice.exportConverted.mockReset().mockResolvedValue("# readme");
+  sent = telemetryMemory();
+  initTelemetry({ providers: [sent] });
+  slice.exportAsIs.mockReset().mockResolvedValue(2);
+  slice.exportConverted
+    .mockReset()
+    .mockResolvedValue({ readme: "# readme", profile: "anchor", files: 3 });
   slice.readProjectKind.mockReset().mockResolvedValue("program");
   utils.PgView.setToast.mockReset();
   utils.PgView.closeModal.mockReset();
 });
-afterEach(() => resetLogger());
+afterEach(() => {
+  resetLogger();
+  resetTelemetry();
+});
 
 const draw = (name?: string) =>
   render(
@@ -68,6 +89,10 @@ const draw = (name?: string) =>
       </ModalIdContext.Provider>
     </Modal>
   );
+
+/** The dialog's export events, apart from the frame's own `overlay_*` ones */
+const exportEvents = () =>
+  sent.events.filter(({ name }) => name.startsWith("project_"));
 
 const toastNames = () =>
   utils.PgView.setToast.mock.calls.map(
@@ -87,6 +112,28 @@ it("exports the named project as is", async () => {
   );
   expect(slice.exportAsIs).toHaveBeenCalledWith("beta");
   expect(slice.exportConverted).not.toHaveBeenCalled();
+  expect(exportEvents()).toEqual([
+    {
+      name: "project_exported",
+      params: { via: "dialog", converted: false, profile: "as-is", files: 2 },
+    },
+  ]);
+});
+
+it("counts a converted export once, as converted", async () => {
+  draw("beta");
+
+  fireEvent.click(screen.getByRole("button", { name: /convert and export/i }));
+
+  await waitFor(() =>
+    expect(exportEvents()).toEqual([
+      {
+        name: "project_exported",
+        params: { via: "dialog", converted: true, profile: "anchor", files: 3 },
+      },
+    ])
+  );
+  expect(slice.exportAsIs).not.toHaveBeenCalled();
 });
 
 it("tells the user a conversion failed and exports as is", async () => {
@@ -103,6 +150,13 @@ it("tells the user a conversion failed and exports as is", async () => {
   expect(slice.exportConverted).toHaveBeenCalledWith("beta");
   expect(slice.exportAsIs).toHaveBeenCalledWith("beta");
   expect(toastNames()).toEqual(["export-convert-failed"]);
+  // The fallback is one export, of the files as they are
+  expect(exportEvents()).toEqual([
+    {
+      name: "project_exported",
+      params: { via: "dialog", converted: false, profile: "as-is", files: 2 },
+    },
+  ]);
 });
 
 it("does not report a project of no known framework, only notes it", async () => {
@@ -146,6 +200,12 @@ it("says only that the export failed when the fallback fails too", async () => {
 
   await waitFor(() => expect(toastNames()).toEqual(["export-failed"]));
   expect(utils.PgView.closeModal).not.toHaveBeenCalled();
+  expect(exportEvents()).toEqual([
+    {
+      name: "project_export_failed",
+      params: { via: "dialog", profile: "as-is" },
+    },
+  ]);
 });
 
 it("tells the user an export failed, and reports it", async () => {
@@ -166,6 +226,12 @@ it("tells the user an export failed, and reports it", async () => {
       report: true,
     }),
   ]);
+  expect(exportEvents()).toEqual([
+    {
+      name: "project_export_failed",
+      params: { via: "dialog", profile: "as-is" },
+    },
+  ]);
 });
 
 it("names the open project when given no name", () => {
@@ -180,7 +246,7 @@ it("asks to make a project with no program a Node project", async () => {
   expect(await screen.findByText("Make it a Node project?")).toBeTruthy();
   expect(screen.queryByText("Convert the project layout?")).toBeNull();
   expect(screen.getByText("package.json")).toBeTruthy();
-  expect(screen.getByText("https://api.devnet.solana.com")).toBeTruthy();
+  expect(screen.getByText(slice.exportedEndpoint())).toBeTruthy();
   expect(screen.getByText(slice.DEFAULT_KEYPAIR_PATH)).toBeTruthy();
   expect(screen.getByText(slice.RPC_URL_VARIABLE)).toBeTruthy();
   expect(slice.readProjectKind).toHaveBeenCalledWith("beta");
@@ -202,7 +268,11 @@ it("keeps the layout question for a project with a program", async () => {
 
 it("converts a project with no program with no fallback toast", async () => {
   slice.readProjectKind.mockResolvedValue("no-program");
-  slice.exportConverted.mockResolvedValue("# beta");
+  slice.exportConverted.mockResolvedValue({
+    readme: "# beta",
+    profile: "typescript",
+    files: 7,
+  });
   draw("beta");
 
   fireEvent.click(screen.getByRole("button", { name: /convert and export/i }));
@@ -214,8 +284,10 @@ it("converts a project with no program with no fallback toast", async () => {
   expect(toastNames()).toEqual([]);
 });
 
-it("does not fall back when the converted zip did not download", async () => {
-  slice.exportConverted.mockRejectedValueOnce(new slice.DownloadError("quota"));
+it("does not fall back when the converted zip did not download, and counts the zip's profile", async () => {
+  slice.exportConverted.mockRejectedValueOnce(
+    new slice.DownloadError("anchor", "quota")
+  );
   draw("beta");
 
   fireEvent.click(screen.getByRole("button", { name: /convert and export/i }));
@@ -223,6 +295,12 @@ it("does not fall back when the converted zip did not download", async () => {
   await waitFor(() => expect(toastNames()).toEqual(["export-failed"]));
   expect(slice.exportAsIs).not.toHaveBeenCalled();
   expect(utils.PgView.closeModal).not.toHaveBeenCalled();
+  expect(exportEvents()).toEqual([
+    {
+      name: "project_export_failed",
+      params: { via: "dialog", profile: "anchor" },
+    },
+  ]);
 });
 
 it("keeps the layout question when the project cannot be read", async () => {

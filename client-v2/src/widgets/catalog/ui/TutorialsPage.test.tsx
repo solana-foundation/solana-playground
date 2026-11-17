@@ -218,7 +218,9 @@ it("invites a first start of Hello Anchor and reports the banner's open", async 
 
   await waitFor(() => expect(named("catalog_banner_opened")).toHaveLength(1));
   expect(utils.PgTutorial.open).toHaveBeenCalledWith("Hello Anchor");
-  expect(named("catalog_banner_opened")[0].params).toEqual({ state: "fresh" });
+  expect(named("catalog_banner_opened")[0].params).toEqual({
+    banner_state: "fresh",
+  });
 });
 
 it("picks up Hello Anchor half done", () => {
@@ -253,7 +255,7 @@ it("reports the banner's state when Continue opens it", async () => {
 
   await waitFor(() => expect(named("catalog_banner_opened")).toHaveLength(1));
   expect(named("catalog_banner_opened")[0].params).toEqual({
-    state: "started",
+    banner_state: "started",
   });
 });
 

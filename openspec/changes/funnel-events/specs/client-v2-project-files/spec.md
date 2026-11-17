@@ -31,20 +31,20 @@ by every import call site.
 
 `ImportGithub` (its dialog's submit) and its `Example` (the Import button)
 in `views/sidebar/explorer/Component/Modals/ImportGithub.tsx` SHALL send
-`project_imported {source: "github"}` once `PgGithub.import` resolves, and
-`project_import_failed {source: "github", reason}` when it rejects, except
+`project_imported {via: "github"}` once `PgGithub.import` resolves, and
+`project_import_failed {via: "github", reason}` when it rejects, except
 with `ImportCancelledError`, which sends nothing. Importing a repository
 that is already a project opens it and counts as imported.
 
 #### Scenario: A GitHub import finishes (manual)
 
 - **WHEN** a user imports a repository from the GitHub import dialog
-- **THEN** `project_imported` is sent once with `source: "github"`
+- **THEN** `project_imported` is sent once with `via: "github"`
 
 #### Scenario: A repository that does not exist (manual)
 
 - **WHEN** a user imports a GitHub URL whose repository answers 404
-- **THEN** `project_import_failed` is sent with `source: "github"` and
+- **THEN** `project_import_failed` is sent with `via: "github"` and
   `reason: "not-found"`
 
 #### Scenario: The program choice is closed (manual)
@@ -56,35 +56,35 @@ that is already a project opens it and counts as imported.
 ### Requirement: A file import is counted
 
 `ImportFs` in `views/sidebar/explorer/Component/Modals/ImportFs.tsx` SHALL
-send `project_import_failed {source: "files", reason}` when `onDrop` cannot
-read or convert the dropped files, `project_imported {source: "files"}` once
+send `project_import_failed {via: "files", reason}` when `onDrop` cannot
+read or convert the dropped files, `project_imported {via: "files"}` once
 its submit has created the project, and `project_import_failed` when the
 submit fails.
 
 #### Scenario: Dropped files that match no framework (manual)
 
 - **WHEN** a user drops a folder whose layout matches no framework
-- **THEN** `project_import_failed` is sent with `source: "files"` and
+- **THEN** `project_import_failed` is sent with `via: "files"` and
   `reason: "unsupported"`
 
 #### Scenario: A file import finishes (manual)
 
 - **WHEN** a user drops a project folder, names it, and presses Import
-- **THEN** `project_imported` is sent once with `source: "files"`
+- **THEN** `project_imported` is sent once with `via: "files"`
 
 ### Requirement: A temporary project's import is counted
 
 `ImportTemporary` in
 `views/sidebar/explorer/Component/Modals/ImportTemporary.tsx` SHALL send
-`project_imported {source: "temporary"}` once `PgExplorer.createWorkspace`
-resolves, and `project_import_failed {source: "temporary", reason}` when it
+`project_imported {via: "temporary"}` once `PgExplorer.createWorkspace`
+resolves, and `project_import_failed {via: "temporary", reason}` when it
 rejects.
 
 #### Scenario: A temporary project is imported (manual)
 
 - **WHEN** a user opens a GitHub link, presses Import on the temporary
   project, and names it
-- **THEN** `project_imported` is sent once with `source: "temporary"`
+- **THEN** `project_imported` is sent once with `via: "temporary"`
 
 ### Requirement: Import failures carry an enumerated reason
 
@@ -110,7 +110,9 @@ error, never from an error message.
 The `github` route (`/github/<owner>/<repo>…`) in `routes/github/github.tsx`
 SHALL send `project_viewed`, with no parameters, once `PgGithub.getFiles`
 has returned the repository's files, and `project_view_failed {reason}` when
-it throws, with the reasons of `project_import_failed`.
+it throws, with the reasons of `project_import_failed`. A closed program
+choice (`ImportCancelledError`) is the user changing their mind and sends
+neither event, as for an import.
 
 #### Scenario: A GitHub link opens (manual)
 
@@ -126,15 +128,21 @@ it throws, with the reasons of `project_import_failed`.
 
 `convertAndExport` and `exportWithoutChanges` in `ExportWorkspace`
 (`views/sidebar/explorer/Component/Modals/ExportWorkspace.tsx`) SHALL send
-`project_exported {from: "dialog", converted}` once the zip is handed to the
-browser, and `project_export_failed {from: "dialog"}` when nothing was
-saved. `converted` is `true` only when the conversion succeeded; a fallback
-to the project as it is sends `false`.
+`project_exported {via: "dialog", converted, profile, files}` once the zip
+is handed to the browser, and `project_export_failed {via: "dialog",
+profile}` when nothing was saved. `converted` is `true` only when the
+conversion succeeded; a fallback to the project as it is sends `false`.
+`profile` is how the zip was made (`anchor`, `native`, `seahorse`,
+`typescript`, or `as-is` for the files as they are, a fallback included),
+and `files` counts the files in it. These two events replace
+`project-export`'s `export_downloaded` and `export_failed`, which carried
+`profile` and `files` without where the export started; `export_convert_failed`
+stays with `project-export`.
 
 #### Scenario: Convert and export (manual)
 
 - **WHEN** a user picks "Convert and export" and the conversion succeeds
-- **THEN** `project_exported` is sent with `from: "dialog"` and
+- **THEN** `project_exported` is sent with `via: "dialog"` and
   `converted: true`
 
 #### Scenario: The conversion falls back (manual)
@@ -146,15 +154,17 @@ to the project as it is sends `false`.
 ### Requirement: The settings page's export is counted
 
 The Export button (named "Export project") of the `Project` section's
-Export project row in `widgets/settings-page/ui/SettingsPage.tsx` SHALL send
-`project_exported {from: "settings", converted: false}` once
-`PgFramework.exportWorkspace` resolves, and
-`project_export_failed {from: "settings"}` when it rejects.
+Export project row, `ExportProject` in
+`widgets/settings-page/ui/ExportProject.tsx`, SHALL send
+`project_exported {via: "settings", converted: false, profile: "as-is",
+files}` once `exportAsIs` (`features/project-export`) resolves with the
+zip's file count, and `project_export_failed {via: "settings", profile:
+"as-is"}` when it rejects.
 
 #### Scenario: Export from the settings page fails (manual)
 
 - **WHEN** a user presses Export in Settings and the zip cannot be made
-- **THEN** `project_export_failed` is sent with `from: "settings"`
+- **THEN** `project_export_failed` is sent with `via: "settings"`
 
 ### Requirement: No project event names the project
 

@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { trackImport } from "@/features/project-files";
 import { FieldError } from "@/shared/ui/field";
 import { ModalFrame } from "@/widgets/overlays";
 
@@ -13,7 +14,10 @@ export const ImportTemporary = () => {
   const { limitError, guard } = useLimitRefusal();
 
   const importTemporary = async () => {
-    await PgExplorer.createWorkspace(name, { fromTemporary: true });
+    await trackImport(
+      () => PgExplorer.createWorkspace(name, { fromTemporary: true }),
+      "temporary"
+    );
   };
 
   return (

@@ -230,7 +230,7 @@ it("should track a GitHub link opened from the form as from the form", async () 
 
   expect(events.events.map((e) => [e.name, e.params])).toEqual([
     ["feedback_opened", {}],
-    ["feedback_github_clicked", { link: "bug", from: "form" }],
+    ["feedback_github_clicked", { link: "bug", via: "form" }],
   ]);
 });
 

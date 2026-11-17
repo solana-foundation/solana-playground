@@ -17,12 +17,12 @@ const pageWithin = (page: unknown, pages: number) =>
 
 /**
  * A tutorial's progress from whether its workspace exists and what it saved.
- * A started tutorial whose saved progress cannot be read (`meta` null) is
+ * A started tutorial whose saved progress cannot be read (`meta` undefined) is
  * on page 1, where `PgTutorial.open` takes it too.
  */
 export const progressOf = (
   started: boolean,
-  meta: TutorialMetadata | null,
+  meta: TutorialMetadata | undefined,
   pages: number
 ): TutorialProgress => {
   if (!started) return { state: "new" };
@@ -76,7 +76,7 @@ if (import.meta.vitest) {
 
   describe("entities/tutorial/model/progress", () => {
     it("is new when the tutorial is not started", () => {
-      expect(progressOf(false, null, 5)).toEqual({ state: "new" });
+      expect(progressOf(false, undefined, 5)).toEqual({ state: "new" });
     });
 
     it("is the saved page of the tutorial's pages once started", () => {
@@ -165,7 +165,7 @@ if (import.meta.vitest) {
     });
 
     it("is started on page 1 when the saved progress cannot be read", () => {
-      expect(progressOf(true, null, 5)).toEqual({
+      expect(progressOf(true, undefined, 5)).toEqual({
         state: "started",
         page: 1,
         pages: 5,

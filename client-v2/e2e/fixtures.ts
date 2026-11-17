@@ -1,15 +1,21 @@
 import type { BrowserContext, Page, Route } from "@playwright/test";
 import { expect, test as base } from "@playwright/test";
 
+// By path: Playwright's CommonJS compile cannot load the cluster entry, whose modules hold `import.meta` blocks
+import { Endpoint } from "../src/entities/cluster/model/endpoint";
 import { isUuid } from "../src/shared/lib/ids";
 import { requireFor } from "../src/test-utils/require-for";
 
 /** For a step that waits on the explorer, sync or a reload */
 export const LONG = { timeout: 60_000 };
 
+/** `url`, with or without a trailing slash, matched whole */
+const wholeUrl = (url: string) =>
+  new RegExp(`^${url.replaceAll(".", "\\.")}/?$`);
+
 /** Devnet's JSON-RPC and websocket endpoints, as a route matches them whole */
-export const DEVNET_RPC = /^https:\/\/api\.devnet\.solana\.com\/?$/;
-export const DEVNET_WS = /^wss:\/\/api\.devnet\.solana\.com\/?$/;
+export const DEVNET_RPC = wholeUrl(Endpoint.DEVNET);
+export const DEVNET_WS = wholeUrl(Endpoint.DEVNET.replace(/^https:/, "wss:"));
 
 /** Home, which a start with no project shows in place of the work */
 export const home = (page: Page) =>
@@ -58,7 +64,9 @@ export const editorTookFocus = (page: Page) =>
 /**
  * A reload, then the app up again: every lazy chunk is fetched anew, so the
  * app's boot, not the step a test waits for after the reload, spends that
- * step's timeout
+ * step's timeout. A click that lands mid-boot hangs in Firefox, where the boot
+ * holds the main thread for seconds. Needs a project open in the editor: the
+ * editor taking focus is the boot's last step.
  */
 export const reloadAndBoot = async (page: Page) => {
   await page.reload();

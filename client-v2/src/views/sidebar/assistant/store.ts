@@ -58,14 +58,21 @@ const log = createLogger("assistant:store");
 
 /**
  * What a surface hands the assistant to narrow it while it is shown, such as
- * a tutorial: its own context, its own tools, and which of the assistant's
- * tools may still run. The assistant never imports the surface.
+ * a tutorial: its own context, its state now, its own tools, and which of the
+ * assistant's tools may still run. The assistant never imports the surface.
  */
 export interface AssistantMode {
   /** A name for logs and refusals: `tutorial` */
   name: string;
   /** Sent with every turn as a system message, after the project's state */
   context(): string;
+  /**
+   * The surface's state as it is now, sent after the thread's history as a
+   * second text part of the newest message. The history keeps that message as
+   * typed, so the state is never stored and each turn sends it fresh. An empty
+   * or blank string adds no part: the message goes as typed
+   */
+  now?(): string;
   /** Tools of the surface's own, offered beside the allowed ones */
   tools: readonly ToolDefinition[];
   /** Whether one of the assistant's own tools may run; a refused one answers

@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { TEST_ENDPOINT } from "@/test-utils/endpoints.mjs";
+
 import { PgTx } from "../../utils";
 import { BpfLoaderUpgradeable } from "./bpf-loader-upgradeable";
 
@@ -19,7 +21,7 @@ const connectionTo = (rpcEndpoint: string) => ({
   })(),
 });
 
-const selected = connectionTo("https://api.devnet.solana.com");
+const selected = connectionTo(TEST_ENDPOINT.DEVNET);
 
 vi.mock("../../utils", () => {
   const pk = { toBase58: () => "pk" };
@@ -37,7 +39,6 @@ vi.mock("../../utils", () => {
       getReadBufferConnection: <T>(connection: T) => connection,
       getSendTxPerSecond: () => undefined,
     },
-    PgPlaynet: { isUrlPlaynet: () => false },
     PgTx: {
       send: vi.fn(async () => "sig"),
       simulate: vi.fn(async () => ({ unitsConsumed: 1 })),
@@ -89,7 +90,7 @@ beforeEach(() => {
 });
 
 describe("BpfLoaderUpgradeable", () => {
-  const theDeploys = connectionTo("https://api.testnet.solana.com");
+  const theDeploys = connectionTo(TEST_ENDPOINT.TESTNET);
 
   it.each([
     [

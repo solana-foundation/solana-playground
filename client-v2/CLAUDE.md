@@ -48,13 +48,13 @@ Two rules on top of the direction:
   enabled.
 
 **The boundary check** is `eslint-plugin-boundaries`, configured in
-`eslint-layers.js`, which `eslintConfig` extends. It fails an import that
+`eslint-layers.js`, which `eslint.config.mjs` spreads in. It fails an import that
 points up a layer, one between two slices of a layer, one past a slice's
 public API, browser code importing a `server.mjs`, and a route in `api/`
 reaching a slice other than through its `server.mjs` (`shared` it may
 import by path), relative paths included, with an error from
 `boundaries/dependencies` that names the rule broken. `yarn lint` (CI, `yarn run check`) runs it, and so does the
-production build: CRA's in-build lint is dropped there to save memory, so
+production build: CRA's in-build lint is dropped in every mode, so
 `build:bundle` and `build-fast` start with `yarn lint:layers`, ESLint with
 the whole config over the five layers and `api/`, which fails the build on
 any lint error there, not only this one. Tests get two allowances and no
@@ -219,7 +219,7 @@ counts.
 3. **The proposal is reviewed as a PR before code.** A small change may
    share the PR with its code; a change that needs agreement lands as a
    docs-only PR first. The `spec:validate` script must pass; CI runs it.
-4. **`/opsx:apply` implements, one task per PR.** It reads `tasks.md`,
+4. **`/opsx:apply` implements.** It reads `tasks.md`,
    works a task, ticks it. Tick a task only in the PR that lands it, and
    name the task in the PR description. The ordinary PR checklist (section
    "Before a PR") still applies to every task. An umbrella is a change many
@@ -298,7 +298,7 @@ when it is empty.
 
 Each rule here came back in review more than once. The first holds by
 review. The next three are
-ESLint errors (`package.json` `eslintConfig`, run by `yarn lint`, and by the
+ESLint errors (`eslint.config.mjs`, run by `yarn lint`, and by the
 build's `lint:layers` in the layers and `api/`) in the
 layers, `src/{app,widgets,features,entities,shared}/`; the legacy roots are
 exempt until code moves out of them, except that `crypto.randomUUID` is an
@@ -414,7 +414,7 @@ reason.
   `src/**/*.{ts,tsx}`.
 - **Throw an `Error`, never a string or a plain object.** A thrown `Error`
   keeps its stack and its `message`; carry the original value in `cause`.
-  ESLint warns (`@typescript-eslint/no-throw-literal` over
+  ESLint warns (`@typescript-eslint/only-throw-error` over
   `src/**/*.{ts,tsx}`, which reads the thrown value's type, and
   `prefer-promise-reject-errors` in `src/` and `e2e/`). A test that
   simulates a non-`Error` throw disables the line with a reason.
@@ -532,7 +532,7 @@ reason.
   into a `scope/*` branch or `new-face-polish-2` merges without a human
   approval once it has no conflict, no human has requested changes, CI is
   green and the line names the PR's current head with 0 critical open.
-  Green means every check the `ci.yml` and `client-v2.yml`
+  Green means every check the `ci.yml`, `client-v2.yml` and `security.yml`
   workflows report on that head passed, except `ci.yml`'s `checks / Build`,
   which is always skipped because `ci.yml` passes `build: false`; any other
   skipped check, and any pending, cancelled or missing one, is not green. A

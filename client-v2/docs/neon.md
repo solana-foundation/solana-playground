@@ -34,7 +34,7 @@ integration's project-level ones are unused there. A preview the Git integration
 
 [`preview-sweep.yml`](../../.github/workflows/preview-sweep.yml) is the safety net for a teardown that was
 cancelled or failed. Daily, it deletes every `preview/pr-<n>` older than its `MIN_AGE_MINUTES` whose PR is no
-longer open and labelled. Run by hand (Actions → preview-sweep → Run workflow) it defaults to a dry run, and scope `all-preview`
+longer open and labelled. Run by hand (Actions → Preview: sweep → Run workflow) it defaults to a dry run, and scope `all-preview`
 extends it to every other `preview/*` branch whose git branch has no open PR: the integration's leftovers and
 hand-deployed previews. It never touches `main` (the default branch), a protected branch, or `preview/master`, the
 production dry run's branch, which the teardown keeps too.

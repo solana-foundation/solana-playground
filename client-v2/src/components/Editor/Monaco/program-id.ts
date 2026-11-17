@@ -2,6 +2,7 @@ import type * as monaco from "monaco-editor";
 
 /** The declarations the build rewrites, so the buffer and the build agree */
 const DECLARATION = {
+  // eslint-disable-next-line security/detect-unsafe-regex -- linear: `::` ends each `\w+` repetition and `\w` matches no `:`
   rust: /^(?:\w+::)*declare_id!\("(?<id>\w*)"\)/m,
   python: /^declare_id\((?<quote>["'])(?<id>\w*)\k<quote>\)/m,
 };
@@ -95,7 +96,13 @@ if (import.meta.vitest) {
       HTMLCanvasElement.prototype.getContext =
         (() => ({})) as unknown as typeof HTMLCanvasElement.prototype.getContext;
       document.queryCommandSupported = () => false;
-      live = await import("monaco-editor");
+      // The core API alone: `editor.main` (what `monaco-editor` resolves to)
+      // also loads every language and editor contribution, seconds of work
+      // that these tests never use and that a busy machine stretched past the
+      // hook's timeout during `yarn run check`
+      live = (await import(
+        "monaco-editor/esm/vs/editor/editor.api.js"
+      )) as unknown as typeof monaco;
     });
 
     afterEach(() => {

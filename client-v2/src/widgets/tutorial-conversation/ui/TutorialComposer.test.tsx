@@ -41,6 +41,7 @@ vi.mock("./TutorialConversation", async () => {
 });
 
 import { PgConversation } from "@/features/tutorial-conversation";
+import { createDraft } from "@/shared/lib/draft";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
 
 import BaseTutorialComposer from "./BaseTutorialComposer";
@@ -191,21 +192,16 @@ describe("TutorialComposer", () => {
     text,
   });
 
-  /** A turn whose input is held like `useTurn`'s */
-  const Connected = ({
-    turn,
-  }: {
-    turn: Omit<ComposerTurn, "input" | "setInput">;
-  }) => {
-    const [input, setInput] = useState("");
+  /** A turn whose draft is held like `useTurn`'s */
+  const Connected = ({ turn }: { turn: Omit<ComposerTurn, "draft"> }) => {
+    const [draft] = useState(createDraft);
     return (
       <TutorialComposer
         turn={{
           send: turn.send,
           stop: turn.stop,
           busy: turn.busy,
-          input,
-          setInput,
+          draft,
         }}
       />
     );
@@ -374,14 +370,15 @@ describe("TutorialComposer", () => {
   it("keeps a question in the box, uncounted, while the assistant answers, and says why", () => {
     store.say.mockReturnValue("assistant");
     const t = turn();
+    const draft = createDraft();
+    draft.set("why msg!?");
     const answering = (busy: boolean) => (
       <TutorialComposer
         turn={{
           send: t.send,
           stop: t.stop,
           busy,
-          input: "why msg!?",
-          setInput: vi.fn(),
+          draft,
         }}
       />
     );

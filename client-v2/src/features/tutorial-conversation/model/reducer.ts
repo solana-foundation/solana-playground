@@ -4,6 +4,7 @@ import type { Idl } from "@coral-xyz/anchor";
 import type {
   Act,
   ActBeat,
+  ActionWord,
   Ask,
   Beat,
   Block,
@@ -43,10 +44,10 @@ import {
   hintOf,
   isMismatch,
   isSignedOut,
+  isStoppedRun,
   isUnconfirmed,
   isUnreachable,
 } from "./progress";
-import type { Word } from "./route";
 import { shippedIdl, shippedIdlAt } from "./shipped-idl";
 
 /**
@@ -181,9 +182,15 @@ export type Action =
    * A typed action word (task 3.6): the action it names, and its pill when
    * that action changed something; a word the engine refuses is dropped
    */
-  | { type: "word"; word: Word; text: string; then: WordAction; at: number }
+  | {
+      type: "word";
+      word: ActionWord;
+      text: string;
+      then: WordAction;
+      at: number;
+    }
   /** An action word typed while a question is open: refused, not run */
-  | { type: "refuseWord"; word: Word; text: string; at: number }
+  | { type: "refuseWord"; word: ActionWord; text: string; at: number }
   /** A finish chip pressed, by its index in the definition's `finish.chips` */
   | { type: "chip"; index: number; at: number }
   /** The assistant proposed one line's change; it waits for Apply or Keep */
@@ -232,8 +239,8 @@ export type Effect =
   | {
       kind: "event";
       name: "tutorial_step_reset";
-      /** `step` is 1-based */
-      params: { tutorial: string; step: number };
+      /** `step_index` is 1-based */
+      params: { tutorial: string; step_index: number };
     }
   | {
       kind: "event";
@@ -257,7 +264,7 @@ export type Effect =
       params: {
         tutorial: string;
         /** 1-based */
-        step: number;
+        step_index: number;
         via: PassedVia;
         seconds: number;
         /** Only when the account the goal creates already existed */
@@ -272,16 +279,16 @@ export type Effect =
   | {
       kind: "event";
       name: "tutorial_question_asked";
-      /** `step` as `stepNumber` gives it: 1-based, 0 before Start, the last after the finish */
-      params: { tutorial: string; step: number; source: "typed" | "chip" };
+      /** `step_index` as `stepNumber` gives it: 1-based, 0 before Start, the last after the finish */
+      params: { tutorial: string; step_index: number; via: "typed" | "chip" };
     }
   | {
       kind: "event";
       name: "tutorial_word_sent";
       params: {
         tutorial: string;
-        step: number;
-        word: string;
+        step_index: number;
+        word: ActionWord;
         refused: boolean;
       };
     }
@@ -346,14 +353,17 @@ const unconfirmedOf = (runs: RunRecord[] | undefined): UnreadTx[] | null => {
     : null;
 };
 
-/** A run's outcome as `tutorial_action_run` names it */
+/**
+ * A run's outcome as `tutorial_action_run` names it. An act the learner
+ * stopped (HOO-2822) is `failed`: the spec's outcomes name no stop
+ */
 const outcomeOf = (result: RunResult): ActionRunParams["outcome"] => {
   if (result.ok) return "ok";
   if (
     (result.act === "airdrop" ||
       result.act === "deploy" ||
       result.act === "buildDeploy") &&
-    result.reason !== "failed"
+    (result.reason === "no_funds" || result.reason === "no_wallet")
   ) {
     return result.reason;
   }
@@ -378,7 +388,7 @@ const actionRunOf = (
   name: "tutorial_action_run",
   params: {
     tutorial: run.slug,
-    step: run.step,
+    step_index: run.step,
     action,
     outcome,
     // Two devices' clocks can disagree; a run never takes negative time
@@ -551,6 +561,36 @@ export const panelInput = (
   };
 };
 
+/**
+ * The input a run of the client file started outside its card is judged with
+ * (HOO-2806), as the run act's would be: the live step's call or refused
+ * goal, while it
+ * has not passed and no act runs, with the step it is for. Undefined on any
+ * other step, which no client run can pass.
+ */
+export const clientRunInput = (
+  definition: TutorialDefinition,
+  p: ConversationProgress
+): { stepId: string; input: RunInput } | undefined => {
+  if (running(p)) return undefined;
+  const step = stepAt(definition, p.cursor);
+  if (!step || passed(p, step)) return undefined;
+  const { goal } = step;
+  if (goal.kind !== "call" && goal.kind !== "refused") return undefined;
+  const creates = createsOf(goal);
+  return {
+    stepId: step.id,
+    input: {
+      beatId: "client-run",
+      ...(p.deployed ? { idl: p.deployed.idl } : {}),
+      ...(goal.kind === "call" && goal.log !== undefined
+        ? { log: goal.log }
+        : {}),
+      ...(creates ? { creates } : {}),
+    },
+  };
+};
+
 /** A goal a failed result can pass: a refusal, or a call whose account may already exist */
 const acceptsFailure = (goal: Goal): boolean =>
   goal.kind === "refused" ||
@@ -561,6 +601,24 @@ const createsOf = (goal: Goal | undefined): RunInput["creates"] =>
   goal?.kind === "call" && goal.creates !== undefined
     ? { instruction: goal.instruction, account: goal.creates }
     : undefined;
+
+/** The account a call act's own instruction creates, if the act names one */
+const ownCreatesOf = (beat: ActBeat): RunInput["creates"] =>
+  beat.act === "call" && beat.call.creates !== undefined
+    ? { instruction: beat.call.instruction, account: beat.call.creates }
+    : undefined;
+
+/** The failed run found the account the act's own call creates already there */
+const hasOwnAccountThere = (beat: ActBeat, result: RunResult): boolean => {
+  const own = ownCreatesOf(beat);
+  const exists = existsOf(result);
+  return (
+    own !== undefined &&
+    exists !== undefined &&
+    sameIdlName(exists.instruction, own.instruction) &&
+    sameIdlName(exists.account, own.account)
+  );
+};
 
 /** A run in flight on an act card: the panel waits for it */
 export const running = (p: ConversationProgress) =>
@@ -830,7 +888,7 @@ const passStep = (
       name: "tutorial_step_passed",
       params: {
         tutorial: ctx.slug,
-        step: ctx.definition.steps.indexOf(step) + 1,
+        step_index: ctx.definition.steps.indexOf(step) + 1,
         via,
         // Two devices' clocks can disagree; a pass never takes negative time
         seconds: Math.max(0, Math.round((at - from) / 1000)),
@@ -886,7 +944,7 @@ const wordSent = (
   name: "tutorial_word_sent",
   params: {
     tutorial: ctx.slug,
-    step: stepNumber(ctx.definition, cursor),
+    step_index: stepNumber(ctx.definition, cursor),
     word: action.word,
     refused: action.type === "refuseWord",
   },
@@ -1190,7 +1248,8 @@ const reduceAction = (
       if (step.goal.kind === "call" && step.goal.log !== undefined) {
         input.log = step.goal.log;
       }
-      const creates = createsOf(step.goal);
+      // The act's own one-time call names its account before the goal's does
+      const creates = ownCreatesOf(beat) ?? createsOf(step.goal);
       if (creates && (beat.act === "run" || beat.act === "call")) {
         input.creates = creates;
       }
@@ -1277,6 +1336,11 @@ const reduceAction = (
         acceptsFailure(step.goal) &&
         !passed(p, step) &&
         ctx.judge(step.goal, result);
+      // The account the act's own one-time call creates was already there (a
+      // second pass with the same wallet): nothing to fix, so the lesson goes
+      // on as if it had landed, and the step still waits on its goal
+      const isExisting =
+        !result.ok && !refused && hasOwnAccountThere(beat, result);
       const measured = actionRunOf(
         {
           slug: ctx.slug,
@@ -1289,7 +1353,7 @@ const reduceAction = (
       let record: RunRecord;
       if (result.ok) {
         record = { status: "ok", at: run.at, took, result };
-      } else if (refused) {
+      } else if (refused || isExisting) {
         record = { status: "refused", at: run.at, took, result };
       } else if (isPlannedFailure(step, p.cursor, result)) {
         record = { status: "failed", at: run.at, took, result, planned: true };
@@ -1307,7 +1371,9 @@ const reduceAction = (
         result
       );
       const cleared: EngineState = { progress: recorded, stage: null };
-      if (!result.ok && !refused) return withEffect(same(cleared), measured);
+      if (!result.ok && !refused && !isExisting) {
+        return withEffect(same(cleared), measured);
+      }
       if (
         refused ||
         (!passed(recorded, step) && ctx.judge(step.goal, result))
@@ -1459,14 +1525,15 @@ const reduceAction = (
       if (passed(p, found.step)) return same(state);
       if (!run.planned || p.cursor.fail) {
         // Asked once: the card closes on the press. A server that never
-        // answered, one that asks for a sign-in, or a devnet that has not
-        // read the transaction back yet has nothing to explain; its card
-        // offers the way on instead
+        // answered, one that asks for a sign-in, a devnet that has not
+        // read the transaction back yet, or an act the learner stopped has
+        // nothing to explain; its card offers the way on instead
         if (
           run.explainedAt !== undefined ||
           isUnreachable(run.result) ||
           isSignedOut(run.result) ||
-          isUnconfirmed(run.result)
+          isUnconfirmed(run.result) ||
+          isStoppedRun(run.result)
         ) {
           return same(state);
         }
@@ -1561,7 +1628,23 @@ const reduceAction = (
             : "landing",
       };
       if (!run.planned || p.cursor.fail) {
-        return { state, effects: [focus] };
+        // A build's card closes, and for an unplanned failure its Build
+        // again card follows (HOO-2806): without it the learner fixed the
+        // code with no Build to press
+        if (
+          run.result.act !== "build" ||
+          run.selfFixAt !== undefined ||
+          run.explainedAt !== undefined
+        ) {
+          return { state, effects: [focus] };
+        }
+        return {
+          state: withLastRun(state, action.beatId, {
+            ...run,
+            selfFixAt: action.at,
+          }),
+          effects: [focus],
+        };
       }
       // The fix question still follows; the explanation before it is skipped
       const flowed = flow(
@@ -1649,7 +1732,7 @@ const reduceAction = (
           name: "tutorial_step_reset",
           params: {
             tutorial: ctx.slug,
-            step: definition.steps.findIndex((s) => s.id === step.id) + 1,
+            step_index: definition.steps.findIndex((s) => s.id === step.id) + 1,
           },
         },
         ...flowed.effects,
@@ -1708,8 +1791,8 @@ const reduceAction = (
             name: "tutorial_question_asked",
             params: {
               tutorial: ctx.slug,
-              step: stepNumber(definition, p.cursor),
-              source: "chip",
+              step_index: stepNumber(definition, p.cursor),
+              via: "chip",
             },
           },
         ]
@@ -1778,8 +1861,8 @@ const reduceAction = (
             name: "tutorial_question_asked",
             params: {
               tutorial: ctx.slug,
-              step: stepNumber(definition, action.cursor),
-              source: "typed",
+              step_index: stepNumber(definition, action.cursor),
+              via: "typed",
             },
           },
         ],
@@ -2604,7 +2687,7 @@ if (import.meta.vitest) {
           name: "tutorial_action_run",
           params: {
             tutorial: expect.any(String),
-            step: 1,
+            step_index: 1,
             action: "call_panel",
             outcome: "failed",
             seconds: 2,
@@ -3176,7 +3259,7 @@ if (import.meta.vitest) {
             name: "tutorial_action_run",
             params: {
               tutorial: "hello-anchor",
-              step: 1,
+              step_index: 1,
               action: "build",
               outcome: "failed",
               seconds: 1,
@@ -3187,7 +3270,7 @@ if (import.meta.vitest) {
             name: "tutorial_action_run",
             params: {
               tutorial: "hello-anchor",
-              step: 1,
+              step_index: 1,
               action: "build",
               outcome: "ok",
               seconds: 2,
@@ -3262,7 +3345,7 @@ if (import.meta.vitest) {
           name: "tutorial_action_run",
           params: {
             tutorial: "hello-anchor",
-            step: 2,
+            step_index: 2,
             action: "airdrop",
             outcome: "ok",
             seconds: 0,
@@ -3326,7 +3409,7 @@ if (import.meta.vitest) {
             name: "tutorial_action_run",
             params: {
               tutorial: "hello-anchor",
-              step: 2,
+              step_index: 2,
               action: "deploy",
               outcome: "interrupted",
               seconds: 0,
@@ -3366,7 +3449,7 @@ if (import.meta.vitest) {
             name: "tutorial_step_passed",
             params: {
               tutorial: "hello-anchor",
-              step: 1,
+              step_index: 1,
               via: "chat",
               seconds: 8,
             },
@@ -3376,7 +3459,7 @@ if (import.meta.vitest) {
             name: "tutorial_step_passed",
             params: {
               tutorial: "hello-anchor",
-              step: 2,
+              step_index: 2,
               via: "call_panel",
               seconds: 3,
             },
@@ -3386,7 +3469,7 @@ if (import.meta.vitest) {
             name: "tutorial_step_passed",
             params: {
               tutorial: "hello-anchor",
-              step: 3,
+              step_index: 3,
               via: "client",
               seconds: 7,
             },
@@ -3537,7 +3620,7 @@ if (import.meta.vitest) {
               params: expect.objectContaining({
                 action: "deploy",
                 outcome: "ok",
-                step: 2,
+                step_index: 2,
               }),
             })
           );
@@ -3837,7 +3920,8 @@ if (import.meta.vitest) {
         expect(flowed.state.progress.cursor).toEqual({
           kind: "step",
           stepId: "greet-by-name",
-          beat: 5,
+          // Past s4.call, the step's sixth beat (s4.client writes the client first)
+          beat: 6,
           fail: false,
         });
         expect(
@@ -3892,7 +3976,7 @@ if (import.meta.vitest) {
             name: "tutorial_step_passed",
             params: {
               tutorial: "hello-anchor",
-              step: 4,
+              step_index: 4,
               via: "chat",
               seconds: 7,
             },
@@ -4081,6 +4165,43 @@ if (import.meta.vitest) {
           at: 8000,
         });
         expect(r.state).toBe(stopped);
+        expect(r.effects).toEqual([]);
+      });
+
+      it("a build the learner stopped is no planned failure, has nothing to explain, and is measured as failed", () => {
+        const stoppedBuild: RunResult = {
+          act: "build",
+          ok: false,
+          seconds: 0,
+          reason: "stopped",
+          error: null,
+          log: "Stopped.",
+        };
+        const { state: ended, effects } = play([
+          start,
+          rightPick,
+          build(7000),
+          { type: "ended", beatId: "s1.build", result: stoppedBuild, at: 7100 },
+        ]);
+        expect(ended.progress.runs["s1.build"]).toEqual([
+          { status: "failed", at: 7000, took: 100, result: stoppedBuild },
+        ]);
+        // The spec's outcomes name no stop: a stop counts as failed
+        expect(effects).toContainEqual(
+          expect.objectContaining({
+            name: "tutorial_action_run",
+            params: expect.objectContaining({
+              action: "build",
+              outcome: "failed",
+            }),
+          })
+        );
+        const r = reduce(ctx(), ended, {
+          type: "explain",
+          beatId: "s1.build",
+          at: 8000,
+        });
+        expect(r.state).toBe(ended);
         expect(r.effects).toEqual([]);
       });
 
@@ -4539,7 +4660,7 @@ if (import.meta.vitest) {
           {
             kind: "event",
             name: "tutorial_question_asked",
-            params: { tutorial: "hello-anchor", step: 4, source: "chip" },
+            params: { tutorial: "hello-anchor", step_index: 4, via: "chip" },
           },
         ]);
         expect(
@@ -4582,7 +4703,7 @@ if (import.meta.vitest) {
         expect(r.effects[1]).toEqual({
           kind: "event",
           name: "tutorial_step_reset",
-          params: { tutorial: "hello-anchor", step: 1 },
+          params: { tutorial: "hello-anchor", step_index: 1 },
         });
         // Its first beat, the boilerplate's write, comes round again
         expect(r.effects).toContainEqual(
@@ -4665,7 +4786,7 @@ if (import.meta.vitest) {
           name: "tutorial_word_sent",
           params: {
             tutorial: "hello-anchor",
-            step: 0,
+            step_index: 0,
             word: "start",
             refused: false,
           },
@@ -4708,7 +4829,7 @@ if (import.meta.vitest) {
             name: "tutorial_word_sent",
             params: {
               tutorial: "hello-anchor",
-              step: 1,
+              step_index: 1,
               word: "build",
               refused: true,
             },
@@ -4728,7 +4849,7 @@ if (import.meta.vitest) {
           {
             kind: "event",
             name: "tutorial_question_asked",
-            params: { tutorial: "hello-anchor", step: 1, source: "typed" },
+            params: { tutorial: "hello-anchor", step_index: 1, via: "typed" },
           },
         ]);
       });
@@ -4744,7 +4865,7 @@ if (import.meta.vitest) {
           {
             kind: "event",
             name: "tutorial_question_asked",
-            params: { tutorial: "hello-anchor", step: 0, source: "typed" },
+            params: { tutorial: "hello-anchor", step_index: 0, via: "typed" },
           },
         ]);
       });
@@ -4950,6 +5071,69 @@ if (import.meta.vitest) {
             instruction: "init_map",
             creates: "map",
           }),
+          // The counter's second pass (HOO-2730): a one-time call before the goal
+          step(
+            "count",
+            [
+              {
+                kind: "act",
+                id: "s4.init",
+                act: "call",
+                title: "Init",
+                context: "Sends initialize",
+                button: "Init",
+                call: { instruction: "initialize", creates: "counter" },
+              },
+              act("s4.inc", "increment", undefined, "Increment"),
+            ],
+            { kind: "call", instruction: "increment" }
+          ),
+          // The act's own account and the goal's, on one step
+          step(
+            "both",
+            [
+              {
+                kind: "act",
+                id: "s5.init",
+                act: "call",
+                title: "Init",
+                context: "Sends initialize",
+                button: "Init",
+                call: { instruction: "initialize", creates: "counter" },
+              },
+              act("s5.inc", "increment", undefined, "Increment"),
+            ],
+            { kind: "call", instruction: "increment", creates: "tally" }
+          ),
+          // A one-time call in the fix path, after the step's first try failed
+          {
+            id: "fix",
+            title: "fix",
+            short: "fix",
+            objective: "fix",
+            learned: "fix",
+            file: "src/lib.rs",
+            start: { "src/lib.rs": "" },
+            target: { "src/lib.rs": "" },
+            beats: [act("s6.go", "increment", undefined, "Go")],
+            goal: { kind: "call", instruction: "increment" },
+            win: { id: "fix.win", headline: "Won", line: "Won." },
+            explain: "fix",
+            planned: "It fails to build.",
+            failsWith: "error\\[E0425\\]",
+            onFail: [
+              {
+                kind: "act",
+                id: "s6.init",
+                act: "call",
+                title: "Init",
+                context: "Sends initialize",
+                button: "Init",
+                call: { instruction: "initialize", creates: "counter" },
+              },
+              act("s6.inc", "increment", undefined, "Increment"),
+            ],
+          },
         ],
         finish: {
           headline: "Done",
@@ -5051,7 +5235,12 @@ if (import.meta.vitest) {
         expect(effects).toContainEqual({
           kind: "event",
           name: "tutorial_step_passed",
-          params: { tutorial: "refusals", step: 1, via: "chat", seconds: 2 },
+          params: {
+            tutorial: "refusals",
+            step_index: 1,
+            via: "chat",
+            seconds: 2,
+          },
         });
       });
 
@@ -5114,7 +5303,7 @@ if (import.meta.vitest) {
             name: "tutorial_step_passed",
             params: {
               tutorial: "refusals",
-              step: 5,
+              step_index: 5,
               via: "chat",
               seconds: 2,
               reason: "exists",
@@ -5132,6 +5321,173 @@ if (import.meta.vitest) {
           );
           expect(progress.runs["s2.create"]?.[0]?.status).toBe("failed");
           expect(progress.passed).not.toContain("create");
+        });
+      });
+
+      describe("a one-time call before the goal (HOO-2730)", () => {
+        const COUNTER = {
+          instruction: "initialize",
+          account: "counter",
+          address: "Counter1",
+        };
+        const refusedInit = (exists: typeof COUNTER): RunResult => ({
+          act: "call",
+          ok: false,
+          seconds: 1,
+          message: "custom program error: 0x0",
+          log: "",
+          refused: {
+            instruction: "initialize",
+            error: { code: 0, name: null },
+          },
+          exists,
+        });
+        const refusedBare: RunResult = {
+          act: "call",
+          ok: false,
+          seconds: 1,
+          message: "custom program error: 0x0",
+          log: "",
+          refused: {
+            instruction: "initialize",
+            error: { code: 0, name: null },
+          },
+        };
+
+        it("sends the account its own call creates", () => {
+          const { effects } = run([press("s4.init", 2000)], at(5));
+          expect(effects).toContainEqual(
+            expect.objectContaining({
+              kind: "run",
+              input: expect.objectContaining({
+                creates: { instruction: "initialize", account: "counter" },
+              }),
+            })
+          );
+        });
+
+        it("records an existing counter refused and posts the next card, without passing the step", () => {
+          const out = refusedInit(COUNTER);
+          const { progress } = run(
+            [press("s4.init", 2000), ended("s4.init", 2000, out)],
+            at(5)
+          );
+          expect(progress.runs["s4.init"]).toEqual([
+            { status: "refused", at: 2000, took: 900, result: out },
+          ]);
+          expect(progress.beats["s4.inc"]).toMatchObject({ kind: "said" });
+          expect(progress.passed).not.toContain("count");
+        });
+
+        it("passes the step on the goal's own call that follows", () => {
+          const { progress } = run(
+            [
+              press("s4.init", 2000),
+              ended("s4.init", 2000, refusedInit(COUNTER)),
+              press("s4.inc", 4000),
+              ended("s4.inc", 4000, landed("increment")),
+            ],
+            at(5)
+          );
+          expect(progress.passed).toContain("count");
+          expect(progress.times.count?.reason).toBeUndefined();
+        });
+
+        it("stays failed on an existing account its call does not name", () => {
+          const other = refusedInit({
+            instruction: "initialize",
+            account: "config",
+            address: "Config1",
+          });
+          const { progress } = run(
+            [press("s4.init", 2000), ended("s4.init", 2000, other)],
+            at(5)
+          );
+          expect(progress.runs["s4.init"]?.[0]?.status).toBe("failed");
+          expect(progress.beats["s4.inc"]).toBeUndefined();
+        });
+
+        it("sends its own account over one the goal creates", () => {
+          const { effects } = run([press("s5.init", 2000)], at(6));
+          expect(effects).toContainEqual(
+            expect.objectContaining({
+              input: expect.objectContaining({
+                creates: { instruction: "initialize", account: "counter" },
+              }),
+            })
+          );
+        });
+
+        it("stays failed and posts nothing on any other refusal", () => {
+          const { progress } = run(
+            [press("s4.init", 2000), ended("s4.init", 2000, refusedBare)],
+            at(5)
+          );
+          expect(progress.runs["s4.init"]?.[0]?.status).toBe("failed");
+          expect(progress.beats["s4.inc"]).toBeUndefined();
+        });
+
+        it("records a second press on the existing account refused again, and leaves the next card where the first posted it", () => {
+          const first = run(
+            [
+              press("s4.init", 2000),
+              ended("s4.init", 2000, refusedInit(COUNTER)),
+            ],
+            at(5)
+          ).progress.beats["s4.inc"];
+          const { progress } = run(
+            [
+              press("s4.init", 2000),
+              ended("s4.init", 2000, refusedInit(COUNTER)),
+              press("s4.init", 4000),
+              ended("s4.init", 4000, refusedInit(COUNTER)),
+            ],
+            at(5)
+          );
+          expect(progress.runs["s4.init"]?.map((r) => r.status)).toEqual([
+            "refused",
+            "refused",
+          ]);
+          expect(first).toMatchObject({ kind: "said" });
+          expect(progress.beats["s4.inc"]).toEqual(first);
+          expect(progress.passed).not.toContain("count");
+        });
+
+        it("records the existing account refused inside onFail and posts the fix path's next card", () => {
+          const { steps } = realCtx.definition;
+          const fix = steps.findIndex((s) => s.id === "fix");
+          expect(fix).toBeGreaterThan(-1);
+          // The cursor in the fix path (`onFail`), its one-time call posted
+          const from: EngineState = {
+            progress: {
+              version: 1,
+              passed: steps.slice(0, fix).map((s) => s.id),
+              finishedAt: null,
+              startedAt: 1000,
+              restartedAt: null,
+              said: [],
+              proposals: [],
+              accounts: {},
+              cursor: { kind: "step", stepId: "fix", beat: 1, fail: true },
+              beats: {
+                "s6.go": { kind: "said", at: 1000 },
+                "s6.init": { kind: "said", at: 1500 },
+              },
+              runs: {},
+              times: { fix: { from: 1000, to: null } },
+            },
+            stage: null,
+          };
+          const { progress } = run(
+            [
+              press("s6.init", 2000),
+              ended("s6.init", 2000, refusedInit(COUNTER)),
+            ],
+            from
+          );
+          expect(progress.runs["s6.init"]?.[0]?.status).toBe("refused");
+          expect(progress.beats["s6.inc"]).toMatchObject({ kind: "said" });
+          expect(progress.passed).not.toContain("fix");
         });
       });
 

@@ -1,4 +1,4 @@
-name: preview-shared-db
+name: "Preview: shared database"
 
 # Keeps the preview instance's shared database, `solpg_preview`, at master's
 # migrations. Once PREVIEW_DB_PROVIDER is `cloud-sql`, the previews the Vercel
@@ -56,6 +56,7 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
+          persist-credentials: false
           sparse-checkout: |
             .github/scripts
             client-v2/db

@@ -447,3 +447,60 @@ describe("PgCommandManager.execute, a quiet run", () => {
     expect(slowLines()).toHaveLength(1);
   });
 });
+
+// HOO-2806: `run missing.ts` was refused here, before the command could count
+// the refusal, and with nothing to choose from the line listed nothing
+describe("PgCommandManager.execute, an argument's values", () => {
+  const installWith = ({
+    values,
+    handle,
+    suggestOnly,
+  }: {
+    values: string[];
+    handle: (input: { args: Record<string, unknown> }) => unknown;
+    suggestOnly?: true;
+  }) => {
+    PgCommandManager.all = {
+      probe: {
+        name: "probe",
+        description: "",
+        args: [{ name: "paths", optional: true, values, suggestOnly }],
+        options: [],
+        handle,
+      },
+    } as never;
+  };
+
+  it("hands a value the list does not hold to a command that checks it itself", async () => {
+    const handle = vi.fn(
+      async (input: { args: Record<string, unknown> }) => input.args.paths
+    );
+    installWith({ values: ["client.ts"], handle, suggestOnly: true });
+
+    await expect(
+      PgCommandManager.execute(["probe", "missing.ts"])
+    ).resolves.toBe("missing.ts");
+  });
+
+  it("refuses it for any other command, naming the values", async () => {
+    const handle = vi.fn();
+    installWith({ values: ["client.ts"], handle });
+
+    await expect(
+      PgCommandManager.execute(["probe", "missing.ts"])
+    ).rejects.toThrow(
+      "Incorrect argument value given: `missing.ts` (possible values: client.ts)"
+    );
+    expect(handle).not.toHaveBeenCalled();
+  });
+
+  it("says there is nothing to choose from rather than an empty list", async () => {
+    installWith({ values: [], handle: vi.fn() });
+
+    await expect(
+      PgCommandManager.execute(["probe", "missing.ts"])
+    ).rejects.toThrow(
+      "Incorrect argument value given: `missing.ts` (there is nothing to choose from)"
+    );
+  });
+});

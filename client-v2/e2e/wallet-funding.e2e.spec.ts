@@ -225,6 +225,7 @@ test("client-v2-wallet-funding: Successful funding", async ({
   await dialog(page).getByRole("button", { name: "Connect Phantom" }).click();
   await expect(dialog(page)).toContainText(phantom.short);
   await expect(dialog(page)).toContainText("5 SOL");
+  await dialog(page).getByLabel("Amount (SOL)").fill("1");
   await dialog(page).getByRole("button", { name: "Send 1 SOL" }).click();
 
   await expect(page.getByText(/^Sent 1 SOL to Wallet 1\.$/)).toBeVisible(LONG);
@@ -286,6 +287,8 @@ test("client-v2-wallet-funding: Amount above the balance", async ({
   await openFund(page);
   await dialog(page).getByRole("button", { name: "Connect Phantom" }).click();
 
+  await dialog(page).getByLabel("Amount (SOL)").fill("1");
+
   await expect(dialog(page)).toContainText("Phantom holds 0.5 SOL.");
   await expect(
     dialog(page).getByRole("button", { name: "Send 1 SOL" })
@@ -318,6 +321,88 @@ test("client-v2-wallet-funding: Max then send", async ({
     SystemInstruction.decodeTransfer(ix)
   );
   expect(Number(transfer.lamports)).toBe(1_999_000_000);
+});
+
+/** The Fund dialog with Phantom, holding 5 SOL on devnet, connected to pay */
+const openFundConnected = async (page: Page) => {
+  const phantom = await installFakeWallet(page, { name: "Phantom" });
+  await stubDevnet(page, phantom.address);
+  await reloadSettled(page);
+  await openFund(page);
+  await dialog(page).getByRole("button", { name: "Connect Phantom" }).click();
+  await expect(dialog(page)).toContainText("5 SOL");
+  return phantom;
+};
+
+test("client-v2-wallet-funding: The address opens in the explorer", async ({
+  page,
+  seededPage,
+}) => {
+  void seededPage;
+  const phantom = await openFundConnected(page);
+
+  const receiver = dialog(page).getByRole("link").first();
+  await expect(receiver).toHaveAttribute(
+    "href",
+    /\/address\/[1-9A-HJ-NP-Za-km-z]+\?cluster=devnet$/
+  );
+  await expect(receiver).toHaveAttribute("target", "_blank");
+  await expect(
+    dialog(page).getByRole("link", { name: phantom.short })
+  ).toHaveAttribute("href", new RegExp(`/address/${phantom.address}\\?`));
+});
+
+test("client-v2-wallet-funding: The field starts at 0", async ({
+  page,
+  seededPage,
+}) => {
+  void seededPage;
+  await openFundConnected(page);
+
+  await expect(dialog(page).getByLabel("Amount (SOL)")).toHaveValue("0");
+  await expect(dialog(page)).toContainText("Enter an amount above 0.");
+  await expect(dialog(page).getByLabel("Amount (SOL)")).not.toHaveAttribute(
+    "aria-invalid",
+    "true"
+  );
+  await expect(
+    dialog(page).getByRole("button", { name: /^Send/ })
+  ).toBeDisabled();
+});
+
+test("client-v2-wallet-funding: Stepping by 0.1", async ({
+  page,
+  seededPage,
+}) => {
+  void seededPage;
+  await openFundConnected(page);
+  const field = dialog(page).getByLabel("Amount (SOL)");
+
+  await dialog(page).getByRole("button", { name: "More by 0.1 SOL" }).click();
+  await field.press("ArrowUp");
+  await expect(field).toHaveValue("0.2");
+
+  await field.fill("1.999");
+  await field.press("ArrowUp");
+  await expect(field).toHaveValue("2");
+  await field.fill("1.999");
+  await dialog(page).getByRole("button", { name: "Less by 0.1 SOL" }).click();
+  await expect(field).toHaveValue("1.9");
+});
+
+test("client-v2-wallet-funding: Where the SOL goes", async ({
+  page,
+  seededPage,
+}) => {
+  void seededPage;
+  await openFundConnected(page);
+
+  await dialog(page).getByLabel("Amount (SOL)").fill("1");
+
+  await expect(dialog(page)).toContainText("Arrives in Wallet 1 on devnet.");
+  await expect(
+    dialog(page).getByRole("button", { name: "Send 1 SOL" })
+  ).toBeEnabled();
 });
 
 test("client-v2-wallet-funding: Balance below the fee", async ({

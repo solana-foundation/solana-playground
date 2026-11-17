@@ -69,7 +69,8 @@ const KINDS = new Set([
  * A `threadId` is the other question and gets the other check: that one is
  * always ours, always a v4, and `isUuid` is right for it.
  */
-const CASTABLE_UUID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+const CASTABLE_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Whether one item is something the insert can be handed.

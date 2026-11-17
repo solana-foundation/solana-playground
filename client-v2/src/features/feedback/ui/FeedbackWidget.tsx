@@ -77,7 +77,7 @@ export const FeedbackHost = ({ children }: { children: ReactNode }) => {
 
   const github = useCallback(
     (from: "menu" | "form") => (link: GithubLink) =>
-      feedbackTelemetry.track("feedback_github_clicked", { link, from }),
+      feedbackTelemetry.track("feedback_github_clicked", { link, via: from }),
     []
   );
 

@@ -4,6 +4,12 @@ import { describe, expect, it } from "vitest";
 
 import { readIdl } from "@/entities/idl";
 import type { TutorialDefinition } from "@/entities/tutorial";
+import { programModule } from "@/features/tutorial-conversation/model/program-source";
+
+/** A `pub fn`'s name, its generics and the `(` that opens its parameters */
+// A copy: program-source keeps its `PUB_FN` private, and AGENTS.md bars exporting it only for a test
+// eslint-disable-next-line security/detect-unsafe-regex -- linear: `\s*`, `<[^>]*>` and `\(` start with disjoint characters
+const PUB_FN = /pub fn (\w+)\s*(?:<[^>]*>\s*)?\(/g;
 
 /**
  * A step's `idl` is generated from its target program (`yarn tutorial:idl`),
@@ -29,19 +35,6 @@ const PLAIN = new Set(
 const plain = (type: string) =>
   PLAIN.has(type.toLowerCase()) ? type.toLowerCase() : "*";
 
-/** The body of the `#[program]` module, braces matched */
-const programModule = (source: string): string => {
-  const at = source.indexOf("#[program]");
-  const open = at === -1 ? -1 : source.indexOf("{", at);
-  if (open === -1) return "";
-  let depth = 0;
-  for (let i = open; i < source.length; i++) {
-    if (source[i] === "{") depth++;
-    if (source[i] === "}" && --depth === 0) return source.slice(open + 1, i);
-  }
-  return source.slice(open + 1);
-};
-
 /** Splits on the commas outside `<>` and `()` */
 const params = (list: string): string[] => {
   const out: string[] = [];
@@ -65,7 +58,7 @@ const params = (list: string): string[] => {
 const shapeOfSource = (source: string): Shape => {
   const body = programModule(source);
   const shape: Shape = {};
-  for (const fn of body.matchAll(/pub fn (\w+)\s*(?:<[^>]*>)?\s*\(/g)) {
+  for (const fn of body.matchAll(PUB_FN)) {
     // The parameter list runs to the parenthesis that closes it
     const start = (fn.index ?? 0) + fn[0].length;
     let depth = 1;
@@ -105,6 +98,7 @@ const tutorials = readdirSync(__dirname, { withFileTypes: true })
   .filter((e) => e.isDirectory() && !e.name.startsWith("__"))
   .map((e) => join(__dirname, e.name, "tutorial.json"))
   .filter(existsSync)
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
   .map((path) => JSON.parse(readFileSync(path, "utf8")) as TutorialDefinition)
   .filter((d) => d.framework === "Anchor");
 

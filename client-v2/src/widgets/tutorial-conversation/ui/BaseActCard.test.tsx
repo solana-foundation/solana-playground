@@ -308,7 +308,7 @@ describe("BaseActCard, a lone action", () => {
       />
     );
     expect(screen.getByRole("button", { name: /Build/ }).className).toContain(
-      "@max-lg/act:w-full"
+      "@max-[326px]/act:w-full"
     );
   });
 });

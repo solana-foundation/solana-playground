@@ -7,6 +7,7 @@ import {
   Copy,
   ExternalLink,
   Eye,
+  Wallet,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
@@ -16,11 +17,13 @@ import type {
   RunResult,
 } from "@/features/tutorial-conversation";
 import { devnetExplorerUrl } from "@/shared/lib/devnet-explorer";
-import { faucetUrlFor } from "@/shared/lib/faucet";
+import { DEVNET_FAUCET_SOL, faucetUrlWith } from "@/shared/lib/faucet";
+import { airdropCause } from "@/shared/lib/faucet-limit";
 import { PROGRAM_LOG, programLogText } from "@/shared/lib/program-log";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { shortKey } from "@/shared/lib/short-key";
 import { cn } from "@/shared/lib/utils";
+import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
 import {
   Collapsible,
@@ -29,6 +32,7 @@ import {
 } from "@/shared/ui/collapsible";
 
 import BaseAccountView from "./BaseAccountView";
+import FaucetSteps from "./FaucetSteps";
 import { formatSeconds, Prose, READ } from "./Prose";
 import WalletAddress from "./WalletAddress";
 
@@ -324,8 +328,11 @@ const errorLineOf = (log: string): string | null => {
  */
 const FundsCard = ({
   result,
+  onFund,
 }: {
   result: Extract<Failed, { reason: "no_funds" }>;
+  /** Open the Fund dialog; no button without it */
+  onFund?: () => void;
 }) => {
   const { balance, cost, address } = result.funding;
   return (
@@ -341,10 +348,9 @@ const FundsCard = ({
           <p className={READ}>
             {`Your wallet has ${solOf(balance)} SOL, and this ${
               result.act
-            } needs about ${solOf(
-              cost
-            )} SOL. The devnet faucet is at its limit for now: try again in a minute, or top the wallet up yourself.`}
+            } needs about ${solOf(cost)} SOL. ${airdropCause(result.message)}`}
           </p>
+          <FaucetSteps />
           {/* As the deploy's card: the whole address, Copy right after it */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption">
             <span className="shrink-0 text-muted-foreground">Your wallet</span>
@@ -359,17 +365,22 @@ const FundsCard = ({
               </span>
             </WalletAddress>
           </div>
-          <div className="flex">
-            <Button variant="secondary" asChild>
+          <div className="flex flex-wrap gap-2 max-sm:flex-col max-sm:items-stretch">
+            <Button variant="outline" asChild>
               <a
-                href={faucetUrlFor("devnet")(address)}
+                href={faucetUrlWith(DEVNET_FAUCET_SOL)("devnet")(address)}
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Open faucet
+                Open the web faucet
                 <ExternalLink aria-hidden="true" className="size-4" />
               </a>
             </Button>
+            {onFund && (
+              <Button variant="outline" onClick={onFund}>
+                Send from your wallet
+              </Button>
+            )}
           </div>
         </>
       }
@@ -438,10 +449,14 @@ const FailedCard = ({
   result,
   exists,
   onRecheck,
+  onFund,
+  onCreateWallet,
 }: {
   result: Failed;
   exists?: string;
   onRecheck?: () => void;
+  onFund?: () => void;
+  onCreateWallet?: () => Promise<unknown> | void;
 }) => {
   if (result.reason === "unconfirmed") {
     return <UnconfirmedCard result={result} onRecheck={onRecheck} />;
@@ -485,7 +500,9 @@ const FailedCard = ({
       />
     );
   }
-  if (result.reason === "no_funds") return <FundsCard result={result} />;
+  if (result.reason === "no_funds") {
+    return <FundsCard result={result} onFund={onFund} />;
+  }
   let title = result.act === "run" ? "Run failed" : "Call failed";
   if (result.reason === "no_wallet") title = "No wallet";
   const error = result.refused?.error;
@@ -511,6 +528,20 @@ const FailedCard = ({
           )}
           {/* The head's meta truncates; the whole reason reads here */}
           <p className={READ}>{result.message}</p>
+          {/* As the deploy's card: the wallet, then the act runs again */}
+          {result.reason === "no_wallet" && onCreateWallet && (
+            <div className="flex max-sm:flex-col max-sm:items-stretch">
+              <AsyncButton
+                onClick={async () => {
+                  await onCreateWallet();
+                }}
+                onError={reportButtonFailure("create the wallet")}
+              >
+                <Wallet aria-hidden="true" className="size-4" />
+                Create wallet
+              </AsyncButton>
+            </div>
+          )}
         </>
       }
       details={
@@ -543,6 +574,8 @@ const BaseTxResultCard = ({
   account,
   exists,
   onRecheck,
+  onFund,
+  onCreateWallet,
 }: {
   result: TxResult;
   account?: AccountOnCard;
@@ -550,11 +583,21 @@ const BaseTxResultCard = ({
   exists?: string;
   /** Check again on an unconfirmed result; absent when it is not live */
   onRecheck?: () => void;
+  /** Open the Fund dialog from a short-wallet card */
+  onFund?: () => void;
+  /** Create wallet on a run or call that found none; absent when it is not live */
+  onCreateWallet?: () => Promise<unknown> | void;
 }) =>
   result.ok ? (
     <LandedCard result={result} account={account} />
   ) : (
-    <FailedCard result={result} exists={exists} onRecheck={onRecheck} />
+    <FailedCard
+      result={result}
+      exists={exists}
+      onRecheck={onRecheck}
+      onFund={onFund}
+      onCreateWallet={onCreateWallet}
+    />
   );
 
 export default BaseTxResultCard;

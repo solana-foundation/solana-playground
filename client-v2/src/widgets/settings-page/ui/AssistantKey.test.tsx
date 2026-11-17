@@ -48,7 +48,7 @@ it("deletes the user's key, disconnects and says so", async () => {
   expect(JSON.stringify(storedValues(sessionStorage))).not.toContain(KEY);
   expect(JSON.stringify(storedValues(localStorage))).not.toContain(KEY);
   expect(events.events.map((e) => [e.name, e.params])).toEqual([
-    ["settings_key_deleted", {}],
+    ["assistant_key_deleted", { via: "settings" }],
   ]);
 });
 

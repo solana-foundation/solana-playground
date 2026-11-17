@@ -160,8 +160,13 @@ const action = (p: BaseInteractProps, surface: EmptySurface): ReactNode => {
           <BrandButtonIcon />
         </BrandButton>
         {/* An outline in the pill's height and shape, so the pill keeps the
-            focus, as Deploy's Upload IDL */}
-        <div className="flex justify-center [&_[data-slot=button]]:h-10 [&_[data-slot=button]]:rounded-full [&_[data-slot=button]]:px-5 max-md:[&_[data-slot=button]]:h-12 max-md:[&_[data-slot=button]]:w-full max-md:[&>div]:w-full">
+            focus, as Deploy's Upload IDL. From md up the row wraps: in a
+            narrow stage (at 1024 px, say, beside the navigation, the
+            assistant and the files) Upload IDL, the IDL's name and "Build
+            the IDL locally" are wider than the stage, and a centred row that
+            cannot wrap cuts both ends off. A phone's row stays one line, its
+            two buttons sharing the width */}
+        <div className="flex justify-center md:flex-wrap md:items-center md:gap-x-3 md:gap-y-2 [&_[data-slot=button]]:h-10 [&_[data-slot=button]]:rounded-full [&_[data-slot=button]]:px-5 max-md:[&_[data-slot=button]]:h-12 max-md:[&_[data-slot=button]]:w-full max-md:[&>div]:w-full">
           {p.idlLoad}
           {p.idlGuide}
         </div>

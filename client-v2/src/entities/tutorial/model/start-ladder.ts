@@ -6,8 +6,9 @@ import { slugOf } from "./definition/check";
  * only these; every other tutorial stays registered, so its link keeps
  * working. What the Start here banner says of a lesson, as the
  * tutorial-v2 prototype's lessons write it (`lessons/<slug>.ts`): `line`
- * before a start, `done` once finished (its `headline`, no full stop); a
- * definition has neither, and two of the three are not definitions yet.
+ * before a start, `done` once finished (its `headline`, no full stop), since
+ * a definition has neither. Each lesson's finish card names the next one
+ * here as its `finish.next`, and the last names none.
  */
 export const START_LADDER = [
   {

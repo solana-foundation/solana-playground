@@ -8,10 +8,12 @@ import { Tag } from "@/shared/ui/tag";
 import BaseResetStepDialog from "./BaseResetStepDialog";
 
 export interface BaseWroteCardProps {
-  /** Null when the block could not be written (`failed`) */
+  /** The landing, its `lines` where the block is now (`linesNow`); null
+   * when the block could not be written (`failed`) */
   wrote: Wrote | null;
   failed: boolean;
-  /** The written lines as the file holds them, first to last; the card shows three */
+  /** The written lines, first to last (`previewOf`): as they landed, or as
+   * the file holds them for a landing without text; the card shows three */
   preview: readonly string[];
   /** Open the file and bring the first written line into view */
   onShow: (file: string, line: number) => void;

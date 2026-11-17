@@ -1,16 +1,10 @@
 import { isTxLinkedBySender } from "@/shared/lib/tx-links";
 
-import {
-  PgCodec,
-  PgConnection,
-  PgSettings,
-  PgTx,
-  PgView,
-  PgWeb3,
-} from "../../utils";
+import { PgCodec, PgSettings, PgTx, PgView, PgWeb3 } from "../../utils";
 import { ExplorerLink } from "./ExplorerLink";
 
-// Show a notification toast with explorer links after a transaction is sent.
+// After a transaction is sent, toast "Transaction sent" with its signature
+// linked to the block explorer picked in Settings.
 export const tx = () => {
   return PgTx.onDidSend((sentTx) => {
     // Check setting
@@ -18,9 +12,6 @@ export const tx = () => {
 
     // Don't repeat a link its sender shows (a tutorial card)
     if (isTxLinkedBySender()) return;
-
-    // Don't show on playnet
-    if (PgConnection.cluster === "playnet") return;
 
     // If a tx includes an BPF Upgradeable Loader program ix, only allow the
     // final deploy/upgrade ixs to not spam

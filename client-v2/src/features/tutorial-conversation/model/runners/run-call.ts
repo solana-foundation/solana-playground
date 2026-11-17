@@ -1,6 +1,8 @@
 /* eslint-disable layers/curry-order, max-params, unicorn/no-null -- tutorial flow v2 predates these rules; cleanup tracked from SF#94 */
 import type { Idl } from "@coral-xyz/anchor";
 
+import { isStopped } from "@/utils/stopped";
+
 import type { RunInput, RunStage } from "../ports";
 import type { Exists, RunResult, UnreadTx } from "../progress";
 import type { AccountData } from "./account-read";
@@ -100,6 +102,24 @@ export interface RunPort {
 const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /**
+ * A run or call that ended with a `StoppedError` (HOO-2822): no failure,
+ * never reported. A guard: the `run` command is not stoppable and a call
+ * runs through no command, so neither can be stopped today
+ */
+const stoppedOf = (
+  act: "run" | "call",
+  seconds: () => number,
+  e: unknown
+): TxResult => ({
+  act,
+  ok: false,
+  seconds: seconds(),
+  reason: "stopped",
+  message: messageOf(e),
+  log: "",
+});
+
+/**
  * A failed call's line when the learner's program no longer matches what the
  * step expects. The conversation adds the offer to show the lines (`view.ts`);
  * the Call panel has no such action, so this line promises none.
@@ -160,6 +180,7 @@ export const runOrCall = async (
   try {
     return await attempt(port, act, input, onStage, seconds, fail);
   } catch (e) {
+    if (isStopped(e)) return stoppedOf(act, seconds, e);
     port.report(e, `The tutorial ${act}`);
     return fail(messageOf(e));
   }
@@ -233,9 +254,52 @@ const attempt = async (
 
   stage(labels[index]);
   const sends = await port.send(act, input);
-  // A first try `PgTx.send` answered by sending again is not a refusal
+  return fromSends({
+    port,
+    act,
+    input,
+    sends,
+    programId,
+    seconds,
+    fail,
+    onConfirming: () => stage(RUN_STAGES.confirming),
+  });
+};
+
+/** What `fromSends` reads a run's or call's result from */
+interface Sent {
+  port: RunPort;
+  act: "run" | "call";
+  input: RunInput;
+  /** What the run handed to the chain, and what it threw, if anything */
+  sends: { captured: Captured[]; error: unknown };
+  programId: string;
+  seconds: () => number;
+  fail: (message: string) => TxResult;
+  /** The sends are in: reading them back starts */
+  onConfirming: () => void;
+}
+
+/**
+ * The result of what a run or call sent: nothing sent, the refusals, and
+ * each sent transaction read back from devnet
+ */
+const fromSends = async ({
+  port,
+  act,
+  input,
+  sends,
+  programId,
+  seconds,
+  fail,
+  onConfirming,
+}: Sent): Promise<TxResult> => {
+  // A try `PgTx.send` answered by sending again is not a refusal; after its last resend the answer arrives as `error`
   const captured = sends.captured.filter((c) => !isRetriedSend(c));
   const { error } = sends;
+  // A guard (see `stoppedOf`): a stop after some sends is still a stop,
+  // since the run did not finish
+  if (isStopped(error)) return stoppedOf(act, seconds, error);
 
   if (!captured.length) {
     if (error instanceof NoSuchInstructionError) {
@@ -258,7 +322,7 @@ const attempt = async (
     };
   }
 
-  stage(RUN_STAGES.confirming);
+  onConfirming();
   const sent: SentTx[] = [];
   for (const c of captured) {
     const { calls, undecoded } = port.decode(c.encoded, input.idl);
@@ -275,6 +339,54 @@ const attempt = async (
     );
   }
   return landedResult(port, act, input, sent, programId, seconds, fail, error);
+};
+
+/**
+ * A run of the client file started outside its act card (the terminal's
+ * `run`, the explorer's Run), read as the run act reads its own: what it
+ * sent, read back from devnet, against the live step's `input`. Nothing is
+ * funded, staged or printed: the run has already happened. Undefined when there
+ * is no program to read its calls against, off devnet, or when the reading
+ * failed (reported).
+ *
+ * @param port the run port the act uses
+ * @param input the live step's run input
+ * @param sends what the run handed to the chain, and what it threw
+ * @param startedAt when it started, for the result's seconds
+ * @returns the result the run act would have posted for the same sends
+ */
+export const readOutsideRun = async (
+  port: RunPort,
+  input: RunInput,
+  sends: { captured: Captured[]; error: unknown },
+  startedAt: number
+): Promise<TxResult | undefined> => {
+  // Another cluster's run is no step's: tutorials run on devnet
+  if (port.refusal()) return undefined;
+  const programId = port.programId();
+  if (!programId) return undefined;
+  const seconds = () => (port.now() - startedAt) / 1000;
+  try {
+    return await fromSends({
+      port,
+      act: "run",
+      input,
+      sends,
+      programId,
+      seconds,
+      fail: (message) => ({
+        act: "run",
+        ok: false,
+        seconds: seconds(),
+        message,
+        log: "",
+      }),
+      onConfirming: () => {},
+    });
+  } catch (e) {
+    port.report(e, "Reading a client run outside its card");
+    return undefined;
+  }
 };
 
 /**
@@ -346,11 +458,7 @@ const landedResult = async (
       return mismatched(result);
     }
     if (result.reason === undefined) {
-      const exists = existingOf(
-        result.log.split("\n"),
-        result.refused,
-        input.creates
-      );
+      const exists = existingOf(sent, result.refused, input.creates);
       if (exists) return { ...result, exists };
     }
     return result;
@@ -378,9 +486,13 @@ const landedResult = async (
 };
 
 if (import.meta.vitest) {
-  const { describe, it, expect, vi } = import.meta.vitest;
+  const { beforeAll, describe, it, expect, vi } = import.meta.vitest;
 
   describe("features/tutorial-conversation/model/runners/run-call", () => {
+    let StoppedError: typeof import("@/utils/stopped").StoppedError;
+    beforeAll(async () => {
+      ({ StoppedError } = await import("@/utils/stopped"));
+    });
     const SOL = 1_000_000_000;
     const PROGRAM = "He11o1111111111111111111111111111111111111";
     const WALLET = "Wa11et1111111111111111111111111111111111111";
@@ -448,6 +560,49 @@ if (import.meta.vitest) {
         now: () => (clock += 500),
       };
     };
+
+    // HOO-2806: a run started outside its card, read as the card reads its own
+    describe("readOutsideRun", () => {
+      const SENT = {
+        captured: [{ kind: "sent" as const, signature: "5ig", encoded: "tx" }],
+        error: undefined,
+      };
+      const INPUT = { beatId: "client-run", log: "Hello, World!" };
+
+      it("reads what it sent as the act would, and funds nothing", async () => {
+        const port = portWith({});
+        await expect(
+          readOutsideRun(port, INPUT, SENT, 0)
+        ).resolves.toMatchObject({ act: "run", ok: true });
+        expect(port.funding.balance).not.toHaveBeenCalled();
+        expect(port.funding.airdrop).not.toHaveBeenCalled();
+      });
+
+      it("judges nothing off devnet, or with no program deployed", async () => {
+        await expect(
+          readOutsideRun(
+            portWith({ refusal: "Switch to devnet." }),
+            INPUT,
+            SENT,
+            0
+          )
+        ).resolves.toBeUndefined();
+        await expect(
+          readOutsideRun(portWith({ programId: null }), INPUT, SENT, 0)
+        ).resolves.toBeUndefined();
+      });
+
+      it("is a run that threw when the script threw after sending", async () => {
+        await expect(
+          readOutsideRun(
+            portWith({}),
+            INPUT,
+            { captured: SENT.captured, error: new Error("x is undefined") },
+            0
+          )
+        ).resolves.toMatchObject({ ok: false, message: "x is undefined" });
+      });
+    });
 
     describe("the account an act draws", () => {
       const CHOP: Captured = { kind: "sent", signature: "sig", encoded: "tx" };
@@ -625,6 +780,48 @@ if (import.meta.vitest) {
       expect(result).not.toHaveProperty("reason");
     });
 
+    it.each(["run", "call"] as const)(
+      "a %s the learner stopped is stopped, not failed, and nothing is reported",
+      async (act) => {
+        const before = portWith({
+          send: async () => ({
+            captured: [],
+            error: new StoppedError("Stopped."),
+          }),
+        });
+        expect((await stagesOf(before, act)).result).toMatchObject({
+          act,
+          ok: false,
+          reason: "stopped",
+          message: "Stopped.",
+        });
+        expect(before.report).not.toHaveBeenCalled();
+        const thrown = portWith({
+          send: async () => {
+            throw new StoppedError("Stopped.");
+          },
+        });
+        expect((await stagesOf(thrown, act)).result).toMatchObject({
+          act,
+          ok: false,
+          reason: "stopped",
+        });
+        expect(thrown.report).not.toHaveBeenCalled();
+        const after = portWith({
+          send: async () => ({
+            captured: [{ kind: "sent", signature: "5ig", encoded: "tx" }],
+            error: new StoppedError("Stopped."),
+          }),
+        });
+        expect((await stagesOf(after, act)).result).toMatchObject({
+          act,
+          ok: false,
+          reason: "stopped",
+        });
+        expect(after.report).not.toHaveBeenCalled();
+      }
+    );
+
     describe("runOrCall", () => {
       const CREATES = { instruction: "init_player", account: "player" };
       const runWith = (port: RunPort, act: "run" | "call") =>
@@ -678,7 +875,12 @@ if (import.meta.vitest) {
         });
         port.decode = () => ({
           calls: [
-            { instruction: "initPlayer", args: {}, accounts: [], wrote: [] },
+            {
+              instruction: "initPlayer",
+              args: {},
+              accounts: [{ name: "Player", address: "Player1" }],
+              wrote: [{ name: "player", address: "Player1" }],
+            },
           ],
         });
         expect(await runWith(port, "call")).toMatchObject({

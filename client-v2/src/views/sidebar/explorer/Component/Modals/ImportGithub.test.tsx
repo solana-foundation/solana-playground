@@ -19,8 +19,14 @@ import {
   memoryProvider as logMemory,
   resetLogger,
 } from "@/shared/lib/logger";
+import {
+  initTelemetry,
+  memoryProvider as telemetryMemory,
+  resetTelemetry,
+} from "@/shared/lib/telemetry";
 import { Modal } from "@/shared/ui/modal";
 import { requireFor } from "@/test-utils/require-for";
+import { GithubImportError } from "@/utils/import-error";
 import { PgView as PgViewDirect } from "@/utils/view";
 import { ModalIdContext } from "@/widgets/overlays";
 import { ModalLayerContext } from "@/widgets/overlays/ui/modal-layer";
@@ -28,7 +34,9 @@ import { ModalLayerContext } from "@/widgets/overlays/ui/modal-layer";
 // The `utils` barrel needs a booted app; the modal uses a few of its parts,
 // and its icons' `Svg` reads `PgTheme` for styles that do not matter here
 const utils = vi.hoisted(() => {
-  class ImportCancelledError extends Error {}
+  // Replaced by the real class in the mock below: `trackImport` reads it from
+  // `@/utils/import-error`, and the dialog from the barrel, the same class
+  const ImportCancelledError = class extends Error {};
   // The dialog's limit guard reads it: a refusal other than a limit passes on
   class ExplorerLimitError extends Error {}
   return {
@@ -61,7 +69,11 @@ const utils = vi.hoisted(() => {
     PgTheme: { convertToCSS: () => "", getColor: () => "inherit" },
   };
 });
-vi.mock("../../../../../utils", () => utils);
+vi.mock("../../../../../utils", async () => {
+  const real = await import("@/utils/import-error");
+  utils.ImportCancelledError = real.ImportCancelledError;
+  return utils;
+});
 
 const gist = vi.hoisted(() => ({
   importGist: vi.fn(),
@@ -73,7 +85,10 @@ import { IMPORTED } from "./imported";
 import { ImportGithub } from "./ImportGithub";
 
 let toast: MockInstance<typeof PgViewDirect.setToast>;
+let sent: ReturnType<typeof telemetryMemory>;
 beforeEach(() => {
+  sent = telemetryMemory();
+  initTelemetry({ providers: [sent] });
   initLogger({ providers: [logMemory()] });
   utils.PgGithub.import.mockReset();
   gist.importGist.mockReset();
@@ -83,7 +98,14 @@ beforeEach(() => {
 afterEach(() => {
   toast.mockRestore();
   resetLogger();
+  resetTelemetry();
 });
+
+/** The project events the dialog sent, by name and parameters */
+const projectEvents = () =>
+  sent.events
+    .filter((event) => event.name.startsWith("project_"))
+    .map(({ name, params }) => ({ name, params }));
 
 const draw = () =>
   render(
@@ -124,6 +146,9 @@ it("closes the dialog as imported once an example is imported", async () => {
     )
   );
   expect(toast).not.toHaveBeenCalled();
+  expect(projectEvents()).toEqual([
+    { name: "project_imported", params: { via: "github" } },
+  ]);
 });
 
 it("keeps the dialog, quietly, when the program selection is closed", async () => {
@@ -137,6 +162,8 @@ it("keeps the dialog, quietly, when the program selection is closed", async () =
   await new Promise((r) => setTimeout(r, 0));
   expect(toast).not.toHaveBeenCalled();
   expect(utils.PgView.closeModal).not.toHaveBeenCalled();
+  // Closing the choice is the user changing their mind, not a failure
+  expect(projectEvents()).toEqual([]);
 });
 
 it("tells the user an example that failed to import", async () => {
@@ -147,6 +174,12 @@ it("tells the user an example that failed to import", async () => {
 
   await waitFor(() => expect(toast).toHaveBeenCalledTimes(1));
   expect(utils.PgView.closeModal).not.toHaveBeenCalled();
+  expect(projectEvents()).toEqual([
+    {
+      name: "project_import_failed",
+      params: { via: "github", reason: "other" },
+    },
+  ]);
 });
 
 /** Type the URL into the dialog's field and press its own Import */
@@ -188,7 +221,39 @@ it("closes the dialog as imported once the URL's project is imported", async () 
     expect(close).toHaveBeenCalledWith(IMPORTED, "import-github")
   );
   expect(utils.PgGithub.import).toHaveBeenCalledWith("https://github.com/c/d");
+  expect(projectEvents()).toEqual([
+    { name: "project_imported", params: { via: "github" } },
+  ]);
   close.mockRestore();
+});
+
+it("counts a URL whose repository was not found, with its reason", async () => {
+  utils.PgGithub.import.mockRejectedValue(
+    new GithubImportError("Repository not found.", "not-found")
+  );
+  draw();
+
+  submitUrl("https://github.com/c/missing");
+
+  expect(await screen.findByText(/Repository not found/)).toBeTruthy();
+  expect(projectEvents()).toEqual([
+    {
+      name: "project_import_failed",
+      params: { via: "github", reason: "not-found" },
+    },
+  ]);
+});
+
+it("sends no project event when the URL's program selection is closed", async () => {
+  utils.PgGithub.import.mockRejectedValue(new utils.ImportCancelledError());
+  draw();
+
+  submitUrl("https://github.com/c/d");
+
+  await waitFor(() => expect(utils.PgGithub.import).toHaveBeenCalled());
+  // Let the submit settle: a failure would be counted on the next ticks
+  await new Promise((r) => setTimeout(r, 0));
+  expect(projectEvents()).toEqual([]);
 });
 
 it("asks for a GitHub or gist URL", () => {
@@ -210,6 +275,8 @@ it("imports a gist URL as a gist, from the dialog", async () => {
     )
   );
   expect(utils.PgGithub.import).not.toHaveBeenCalled();
+  // A gist counts through its own `gist_import_*` events
+  expect(projectEvents()).toEqual([]);
 });
 
 it("still imports a repository URL as a repository", async () => {

@@ -124,7 +124,10 @@ function ConsoleDrawerStatus({
   return (
     <div
       data-slot="console-drawer-status"
-      className={cn("flex min-w-0 items-center gap-1.5 truncate", className)}
+      className={cn(
+        "flex min-w-0 items-center gap-1.5 truncate font-read",
+        className
+      )}
       {...props}
     />
   );

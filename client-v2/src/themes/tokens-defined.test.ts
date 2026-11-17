@@ -22,6 +22,7 @@ const TOKEN_SOURCES = [
   "app/styles/playground-theme.css",
 ];
 
+// eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
 const read = (rel: string) => fs.readFileSync(path.join(SRC, rel), "utf8");
 
 const used = (text: string) =>

@@ -603,6 +603,25 @@ describe("reloadCurrentFromDisk", () => {
     store().set("/alpha/src/lib.rs", "irrelevant");
 
     expect(await reloadCurrentFromDisk()).toBe("skipped");
+    expect(PgExplorer.switchWorkspace).not.toHaveBeenCalled();
+    expect(PgEditorModels.drop).not.toHaveBeenCalled();
+  });
+
+  // The project list beside a shared link went on naming projects another
+  // tab had renamed or deleted
+  it("re-reads the list beside a temporary workspace", async () => {
+    vi.spyOn(PgExplorer, "isTemporary", "get").mockReturnValue(true);
+
+    expect(await reloadCurrentFromDisk()).toBe("skipped");
+    expect(PgExplorer.refreshWorkspaces).toHaveBeenCalledTimes(1);
+  });
+
+  it("is owed again when the list beside a temporary workspace fails to read", async () => {
+    vi.spyOn(PgExplorer, "isTemporary", "get").mockReturnValue(true);
+    vi.spyOn(PgExplorer, "refreshWorkspaces").mockResolvedValue(false);
+
+    expect(await reloadCurrentFromDisk()).toBe("deferred");
+    expect(PgExplorer.switchWorkspace).not.toHaveBeenCalled();
   });
 
   it("skips when the workspace directory is gone", async () => {

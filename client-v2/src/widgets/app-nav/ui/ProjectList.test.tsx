@@ -52,7 +52,12 @@ const app = vi.hoisted(() => {
     state,
     emit: () => listeners.forEach((listener) => listener()),
     PgExplorer: {
+      // A temporary view (a repository or gist link) keeps no list in
+      // memory; the stored one stays readable beside it
       get allWorkspaceNames() {
+        return state.temporary ? undefined : state.names;
+      },
+      get storedWorkspaceNames() {
         return state.names;
       },
       get isTemporary() {
@@ -61,7 +66,9 @@ const app = vi.hoisted(() => {
       get currentWorkspaceName() {
         return state.current;
       },
-      workspaceIdOf: (name: string) => state.ids[name],
+      workspaceIdOf: (name: string) =>
+        state.temporary ? undefined : state.ids[name],
+      storedWorkspaceIdOf: (name: string) => state.ids[name],
       isWorkspaceNameValid: (name: string) => /^(?!\s)[\w\s-]+$/.test(name),
       switchWorkspace: vi.fn(),
       renameWorkspace: vi.fn(),
@@ -259,6 +266,29 @@ describe("ProjectList", () => {
       </TooltipProvider>
     );
     expect(screen.queryByText("No projects")).toBeNull();
+  });
+
+  it("lists the stored projects while a repository link's project is open", () => {
+    app.state.temporary = true;
+    app.state.current = undefined;
+    localStorage.setItem(PINS_KEY, JSON.stringify(["id-b"]));
+    draw();
+
+    // Pinned first: the pin is keyed by the stored id
+    expect(projectNames()).toEqual(["beta", "alpha"]);
+  });
+
+  it("opens a stored project picked while a repository link's project is open", async () => {
+    app.state.temporary = true;
+    app.state.current = undefined;
+    const onPicked = vi.fn();
+    draw(onPicked);
+
+    fireEvent.click(screen.getByRole("button", { name: "alpha" }));
+
+    await waitFor(() => expect(onPicked).toHaveBeenCalled());
+    expect(app.PgExplorer.switchWorkspace).toHaveBeenCalledWith("alpha");
+    expect(onPickCurrent).not.toHaveBeenCalled();
   });
 
   it("shows skeleton rows until the explorer has read the names", () => {

@@ -28,3 +28,9 @@ export const toastStartFailed = toastFailed({
   lead: "Could not create the project.",
   name: "new-project-start-failed",
 });
+
+/** The same for Import from GitHub, once New project was left */
+export const toastImportFailed = toastFailed({
+  lead: "Could not import.",
+  name: "new-project-import-failed",
+});

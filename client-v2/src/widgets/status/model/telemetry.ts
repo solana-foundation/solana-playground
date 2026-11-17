@@ -17,13 +17,13 @@ type StatusEvents = {
   status_indicator_picked: {
     indicator: IndicatorId;
     state: MeasuredState;
-    from: PickedFrom;
+    via: PickedFrom;
   };
   /** A user's Try again on an indicator's panel or sheet row finished
    * asking: `answered` is whether the cluster, or the hosted model, answered. */
   status_retried: {
     indicator: Exclude<IndicatorId, "rust">;
-    from: PickedFrom;
+    via: PickedFrom;
     answered: boolean;
   };
   /** A user opened the phone's status sheet; `worst` is the chip's state. */

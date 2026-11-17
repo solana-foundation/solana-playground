@@ -49,6 +49,17 @@ export class GistImportError extends Error {
 }
 
 /**
+ * A request GitHub never answered (`fetch` rejected), told apart from the
+ * failures GitHub did answer; its reason stays `request-failed`
+ */
+export class GistUnreachableError extends GistImportError {
+  constructor(message: string) {
+    super("request-failed", message);
+    this.name = "GistUnreachableError";
+  }
+}
+
+/**
  * Turn a failed response into a message that explains what to do next,
  * modelled on repository import's (`PgGithub`). A missing gist says "may have
  * been deleted" where a repository says "may be private": a secret gist is
@@ -104,8 +115,7 @@ const request = async (url: string, subject: string) => {
     response = await fetch(url);
   } catch (error) {
     log.warn(`request for ${subject} failed`, { context: { url, error } });
-    throw new GistImportError(
-      "request-failed",
+    throw new GistUnreachableError(
       `Could not reach GitHub to read ${subject}. Check the connection and ` +
         "try again."
     ).causedBy(error);
@@ -275,29 +285,32 @@ const layOut = async (files: Record<string, { content: string }>) => {
  * @throws {GistImportError} with the reason the import stopped
  */
 export const fetchGistFiles = async (ref: GistRef, from: GistImportSource) => {
-  gistTelemetry.track("gist_import_started", { from });
+  gistTelemetry.track("gist_import_started", { via: from });
   try {
     const { owner, files } = await fetchGist(ref);
     const laidOut = await layOut(files);
     gistTelemetry.track("gist_import_succeeded", {
-      from,
+      via: from,
       layout: laidOut.layout,
     });
     return { owner, files: laidOut.files };
   } catch (error) {
-    // Anything else is a fault of ours, not of the gist: reported, and
-    // counted with the failed requests since the user can only retry
+    // Anything else is a fault of ours, not of the gist or of GitHub:
+    // reported, and counted apart from GitHub's failures
     const failure =
       error instanceof GistImportError
         ? error
         : new GistImportError(
-            "request-failed",
+            "unexpected",
             `Could not import gist "${ref.id}".`
           ).causedBy(error);
     if (failure !== error) {
       log.error(error as Error, { report: true, context: { id: ref.id } });
     }
-    gistTelemetry.track("gist_import_failed", { from, reason: failure.reason });
+    gistTelemetry.track("gist_import_failed", {
+      via: from,
+      reason: failure.reason,
+    });
     throw failure;
   }
 };

@@ -93,6 +93,25 @@ describe("export a project, then import its zip", () => {
     }
   );
 
+  it("brings back an unmarked program with the same files", async () => {
+    const files: TupleFiles = [
+      ["src/lib.rs", "// Import anchor"],
+      ["client/client.ts", 'console.log("client");\n'],
+      ["tests/a.test.ts", 'describe("a", () => {});\n'],
+      ["README.md", "# Notes\n"],
+    ];
+    await PgExplorer.createWorkspace("unmarked", {
+      files: files.map(([path, content]) => [`/unmarked/${path}`, content]),
+    });
+    const exported = vi.spyOn(PgCommon, "export").mockImplementation(() => {});
+
+    await PgFramework.exportWorkspace();
+    const [fileName, blob] = exported.mock.calls[0] as [string, Blob];
+    const imported = await PgFramework.importFiles([asDropped(fileName, blob)]);
+
+    expect(sorted(imported)).toEqual(sorted(files));
+  });
+
   it("keeps the folder of a project with only tests", async () => {
     const files: TupleFiles = [
       ["tests/rpc.test.ts", 'import fixture from "./fixture.json";\n'],

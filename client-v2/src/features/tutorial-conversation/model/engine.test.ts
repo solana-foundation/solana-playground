@@ -417,7 +417,7 @@ describe("Hello Anchor through the engine", () => {
     ).toEqual(
       [1, 2, 3, 4].map((n) => ({
         tutorial: "hello-anchor",
-        step: n,
+        step_index: n,
         via: n === 3 ? "client" : "chat",
         seconds: expect.any(Number),
       }))
@@ -541,7 +541,7 @@ describe("Lumberjack's step 2, on a player that already exists,", () => {
     ).toEqual([
       {
         tutorial: "lumberjack",
-        step: 2,
+        step_index: 2,
         via: "call_panel",
         seconds: expect.any(Number),
         reason: "exists",

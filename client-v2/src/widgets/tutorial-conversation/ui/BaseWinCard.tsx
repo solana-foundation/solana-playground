@@ -8,6 +8,7 @@ import { Button } from "@/shared/ui/button";
 import { Kbd } from "@/shared/ui/kbd";
 import { Tag } from "@/shared/ui/tag";
 
+import { nextStepLabel, stepDoneLabel } from "../model/card-labels";
 import { BaseDrawnCheck } from "./BaseDrawnCheck";
 import { PHONE_CTA } from "./card-action";
 import { nothingFocused } from "./keys";
@@ -96,7 +97,7 @@ const BaseWinCard = ({
 
   return (
     <section
-      aria-label={`Step ${index} done`}
+      aria-label={stepDoneLabel(index)}
       className="flex flex-col gap-3 rounded-panel border border-border bg-surface-panel p-4"
     >
       <div className="flex items-start gap-3">
@@ -105,7 +106,7 @@ const BaseWinCard = ({
             where the headline does */}
         <div className="flex min-w-0 flex-1 flex-col gap-3">
           <div className="flex flex-col gap-1">
-            <Tag className="w-fit">Step {index} done</Tag>
+            <Tag className="w-fit">{stepDoneLabel(index)}</Tag>
             <p className={HEADLINE}>
               <Prose text={noStop(win.headline, phone)} />
             </p>
@@ -122,7 +123,7 @@ const BaseWinCard = ({
                   onClick={onNext}
                   className={cn(phone && PHONE_CTA, phoneCtaWidth(layout))}
                 >
-                  Next: {next}
+                  {nextStepLabel(next)}
                   {!phone && (
                     <Kbd
                       aria-hidden="true"

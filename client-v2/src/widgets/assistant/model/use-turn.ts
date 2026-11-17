@@ -1,9 +1,17 @@
-import { useEffect, useReducer, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 
 import { PgSession } from "@/features/auth";
 import { report, toReplayMessagesWith } from "@/features/persistence";
 import type { AiTurnError, ModelProvider } from "@/shared/lib/ai";
 import { isNetworkFailure } from "@/shared/lib/ai";
+import type { Draft } from "@/shared/lib/draft";
+import { createDraft } from "@/shared/lib/draft";
 import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
@@ -182,7 +190,52 @@ export type ConnectOpener = (via: ConnectVia, preset?: ConnectPreset) => void;
 
 export interface TurnOptions {
   open: ConnectOpener;
+  /**
+   * Keeps what the composer holds for the next hook with the same key, so a
+   * chat that unmounts and comes back (a tutorial's, across Back to
+   * tutorials) still holds its draft. Without one the draft is the hook's own.
+   */
+  draftKey?: string;
 }
+
+/**
+ * Drafts by account and `draftKey`, for this page's life; an empty one is
+ * dropped. By account, so one signed in after another in the same tab never
+ * finds the last one's half-typed question, whether or not a chat was
+ * mounted when the account changed.
+ */
+const drafts = new Map<string, string>();
+/** Whose a draft typed before the page has read the session is */
+const UNREAD = "unread";
+const draftSlot = (draftKey: string | undefined) => {
+  if (draftKey === undefined) return undefined;
+  const owner = PgSession.hasRead
+    ? PgSession.get()?.id ?? "signed-out"
+    : UNREAD;
+  return `${owner}\u0000${draftKey}`;
+};
+const earlySlot = (draftKey: string) => `${UNREAD}\u0000${draftKey}`;
+/**
+ * The draft for `draftKey` under the account signed in. One typed before the
+ * session was read by a chat no longer on screen is dropped once the read
+ * lands: nothing says whose it is, and the next account to open that chat
+ * must not get it. A chat on screen across the read keeps it (`useTurn`).
+ */
+const draftOf = (draftKey: string | undefined) => {
+  const slot = draftSlot(draftKey);
+  if (slot === undefined || draftKey === undefined) return "";
+  if (PgSession.hasRead) drafts.delete(earlySlot(draftKey));
+  return drafts.get(slot) ?? "";
+};
+
+/**
+ * The turn in flight, whichever hook started it, and a send still finding
+ * its backend. Both are the page's, not a hook's: a chat that unmounts
+ * mid-turn and mounts again still has its Stop, and two hooks mounted at
+ * once (the panel and a tutorial's chat) cannot both start a turn.
+ */
+const liveTurn: { current?: AbortController } = {};
+const startingTurn = { current: false };
 
 /**
  * Where the turn is. `stopping` is a turn that was stopped, by the user
@@ -232,9 +285,11 @@ export interface Turn {
   phase: TurnPhase;
   /** `phase` is not idle: a turn runs, waits on an approval or on a busy model, or unwinds */
   busy: boolean;
-  /** What is in the composer */
-  input: string;
-  setInput(value: string): void;
+  /**
+   * What is in the composer. A store, not a string, so typing re-renders only
+   * the composer that subscribes to it (`useDraft`)
+   */
+  draft: Draft;
   /** Open Connect a model, on `preset`'s backend when given */
   openConnect: ConnectOpener;
   /**
@@ -336,13 +391,59 @@ const unconnectedPreset = (): ConnectPreset | undefined => {
  */
 const restored = new WeakSet<Connection>();
 
-export const useTurn = ({ open }: TurnOptions): Turn => {
+export const useTurn = ({ open, draftKey }: TurnOptions): Turn => {
   const [, render] = useReducer((n: number) => n + 1, 0);
   useEffect(() => PgAssistant.onDidChange(render).dispose, []);
   // A session ending or starting changes whether the default can take a turn
   useEffect(() => PgSession.onDidChange(render).dispose, []);
 
-  const [input, setInput] = useState("");
+  // What the composer holds lives in a store (`Draft`), so a keystroke
+  // re-renders only the composer. It starts as the chat's saved draft, and
+  // follows the chat's slot: see the effects below
+  const slot = draftSlot(draftKey);
+  const [draft] = useState(() => {
+    const created = createDraft();
+    created.set(draftOf(draftKey));
+    return created;
+  });
+  // Through a ref: the subscription below subscribes once and keeps the first
+  // render's key
+  const key = useRef(draftKey);
+  key.current = draftKey;
+  // Keep what is typed for the next hook with the same key (a chat that
+  // unmounts and comes back, a tutorial across Back to tutorials)
+  useEffect(
+    () =>
+      draft.subscribe(() => {
+        const at = draftSlot(key.current);
+        if (at === undefined) return;
+        const text = draft.get();
+        if (text) drafts.set(at, text);
+        else drafts.delete(at);
+      }),
+    [draft]
+  );
+  // Another chat or another account shows that one's draft. Text typed while
+  // the session was still being read is the account's the read found: it stays
+  // on screen rather than blanking mid-typing. Before paint, so the composer
+  // never shows the last chat's words
+  const shownSlot = useRef(slot);
+  useLayoutEffect(() => {
+    const was = shownSlot.current;
+    shownSlot.current = slot;
+    if (was === slot) return;
+    const isCarried =
+      draftKey !== undefined &&
+      slot !== undefined &&
+      was === earlySlot(draftKey);
+    if (isCarried) {
+      const text = draft.get();
+      if (text) drafts.set(slot, text);
+      drafts.delete(earlySlot(draftKey));
+      return;
+    }
+    draft.set(draftOf(draftKey));
+  }, [draft, draftKey, slot]);
   const [focusRequest, focus] = useReducer((n: number) => n + 1, 0);
   // A prompt that arrived with no backend waits in the composer. Saying so is
   // the panel's job, not the conversation's: a notice item would outlive the
@@ -362,11 +463,20 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     context: ReadonlySet<string>;
     instance: Provider;
   } | null>(null);
-  const turn = useRef<AbortController | null>(null);
+  const turn = liveTurn;
   // Set from the first `send` until its turn starts, so a second send in the
   // meantime (a double Enter, a suggestion clicked twice) cannot start another
   // while the first is still finding a backend
-  const starting = useRef(false);
+  const starting = startingTurn;
+  // A turn outlives the hook that started it (`liveTurn`); what it ends on
+  // after the unmount is said in the thread, since no composer is left to show it
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   // A message waiting on a busy model. The ref is what the handlers read: a
   // send through `startRef` holds an older render's state. The state draws it
@@ -381,10 +491,9 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
 
   // The store says what a live turn is doing; the controller says whether a
   // turn is over, since a stopped one still has to unwind. A turn the store
-  // records but this hook has no controller for was started before the hook
-  // remounted. The store's status may already read idle (a closed thread, a
-  // backend change), so its record is all that says the turn still runs; it
-  // shows as stopping because this hook cannot stop it
+  // records with no controller here was cut off by the store (a closed
+  // thread, a backend change), which resets its status to idle, so its record
+  // is all that says the turn still runs; it shows as stopping
   const phaseOf = (): TurnPhase => {
     if (turn.current?.signal.aborted) return "stopping";
     if (PgAssistant.status !== "idle") return PgAssistant.status;
@@ -400,7 +509,14 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
   useEffect(() => {
     PgAssistant.markTurnBusy(busy);
   }, [busy]);
-  useEffect(() => () => PgAssistant.markTurnBusy(false), []);
+  // A turn still running when the chat unmounts keeps the key held; its own
+  // end releases it (`runTurn`)
+  useEffect(
+    () => () => {
+      if (!liveTurn.current) PgAssistant.markTurnBusy(false);
+    },
+    []
+  );
 
   const connection = usableConnection();
   // Connecting answers the hint; a later disconnect must not bring it back
@@ -482,8 +598,8 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
   /**
    * Whether a turn, a send still finding its backend, or a message waiting on
    * a busy model is under way.
-   * `PgAssistant.turnRunning` covers a turn this hook has no controller for,
-   * and one whose status a closed thread reset; see `turnRunning`.
+   * `PgAssistant.turnRunning` covers a turn the store cut off, whose status a
+   * closed thread reset; see `turnRunning`.
    */
   const occupied = () =>
     starting.current ||
@@ -508,7 +624,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     if (current && restored.has(current)) {
       const backend = resolveSendBackend();
       if (backend.kind === "ask") {
-        setInput(text);
+        draft.set(text);
         openConnect(backend.via, backend.preset);
         return "connecting";
       }
@@ -519,7 +635,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     if (!current && !PgAssistant.connection) {
       const backend = resolveSendBackend();
       if (backend.kind === "ask") {
-        setInput(text);
+        draft.set(text);
         openConnect(backend.via, backend.preset);
         return "connecting";
       }
@@ -540,7 +656,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     if (!current) {
       // Nothing to send to: the prompt stays where the user can send it once
       // a backend is connected
-      setInput(text);
+      draft.set(text);
       openConnect("send");
       return "connecting";
     }
@@ -583,7 +699,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     PgAssistant.addUserMessage(trimmed);
     // Cleared only once the message is in: a store that throws leaves the
     // typed text where the user can send it again
-    setInput("");
+    draft.set("");
     await runTurn({ text: trimmed, attempt: 0 });
     return "sent";
   };
@@ -622,7 +738,16 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
       if (!controller.signal.aborted && !(e instanceof ModelBusyError)) {
         trackTurnFailureFor(current.id)(e);
       }
-      if (!controller.signal.aborted && e instanceof ModelBusyError) {
+      if (
+        !controller.signal.aborted &&
+        e instanceof ModelBusyError &&
+        !mounted.current
+      ) {
+        // No composer is left to count down: the wait ends as a Stop, as it
+        // does when the chat unmounts during one
+        PgAssistant.addNotice("Stopped.");
+        assistantTelemetry.track("assistant_turn_stopped", {});
+      } else if (!controller.signal.aborted && e instanceof ModelBusyError) {
         waitOnBusyWith(current.id)(outgoing, e);
       } else if (
         !controller.signal.aborted &&
@@ -672,9 +797,13 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
         log.error(e, { report: true, context: { stopped: true } });
       }
     } finally {
-      if (turn.current === controller) turn.current = null;
+      if (turn.current === controller) turn.current = undefined;
       const finished = PgAssistant.endTurn(controller);
       PgAssistant.setStatus("idle");
+      // Its hook is gone, so no effect of it releases the key it held
+      if (!mounted.current && !liveTurn.current) {
+        PgAssistant.markTurnBusy(false);
+      }
       focus();
 
       // End of turn is the natural commit point: the exchange is complete and
@@ -838,7 +967,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
   useEffect(() => {
     /** A prompt the user did not type gets one look before it costs a turn */
     const place = (text: string) => {
-      setInput(text);
+      draft.set(text);
       focus();
     };
     /**
@@ -876,7 +1005,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
         if (!PgAssistant.connection) {
           const backend = resolveSendBackend();
           if (backend.kind === "ask") {
-            setInput(request.text);
+            draft.set(request.text);
             setPromptWaiting(true);
             openConnect(backend.via, backend.preset);
             return;
@@ -935,8 +1064,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     tryNow,
     phase,
     busy,
-    input,
-    setInput,
+    draft,
     openConnect,
     addKey,
     promptWaiting,

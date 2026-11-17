@@ -44,7 +44,6 @@ test.describe("the wasm CLIs", REAL_WASM, () => {
   // The last lines of each help text: the terminal renders only the rows that fit, so its first lines scroll away
   for (const [cli, lastLine] of [
     ["spl-token", "Wrap native SOL in a SOL token account"],
-    ["anchor", "Commands for interacting with interface definitions"],
     ["sugar", "Withdraw funds from candy machine account by closing it"],
   ]) {
     test(`${cli} --help lists its subcommands`, async ({

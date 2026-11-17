@@ -4,8 +4,21 @@
  * @param input command input
  * @returns the parsed tokens
  */
-export const parse = (input: string) => {
+export const parse = (input: string) => tokenize(input).tokens;
+
+/**
+ * Parse the given input to the tokens a command runs with: a run of spaces
+ * separates as one space does, and only a quoted empty string is an empty token.
+ */
+export const parseArgs = (input: string) => {
+  const { tokens, quotedIndices } = tokenize(input);
+  return tokens.filter((token, i) => token !== "" || quotedIndices.has(i));
+};
+
+/** Autocomplete reads the empty token each unquoted space starts, so {@link parse} keeps them. */
+const tokenize = (input: string) => {
   const tokens = [];
+  const quotedIndices = new Set<number>();
   let currentTokenIndex = 0;
   let isInQuotes = false;
   for (const char of input) {
@@ -13,6 +26,7 @@ export const parse = (input: string) => {
       case '"':
       case "'":
         isInQuotes = !isInQuotes;
+        quotedIndices.add(currentTokenIndex);
         if (!tokens[currentTokenIndex]) tokens[currentTokenIndex] = "";
         break;
 
@@ -32,7 +46,7 @@ export const parse = (input: string) => {
     }
   }
 
-  return tokens;
+  return { tokens, quotedIndices };
 };
 
 /**
@@ -110,3 +124,23 @@ export const isIncompleteInput = (input: string) => {
 
   return false;
 };
+
+if (import.meta.vitest) {
+  const { describe, it, expect } = import.meta.vitest;
+
+  describe("utils/terminal/utils", () => {
+    it("parseArgs reads two spaces between an argument and an option as one", () => {
+      expect(parseArgs("anchor idl init PROGRAM  --filepath idl.json")).toEqual(
+        parseArgs("anchor idl init PROGRAM --filepath idl.json")
+      );
+    });
+
+    it("parseArgs adds no argument for leading or trailing spaces", () => {
+      expect(parseArgs("  anchor idl  ")).toEqual(["anchor", "idl"]);
+    });
+
+    it("parseArgs keeps a quoted empty string as an argument", () => {
+      expect(parseArgs(`echo "" ''`)).toEqual(["echo", "", ""]);
+    });
+  });
+}

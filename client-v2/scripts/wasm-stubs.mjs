@@ -12,7 +12,6 @@ export const WASM_STUB_MARKER = "local dev stub";
 
 /** The wasm-bindgen module each real package ships; no stub has one, and the rust-analyzer stub carries no {@link WASM_STUB_MARKER}. */
 export const REAL_WASM_MARKERS = [
-  "anchor_cli_wasm_bg",
   "rust_analyzer_wasm_bg",
   "seahorse_compile_wasm_bg",
   "solana_cli_wasm_bg",

@@ -116,8 +116,8 @@ export const Thread = ({
       via: "key-rejected",
     });
     const refusedMessage = items.findLast((item) => item.kind === "user");
-    if (!turn.input && refusedMessage?.kind === "user") {
-      turn.setInput(refusedMessage.text);
+    if (!turn.draft.get() && refusedMessage?.kind === "user") {
+      turn.draft.set(refusedMessage.text);
     }
   };
 
@@ -147,7 +147,7 @@ export const Thread = ({
     if (card?.kind !== "approval" || card.status !== "pending") return;
     assistantTelemetry.track("assistant_approval_answered", {
       kind: card.request.type,
-      answer,
+      decision: answer,
     });
     PgAssistant.resolveApproval(id, answer === "allow");
   };

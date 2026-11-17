@@ -7,6 +7,7 @@ import { Button } from "@/shared/ui/button";
 
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import Grounding from "../../../views/sidebar/assistant/Component/Grounding";
+import { assistantKeyTelemetry } from "../../../views/sidebar/assistant/model/telemetry";
 import { useMcpSources } from "../../../views/sidebar/assistant/model/use-mcp-sources";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import { aiOff } from "../model/ai-off";
@@ -14,7 +15,6 @@ import { modelShown } from "../model/choice";
 import { connectLabel } from "../model/connection";
 import { useDefaultBackend } from "../model/default-backend";
 import { headLabel } from "../model/head-label";
-import { assistantTelemetry } from "../model/telemetry";
 import type { ConnectOpener } from "../model/use-turn";
 import { useTurn } from "../model/use-turn";
 import { AssistantComposer } from "./AssistantComposer";
@@ -146,7 +146,9 @@ export function Assistant({ widen, onHide, openConnect }: AssistantProps) {
         // Read on every render `useTurn` makes for a change in the store
         deleteKey={PgAssistant.keyHold}
         onDeleteKey={() => {
-          assistantTelemetry.track("assistant_key_deleted", {});
+          assistantKeyTelemetry.track("assistant_key_deleted", {
+            via: "assistant",
+          });
           PgAssistant.disconnect();
         }}
       />

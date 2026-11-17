@@ -289,9 +289,7 @@ impl WasmClient {
             let signature_statuses = self.get_signature_statuses(&[*signature]).await?;
 
             if let Some(signature_status) = signature_statuses[0].as_ref() {
-                if signature_status.confirmation_status.is_some() {
-                    let current_commitment = signature_status.confirmation_status.as_ref().unwrap();
-
+                if let Some(current_commitment) = &signature_status.confirmation_status {
                     let commitment_matches = match commitment_config.commitment {
                         CommitmentLevel::Finalized => {
                             matches!(current_commitment, TransactionConfirmationStatus::Finalized)

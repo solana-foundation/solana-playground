@@ -46,8 +46,10 @@ vi.mock("@/features/tutorial-conversation", async () => ({
     next: vi.fn(),
     startOver: vi.fn(),
     deployed: vi.fn(),
+    watchClientRuns: vi.fn(() => ({ dispose: vi.fn() })),
   },
   judgeGoal: "judgeGoal",
+  realClientRuns: () => "realClientRuns",
   realDeployWatch: () => "realDeployWatch",
   watchBuildSource: vi.fn(),
   watchDeploys: vi.fn(() => ({ dispose: vi.fn() })),
@@ -92,9 +94,12 @@ vi.mock("@/views/flow/state/stage", () => ({
   PgFlow: { deployStarted: vi.fn(), deployFinished: vi.fn() },
 }));
 vi.mock("@/utils", () => ({
-  PgProgramInfo: { idl: null, pk: null },
+  PgProgramInfo: { idl: null, pk: null, update: vi.fn() },
+  PgGlobal: { deployState: "ready" },
+  PgWeb3: { Keypair: { generate: () => "new keypair" } },
   PgWallet: {
-    accounts: [],
+    accounts: [] as unknown[],
+    state: "setup",
     add: vi.fn(),
     // `useWallet` and `useBalance` poll every 10 ms without these
     onDidChangeCurrent: () => ({ dispose: () => {} }),
@@ -180,6 +185,7 @@ import {
   reportButtonFailure,
 } from "@/shared/lib/report-button-failure";
 import { TooltipProvider } from "@/shared/ui/tooltip";
+import { PgGlobal, PgProgramInfo, PgWallet } from "@/utils";
 import { PgEditor } from "@/utils/editor";
 import { PgExplorer } from "@/utils/explorer";
 import { PgTutorial } from "@/utils/tutorial";
@@ -395,6 +401,166 @@ describe("TutorialConversation", () => {
     expect(stop).toHaveBeenCalledTimes(1);
   });
 
+  // HOO-2806: a run that found no wallet because the Playground wallet was
+  // disconnected made none, ran again, and found none again
+  it("Create wallet on a run connects a disconnected Playground wallet, then runs it", async () => {
+    const result: Turn = {
+      id: "result:s3.run:0",
+      kind: "result",
+      step: "call-client",
+      at: 9,
+      whole: true,
+      beatId: "s3.run",
+      act: "run",
+      result: {
+        act: "run",
+        ok: false,
+        seconds: 0,
+        reason: "no_wallet",
+        message: "Create a Playground wallet or connect one, then try again.",
+        log: "",
+      },
+      took: 0,
+      planned: null,
+      open: true,
+    };
+    store.view.mockReturnValue({
+      turns: [divider, result],
+      live: result,
+      steps: onStep2.steps,
+      placeholder: "Ask about this step",
+      nextAt: null,
+      finishAt: null,
+    });
+    const wallet = PgWallet as unknown as {
+      accounts: unknown[];
+      state: string;
+    };
+    wallet.accounts = [{ name: "Wallet 1" }];
+    wallet.state = "disconnected";
+    try {
+      render(
+        <TutorialConversation onAllTutorials={vi.fn()} onOpenMenu={vi.fn()} />
+      );
+      await userEvent.click(
+        screen.getByRole("button", { name: "Create wallet" })
+      );
+      expect(wallet.state).toBe("pg");
+      expect(PgWallet.add).not.toHaveBeenCalled();
+      expect(PgConversation.act).toHaveBeenCalledWith("s3.run");
+    } finally {
+      wallet.accounts = [];
+      wallet.state = "setup";
+    }
+  });
+
+  // HOO-2806: an immutable program's deploy failed with only Try again
+  it("Deploy under a new program id makes a new keypair, drops the build id, then deploys", async () => {
+    const result: Turn = {
+      id: "result:s2.deploy:0",
+      kind: "result",
+      step: "deploy",
+      at: 9,
+      whole: true,
+      beatId: "s2.deploy",
+      act: "deploy",
+      result: {
+        act: "deploy",
+        ok: false,
+        seconds: 1,
+        reason: "immutable",
+        message: "This program is not upgradable.",
+      },
+      took: 0,
+      planned: null,
+      open: true,
+    };
+    store.view.mockReturnValue({
+      turns: [divider, result],
+      live: result,
+      steps: onStep2.steps,
+      placeholder: "Ask about this step",
+      nextAt: null,
+      finishAt: null,
+    });
+    render(
+      <TutorialConversation onAllTutorials={vi.fn()} onOpenMenu={vi.fn()} />
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Deploy under a new program id" })
+    );
+    expect(PgProgramInfo.update).toHaveBeenCalledWith({
+      kp: "new keypair",
+      customPk: null,
+      uuid: null,
+    });
+    expect(PgConversation.act).toHaveBeenCalledWith("s2.deploy");
+  });
+
+  it("refuses a new program id while a deploy runs, and changes nothing", async () => {
+    const result: Turn = {
+      id: "result:s2.deploy:0",
+      kind: "result",
+      step: "deploy",
+      at: 9,
+      whole: true,
+      beatId: "s2.deploy",
+      act: "deploy",
+      result: {
+        act: "deploy",
+        ok: false,
+        seconds: 1,
+        reason: "not_authority",
+        message: "This program's upgrade authority is Other1…111111.",
+      },
+      took: 0,
+      planned: null,
+      open: true,
+    };
+    store.view.mockReturnValue({
+      turns: [divider, result],
+      live: result,
+      steps: onStep2.steps,
+      placeholder: "Ask about this step",
+      nextAt: null,
+      finishAt: null,
+    });
+    const global = PgGlobal as unknown as { deployState: string };
+    global.deployState = "deploying";
+    try {
+      render(
+        <TutorialConversation onAllTutorials={vi.fn()} onOpenMenu={vi.fn()} />
+      );
+      await userEvent.click(
+        screen.getByRole("button", { name: "Deploy under a new program id" })
+      );
+      expect(PgProgramInfo.update).not.toHaveBeenCalled();
+      expect(PgConversation.act).not.toHaveBeenCalled();
+      expect(markUnavailableHere).toHaveBeenCalledWith(
+        expect.any(Error),
+        "wait for the run to finish"
+      );
+      expect(reportButtonFailure).toHaveBeenCalledWith("use a new program id");
+    } finally {
+      global.deployState = "ready";
+    }
+  });
+
+  it("judges a client run from outside the run card, until it leaves", () => {
+    const stop = vi.fn();
+    vi.mocked(PgConversation.watchClientRuns).mockReturnValueOnce({
+      dispose: stop,
+    });
+    const { unmount } = render(
+      <TutorialConversation onAllTutorials={vi.fn()} onOpenMenu={vi.fn()} />
+    );
+    expect(PgConversation.watchClientRuns).toHaveBeenCalledWith(
+      "realClientRuns"
+    );
+    unmount();
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+
   it("puts the live assistant in its tutorial mode while shown", () => {
     store.view.mockReturnValue(null);
     const { unmount } = render(
@@ -498,8 +664,8 @@ describe("TutorialConversation", () => {
     expect(PgExplorer.openFile).toHaveBeenCalledWith(`/hello/${step1.file}`);
     expect(track).toHaveBeenCalledWith("tutorial_step_jumped", {
       tutorial: "hello-anchor",
-      step: 1,
-      from: 2,
+      step_index: 1,
+      from_step: 2,
       via: "bar",
     });
   });
@@ -1279,7 +1445,7 @@ describe("TutorialConversation keys and the pill", () => {
     );
     expect(track).toHaveBeenLastCalledWith("tutorial_step_back", {
       tutorial: "hello-anchor",
-      step: 2,
+      step_index: 2,
     });
   });
 });
@@ -1432,7 +1598,7 @@ describe("TutorialConversation on the phone", () => {
     act(() => requestStepJump(0));
     expect(track).toHaveBeenCalledWith(
       "tutorial_step_jumped",
-      expect.objectContaining({ step: 1, via: "menu" })
+      expect.objectContaining({ step_index: 1, via: "menu" })
     );
     expect(PgExplorer.openFile).not.toHaveBeenCalled();
   });

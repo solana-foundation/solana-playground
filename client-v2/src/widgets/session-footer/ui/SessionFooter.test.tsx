@@ -65,10 +65,8 @@ vi.mock("@/utils", () => ({
   PgView: { setToast },
 }));
 // The Fund dialog has its own tests; here only the menu item that opens it counts
-vi.mock("@/features/fund-wallet", () => ({
-  // eslint-disable-next-line unicorn/no-null -- a React component renders nothing by returning `null`
-  FundDialog: () => null,
-}));
+const openFundDialog = vi.hoisted(() => vi.fn());
+vi.mock("@/features/fund-wallet", () => ({ openFundDialog }));
 vi.mock("@/features/feedback", () => ({
   FeedbackMenuItems: () => null,
   useFeedbackSend: () => ({ sending: false, triggerRef: { current: null } }),
@@ -144,13 +142,23 @@ const pick = async (name: string | RegExp) => {
 const eventsNamed = (name: string) =>
   sent.events.filter((event) => event.name === name).map((e) => e.params);
 
+it("opens the one Fund dialog from the menu's Fund from a wallet", async () => {
+  walletWindow.accounts = [{}];
+  draw("footer");
+
+  await pick("Fund from a wallet…");
+
+  expect(openFundDialog).toHaveBeenCalledWith("account-menu");
+  walletWindow.accounts = [];
+});
+
 it.each(["footer", "rail"] as const)(
   "reports that the %s opened the menu",
   async (which) => {
     draw(which);
     await openMenu();
     expect(eventsNamed("session_account_menu_opened")).toEqual([
-      { from: which },
+      { via: which },
     ]);
   }
 );

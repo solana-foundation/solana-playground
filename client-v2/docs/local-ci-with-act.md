@@ -49,7 +49,7 @@ Drop the `$(grep ...)` part on an x86-64 host.
 
 ## On the real packages
 
-`--input use-wasm-stubs=false` runs the jobs as `client-v2.yml` does: the `wasm` job builds the six packages and the other jobs download them as the `wasm-pkg` artifact. The `wasm` job runs wasm-pack 0.10.3, which ships no arm64 `wasm-opt`, so this run keeps the amd64 of `.actrc` on every host: leave out the arm64 overrides. The amd64 image is pulled once.
+`--input use-wasm-stubs=false` runs the jobs as `client-v2.yml` does: the `wasm` job builds the wasm packages and the other jobs download them as the `wasm-pkg` artifact. The `wasm` job runs wasm-pack 0.10.3, which ships no arm64 `wasm-opt`, so this run keeps the amd64 of `.actrc` on every host: leave out the arm64 overrides. The amd64 image is pulled once.
 
 ```sh
 cd client-v2

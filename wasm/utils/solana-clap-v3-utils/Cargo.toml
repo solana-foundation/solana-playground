@@ -12,7 +12,7 @@ keywords = ["solana", "playground", "wasm", "clap"]
 [dependencies]
 chrono = "0.4"
 clap = "*"
-rpassword = "6.0"
+rpassword = "7.5"
 solana-remote-wallet = { version = "*", default-features = false }
 solana-sdk = "*"
 thiserror = "1.0.31"

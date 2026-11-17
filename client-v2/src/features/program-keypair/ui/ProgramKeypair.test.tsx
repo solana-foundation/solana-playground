@@ -345,7 +345,7 @@ describe("features/program-keypair/ui/ProgramKeypair", () => {
     expect(mocks.updates[0].kp?.publicKey.equals(KP.publicKey)).toBe(false);
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(events()).toEqual([
-      ["keypair_exported", { from: "dialog" }],
+      ["keypair_exported", { via: "dialog" }],
       ["keypair_generated", { replaced: true }],
     ]);
   });
@@ -358,7 +358,7 @@ describe("features/program-keypair/ui/ProgramKeypair", () => {
     expect(mocks.exported).toEqual([
       { name: "program-keypair.json", content: Array.from(KP.secretKey) },
     ]);
-    expect(events()).toEqual([["keypair_exported", { from: "block" }]]);
+    expect(events()).toEqual([["keypair_exported", { via: "block" }]]);
   });
 
   it("sets a valid custom id and refuses an invalid one", () => {

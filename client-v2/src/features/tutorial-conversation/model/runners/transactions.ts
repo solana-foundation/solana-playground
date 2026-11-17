@@ -1,5 +1,6 @@
 /* eslint-disable layers/curry-order, max-params, unicorn/no-null -- tutorial flow v2 predates these rules; cleanup tracked from SF#94 */
 import { sameIdlName } from "@/shared/lib/idl-name";
+import { LINE_BREAK } from "@/shared/lib/line-break";
 import { createLogger } from "@/shared/lib/logger";
 import { isProgramLog } from "@/shared/lib/program-log";
 
@@ -112,9 +113,11 @@ const logger = createLogger("tutorial-conversation:transactions");
 
 /** Anchor logs the instruction's name first, in the program's own frame */
 const INSTRUCTION = /^Program log: Instruction: (\w+)/;
-/** `AnchorError thrown in ...` or `AnchorError occurred.` */
-const ANCHOR_ERROR =
-  /AnchorError.*Error Code: (\w+)\. Error Number: (\d+)\.(?: Error Message: (.*?)\.?$)?/;
+const ANCHOR_ERROR = "AnchorError";
+const ERROR_CODE = "Error Code: ";
+const ERROR_MESSAGE = " Error Message: ";
+/** What follows `Error Code: `, read in place with the sticky flag */
+const ERROR_CODE_TAIL = /(\w+)\. Error Number: (\d+)\./y;
 const CUSTOM_ERROR = /custom program error: 0x([0-9a-f]+)/i;
 const INVOKE = /^Program (\w+) invoke \[\d+\]$/;
 const EXIT = /^Program (\w+) (success|failed)/;
@@ -151,6 +154,7 @@ export const programLines = (log: string[], programId: string): string[] => {
 const matcher = (pattern: string | undefined): ((line: string) => boolean) => {
   if (pattern === undefined) return () => true;
   try {
+    // eslint-disable-next-line security/detect-non-literal-regexp -- a shipped tutorial's pattern, which `yarn tutorial:check` compiles
     const re = new RegExp(pattern, "i");
     return (line) => re.test(line);
   } catch (e) {
@@ -185,9 +189,40 @@ export const pickLine = (
 /** The error an Anchor program logged, with its message when it gave one */
 const anchorError = (log: string[]) => {
   for (const line of log) {
-    const m = ANCHOR_ERROR.exec(line);
-    if (m) {
-      return { name: m[1], code: Number(m[2]), message: m[3] ?? null };
+    const error = anchorErrorOf(line);
+    if (error) return error;
+  }
+  return null;
+};
+
+/**
+ * What `/AnchorError.*Error Code: (\w+)\. Error Number: (\d+)\.(?: Error
+ * Message: (.*?)\.?$)?/` would read, found with `lastIndexOf`, since the
+ * regex backtracks quadratically on a long line. The last `Error Code: `
+ * whose tail parses wins, as the greedy `.*` chooses.
+ */
+const anchorErrorOf = (line: string) => {
+  const segments = line.split(LINE_BREAK);
+  for (const [i, segment] of segments.entries()) {
+    const start = segment.indexOf(ANCHOR_ERROR);
+    if (start === -1) continue;
+    const from = start + ANCHOR_ERROR.length;
+    for (
+      let at = segment.lastIndexOf(ERROR_CODE);
+      at >= from;
+      at = segment.lastIndexOf(ERROR_CODE, at - 1)
+    ) {
+      ERROR_CODE_TAIL.lastIndex = at + ERROR_CODE.length;
+      const tail = ERROR_CODE_TAIL.exec(segment);
+      if (!tail) continue;
+      const rest = segment.slice(ERROR_CODE_TAIL.lastIndex);
+      // The message runs to the end of the input, so only the last segment has one
+      const hasMessage =
+        i === segments.length - 1 && rest.startsWith(ERROR_MESSAGE);
+      const message = hasMessage
+        ? rest.slice(ERROR_MESSAGE.length).replace(/\.$/, "")
+        : null;
+      return { name: tail[1], code: Number(tail[2]), message };
     }
   }
   return null;
@@ -227,15 +262,74 @@ export const refusalOf = (
 const IN_USE = /^(?:Allocate|Create Account): account .*already in use$/;
 const IN_USE_ADDRESS = /address: (\w+)/;
 
+/** A transaction devnet has read back, or refused */
+type ReadTx = Exclude<SentTx, { kind: "unread" }>;
+
+/** It failed: refused, or landed with an error */
+const failed = (tx: SentTx): tx is ReadTx =>
+  tx.kind === "refused" || (tx.kind === "landed" && tx.err !== null);
+
+/** The first System Program "already in use" line in a log, if any */
+const inUseLine = (log: string[]): string | undefined =>
+  log.find((l) => IN_USE.test(l));
+
+type Creates = { instruction: string; account: string };
+
+/**
+ * How a failed transaction ties the account in use at `address` to the one
+ * `creates` names. `match`: a decoded call of that instruction wrote the
+ * account, under its IDL name, at that address. `fallback`: nothing decoded
+ * says either way (a call of that instruction decoded with nothing written,
+ * or no call decoded and Anchor's `Instruction:` line names it), so the log
+ * line's address stands on its own. `none`: the decoded calls show another
+ * account or another instruction, or nothing names the instruction at all.
+ * Known limit: on `fallback`, an instruction that creates two accounts and
+ * finds only the second in use reads as the first existing; it takes an
+ * undecoded call, which the deployed IDL normally rules out
+ */
+const tieFor =
+  (creates: Creates) =>
+  (tx: ReadTx, address: string): "match" | "fallback" | "none" => {
+    if (tx.calls.length === 0) {
+      const named = tx.log.map((l) => INSTRUCTION.exec(l)?.[1]).find(Boolean);
+      return named !== undefined && sameIdlName(named, creates.instruction)
+        ? "fallback"
+        : "none";
+    }
+    // `wrote` carries IDL names; `accounts` has Anchor's display names
+    // ("Big Map"), which no IDL name matches
+    const wrote = tx.calls
+      .filter((c) => sameIdlName(c.instruction, creates.instruction))
+      .flatMap((c) => c.wrote);
+    if (wrote.length === 0) {
+      return tx.calls.some((c) =>
+        sameIdlName(c.instruction, creates.instruction)
+      )
+        ? "fallback"
+        : "none";
+    }
+    return wrote.some(
+      (a) => a.address === address && sameIdlName(a.name, creates.account)
+    )
+      ? "match"
+      : "none";
+  };
+
 /**
  * The existing account behind a refusal of the instruction that creates it:
  * the System Program's "already in use" with its error 0, in that
- * instruction. Undefined for any other refusal, or with nothing to create
+ * instruction, at the address the call wrote as the account it creates. Every
+ * failed transaction is read: one whose decoded call wrote the account there
+ * wins; else one whose calls say nothing either way (see `tieFor`) lends the
+ * log line's address. Undefined for any other refusal, for an address a
+ * decoded call shows is another account or another instruction's, or with
+ * nothing to create. An "already in use" line that ties to no such account is
+ * logged, so a second pass stuck on its init card leaves a trace
  */
 export const existingOf = (
-  log: string[],
+  sent: SentTx[],
   refused: Refusal | undefined,
-  creates: { instruction: string; account: string } | undefined
+  creates: Creates | undefined
 ): Exists | undefined => {
   if (
     !creates ||
@@ -245,14 +339,33 @@ export const existingOf = (
   ) {
     return undefined;
   }
-  const line = log.find((l) => IN_USE.test(l));
-  if (line === undefined) return undefined;
-  const address = IN_USE_ADDRESS.exec(line)?.[1];
-  return {
-    instruction: creates.instruction,
-    account: creates.account,
-    ...(address === undefined ? {} : { address }),
-  };
+  const tieOf = tieFor(creates);
+  const inUse = sent.filter(failed).flatMap((tx) => {
+    const line = inUseLine(tx.log);
+    if (line === undefined) return [];
+    const address = IN_USE_ADDRESS.exec(line)?.[1];
+    return [{ line, address, tie: address ? tieOf(tx, address) : "none" }];
+  });
+  const found =
+    inUse.find((u) => u.tie === "match") ??
+    inUse.find((u) => u.tie === "fallback");
+  if (found?.address) {
+    return {
+      instruction: creates.instruction,
+      account: creates.account,
+      address: found.address,
+    };
+  }
+  if (inUse.length > 0) {
+    logger.warn("An account in use ties to no account the call creates", {
+      context: {
+        instruction: creates.instruction,
+        account: creates.account,
+        lines: inUse.map((u) => u.line),
+      },
+    });
+  }
+  return undefined;
 };
 
 /**
@@ -260,8 +373,6 @@ export const existingOf = (
  * refused send, the RPC's first line; for a landed transaction with no
  * Anchor error, its error as the chain gives it
  */
-type ReadTx = Exclude<SentTx, { kind: "unread" }>;
-
 const reasonOf = (tx: ReadTx): string => {
   const anchor = anchorError(tx.log);
   if (anchor?.message) return anchor.message;
@@ -269,9 +380,6 @@ const reasonOf = (tx: ReadTx): string => {
   if (tx.kind === "refused") return tx.message.split("\n")[0];
   return `The transaction failed: ${JSON.stringify(tx.err)}`;
 };
-
-const failed = (tx: SentTx): tx is ReadTx =>
-  tx.kind === "refused" || (tx.kind === "landed" && tx.err !== null);
 
 /** A sent transaction as it is kept to be read again */
 const unreadOf = (tx: Exclude<SentTx, { kind: "refused" }>): UnreadTx => ({
@@ -373,9 +481,53 @@ const receiptOf = (
 };
 
 if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
+  const { describe, it, expect, vi } = import.meta.vitest;
 
   describe("features/tutorial-conversation/model/runners/transactions", () => {
+    describe("anchorErrorOf", () => {
+      const TAIL = "Error Code: Late. Error Number: 6001.";
+      it.each([
+        [
+          "Program log: AnchorError occurred. Error Code: Low. Error Number: 6000. Error Message: Too low.",
+          { name: "Low", code: 6000, message: "Too low" },
+        ],
+        [
+          "AnchorError occurred. Error Code: Low. Error Number: 6000.",
+          { name: "Low", code: 6000, message: null },
+        ],
+        // The last code whose tail parses, as a greedy `.*` picked it
+        [
+          `AnchorError ${TAIL} Error Code: Bad. ${TAIL}`,
+          { name: "Late", code: 6001, message: null },
+        ],
+        [`${TAIL} AnchorError`, null],
+        // A line break ends the search, and a message must reach the end
+        [`AnchorError\n${TAIL}`, null],
+        [
+          `AnchorError ${TAIL} Error Message: x.\nmore`,
+          { name: "Late", code: 6001, message: null },
+        ],
+        // The code's tail must start right after `Error Code: `
+        ["AnchorError Error Code: a b. Error Number: 1.", null],
+      ])("reads %j", (line, expected) => {
+        expect(anchorErrorOf(line)).toEqual(expected);
+      });
+
+      it.each([
+        { label: "AnchorError repeats", line: "AnchorError ".repeat(30_000) },
+        {
+          label: "Error Code: repeats",
+          line: `AnchorError ${"Error Code: x".repeat(40_000)}`,
+        },
+      ])(
+        "parses a long line of $label in linear time",
+        ({ line }) => {
+          expect(anchorErrorOf(line)).toBeNull();
+        },
+        1000
+      );
+    });
+
     describe("accountsWritten", () => {
       it("names what a call wrote to as the IDL does, past the payer and read-only accounts", () => {
         expect(
@@ -570,6 +722,9 @@ if (import.meta.vitest) {
     describe("existingOf", () => {
       const SYSTEM = "11111111111111111111111111111111";
       const PLAYER = "3azZ1111111111111111111111111111111111111111";
+      const VAULT = "4bzZ1111111111111111111111111111111111111111";
+      const inUse = (address: string) =>
+        `Allocate: account Address { address: ${address}, base: None } already in use`;
       /** Lumberjack's `init_player` on a player that exists, as devnet logged it (HOO-2362) */
       const initLog = (systemLine: string, code: string) => [
         `Program ${PROGRAM} invoke [1]`,
@@ -579,22 +734,30 @@ if (import.meta.vitest) {
         `Program ${SYSTEM} failed: custom program error: ${code}`,
         `Program ${PROGRAM} failed: custom program error: ${code}`,
       ];
+      /** `init_player` passing the player, and a vault it also creates */
       const init: DecodedCall = {
         instruction: "initPlayer",
         args: {},
-        accounts: [],
-        wrote: [],
+        accounts: [
+          { name: "Player", address: PLAYER },
+          { name: "Vault", address: VAULT },
+        ],
+        wrote: [
+          { name: "player", address: PLAYER },
+          { name: "vault", address: VAULT },
+        ],
       };
       const CREATES = { instruction: "init_player", account: "player" };
-      const existing = (log: string[]) =>
-        existingOf(log, refusalOf(log, PROGRAM, [init]), CREATES);
+      const existingFor = (calls: DecodedCall[]) => (log: string[]) =>
+        existingOf(
+          [{ kind: "refused", log, message: "0x0", calls }],
+          refusalOf(log, PROGRAM, calls),
+          CREATES
+        );
+      const existing = existingFor([init]);
 
       it("names the account the System Program found already in use", () => {
-        const log = initLog(
-          `Allocate: account Address { address: ${PLAYER}, base: None } already in use`,
-          "0x0"
-        );
-        expect(existing(log)).toEqual({
+        expect(existing(initLog(inUse(PLAYER), "0x0"))).toEqual({
           instruction: "init_player",
           account: "player",
           address: PLAYER,
@@ -604,6 +767,190 @@ if (import.meta.vitest) {
       it("finds none in another refusal with error 0, whose log names no account in use", () => {
         const log = initLog("Program log: Error: something else", "0x0");
         expect(existing(log)).toBeUndefined();
+      });
+
+      it("finds none when the address in use is another account the instruction creates", () => {
+        expect(existing(initLog(inUse(VAULT), "0x0"))).toBeUndefined();
+      });
+
+      it("finds none when the call that failed did not pass the account at that address", () => {
+        const other: DecodedCall = {
+          instruction: "initPlayer",
+          args: {},
+          accounts: [{ name: "Player", address: VAULT }],
+          wrote: [{ name: "player", address: VAULT }],
+        };
+        expect(
+          existingFor([other])(initLog(inUse(PLAYER), "0x0"))
+        ).toBeUndefined();
+      });
+
+      it("takes the log line's address when no call decoded to say otherwise", () => {
+        const found = {
+          instruction: "init_player",
+          account: "player",
+          address: PLAYER,
+        };
+        // The call did not decode: `refusalOf` names it from Anchor's line
+        expect(existingFor([])(initLog(inUse(PLAYER), "0x0"))).toEqual(found);
+        // It decoded, with nothing written at all
+        const bare: DecodedCall = {
+          instruction: "initPlayer",
+          args: {},
+          accounts: [{ name: "Player", address: PLAYER }],
+          wrote: [],
+        };
+        expect(existingFor([bare])(initLog(inUse(PLAYER), "0x0"))).toEqual(
+          found
+        );
+      });
+
+      it("finds the account in a transaction that landed with an error", () => {
+        const log = initLog(inUse(PLAYER), "0x0");
+        const tx: SentTx = {
+          kind: "landed",
+          signature: "sig",
+          log,
+          err: { InstructionError: [0, { Custom: 0 }] },
+          computeUnits: 3000,
+          fee: 5000,
+          signer: null,
+          calls: [init],
+        };
+        expect(
+          existingOf([tx], refusalOf(log, PROGRAM, [init]), CREATES)
+        ).toMatchObject({ address: PLAYER });
+      });
+
+      it("finds the account in a failed transaction past the first", () => {
+        const first = initLog("Program log: Error: something else", "0x0");
+        const later = initLog(inUse(PLAYER), "0x0");
+        expect(
+          existingOf(
+            [
+              { kind: "refused", log: first, message: "0x0", calls: [init] },
+              { kind: "refused", log: later, message: "0x0", calls: [init] },
+            ],
+            refusalOf(first, PROGRAM, [init]),
+            CREATES
+          )
+        ).toMatchObject({ address: PLAYER });
+      });
+
+      it("finds none, and logs it, when the line in use names no address it can read", () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        try {
+          const log = initLog(
+            "Allocate: account Address { 3azZ, base: None } already in use",
+            "0x0"
+          );
+          expect(existing(log)).toBeUndefined();
+          expect(JSON.stringify(warn.mock.calls)).toContain(
+            "ties to no account the call creates"
+          );
+        } finally {
+          warn.mockRestore();
+        }
+      });
+
+      it("logs nothing when it finds the account, or when no line says in use", () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        try {
+          existing(initLog(inUse(PLAYER), "0x0"));
+          existing(initLog("Program log: Error: something else", "0x0"));
+          expect(warn).not.toHaveBeenCalled();
+        } finally {
+          warn.mockRestore();
+        }
+      });
+
+      it("finds none when the decoded call wrote only another account", () => {
+        const vaultOnly: DecodedCall = {
+          instruction: "initPlayer",
+          args: {},
+          accounts: [{ name: "Vault", address: VAULT }],
+          wrote: [{ name: "vault", address: VAULT }],
+        };
+        expect(
+          existingFor([vaultOnly])(initLog(inUse(VAULT), "0x0"))
+        ).toBeUndefined();
+      });
+
+      it("takes no address from a failed transaction of another instruction", () => {
+        const first = initLog("Program log: Error: something else", "0x0");
+        /** `init_vault`, undecoded, refused on a vault already there */
+        const vaultLog = [
+          `Program ${PROGRAM} invoke [1]`,
+          "Program log: Instruction: InitVault",
+          `Program ${SYSTEM} invoke [2]`,
+          inUse(VAULT),
+          `Program ${SYSTEM} failed: custom program error: 0x0`,
+          `Program ${PROGRAM} failed: custom program error: 0x0`,
+        ];
+        const vaultCall: DecodedCall = {
+          instruction: "initVault",
+          args: {},
+          accounts: [{ name: "Vault", address: VAULT }],
+          wrote: [{ name: "vault", address: VAULT }],
+        };
+        const refused = refusalOf(first, PROGRAM, [init]);
+        for (const calls of [[], [vaultCall]]) {
+          expect(
+            existingOf(
+              [
+                { kind: "refused", log: first, message: "0x0", calls: [init] },
+                { kind: "refused", log: vaultLog, message: "0x0", calls },
+              ],
+              refused,
+              CREATES
+            )
+          ).toBeUndefined();
+        }
+        // Undecoded, with no `Instruction:` line to name it
+        const bare = vaultLog.filter((l) => !l.includes("Instruction:"));
+        expect(
+          existingOf(
+            [{ kind: "refused", log: bare, message: "0x0", calls: [] }],
+            { instruction: "initPlayer", error: { code: 0, name: null } },
+            CREATES
+          )
+        ).toBeUndefined();
+      });
+
+      it("prefers a decoded call that wrote the account over a log line alone", () => {
+        const undecoded = initLog(inUse(VAULT), "0x0");
+        const decoded = initLog(inUse(PLAYER), "0x0");
+        expect(
+          existingOf(
+            [
+              { kind: "refused", log: undecoded, message: "0x0", calls: [] },
+              { kind: "refused", log: decoded, message: "0x0", calls: [init] },
+            ],
+            refusalOf(undecoded, PROGRAM, []),
+            CREATES
+          )
+        ).toMatchObject({ address: PLAYER });
+      });
+
+      it("matches a creates of two words by its IDL name, not Anchor's display name", () => {
+        const log = initLog(inUse(PLAYER), "0x0");
+        const big: DecodedCall = {
+          instruction: "initBigMap",
+          args: {},
+          accounts: [{ name: "Big Map", address: PLAYER }],
+          wrote: [{ name: "big_map", address: PLAYER }],
+        };
+        expect(
+          existingOf(
+            [{ kind: "refused", log, message: "0x0", calls: [big] }],
+            { instruction: "initBigMap", error: { code: 0, name: null } },
+            { instruction: "init_big_map", account: "big_map" }
+          )
+        ).toEqual({
+          instruction: "init_big_map",
+          account: "big_map",
+          address: PLAYER,
+        });
       });
     });
 

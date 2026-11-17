@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 
+import { Endpoint } from "../src/entities/cluster/model/endpoint";
 import { expect, json, LONG, test } from "./fixtures";
 
 /**
@@ -69,7 +70,7 @@ const DEPLOYED_ACCOUNT = {
 
 /** Builds with `idl` as the build server's IDL, then opens Interact */
 const buildThenInteract = async (page: Page, idl: object) => {
-  await page.route("https://api.devnet.solana.com/**", async (route) => {
+  await page.route(`${Endpoint.DEVNET}/**`, async (route) => {
     const body = route.request().postDataJSON() as {
       id?: unknown;
       method?: string;
@@ -111,7 +112,7 @@ test.describe("client-v2-idl", () => {
       panel.getByRole("button", { name: /^incrementBy/ })
     ).toBeVisible();
     await initialize.click();
-    await expect(panel.getByRole("button", { name: "Test" })).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Send" })).toBeVisible();
     await expect(panel.locator('[data-slot="stage-empty"]')).toHaveCount(0);
   });
 });
@@ -129,7 +130,7 @@ test.describe("client-v2-interact", () => {
         LONG
       );
     }
-    await expect(panel.getByRole("button", { name: "Test" })).toHaveCount(0);
+    await expect(panel.getByRole("button", { name: "Send" })).toHaveCount(0);
   });
 
   test("client-v2-interact: Two cards open", async ({ seededPage: page }) => {
@@ -139,7 +140,7 @@ test.describe("client-v2-interact", () => {
     await initialize.click(LONG);
     await panel.getByRole("button", { name: /^incrementBy/ }).click();
     await expect(initialize).toHaveAttribute("aria-expanded", "true");
-    await expect(panel.getByRole("button", { name: "Test" })).toHaveCount(2);
+    await expect(panel.getByRole("button", { name: "Send" })).toHaveCount(2);
   });
 
   test("client-v2-interact: A 1.x IDL with a custom discriminator", async ({
@@ -188,6 +189,6 @@ test.describe("client-v2-idl, 0.29", () => {
     const card = panel.getByRole("button", { name: /^incrementBy/ });
     await expect(card).toContainText("1 arg · 1 account", LONG);
     await card.click();
-    await expect(panel.getByRole("button", { name: "Test" })).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Send" })).toBeVisible();
   });
 });

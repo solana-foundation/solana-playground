@@ -1,5 +1,9 @@
 import type { FaucetLinkFill } from "@/shared/lib/faucet";
-import { faucetLink } from "@/shared/lib/faucet";
+import { faucetLink, offeredAmount, webFaucetSteps } from "@/shared/lib/faucet";
+import type { AirdropRefusal } from "@/shared/lib/faucet-limit";
+import { NETWORK_UNREACHABLE } from "@/shared/lib/faucet-limit";
+
+import { TerminalLineError } from "../../utils/terminal/line-error";
 
 const LAMPORTS_PER_SOL = 1_000_000_000;
 
@@ -34,12 +38,101 @@ export const isRateLimited = (error: unknown): boolean =>
   );
 
 /**
- * What the terminal says after a limit, with the web faucet filled in. Worded
- * like the tutorial's airdrop card (HOO-2677): the user meets both.
+ * An airdrop that brought no SOL once it started: a balance read, the
+ * request, its confirmation, or a balance that never moved failed. It keeps
+ * the failure's message, so the terminal's error line reads as before, and is
+ * told apart from a failure before the airdrop started (no wallet, a sign-in,
+ * no faucet on the cluster), which no faucet steps would help. Thrown only
+ * where the web faucet serves the cluster.
  */
-export const rateLimitNote = (fill: FaucetLinkFill): string => {
+export class AirdropRefusedError extends Error {
+  override readonly name = "AirdropRefusedError";
+
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : "The airdrop failed", {
+      cause,
+    });
+  }
+}
+
+/**
+ * The RPC's faucet answered that it is closed: asking again will not help
+ * until it reopens. Its message is the whole line the terminal prints, with
+ * the web faucet filled in, so it is a `TerminalLineError`; the chip and the
+ * menu take it for a refusal and show the way round.
+ */
+export class AirdropClosedError extends TerminalLineError {
+  override readonly name = "AirdropClosedError";
+}
+
+/** Whether the `airdrop` command threw because the RPC's faucet is closed */
+export const isAirdropClosed = (error: unknown): error is AirdropClosedError =>
+  error instanceof AirdropClosedError;
+
+/**
+ * Whether the `airdrop` command threw for a refusal ({@link AirdropRefusedError}
+ * or a closed faucet)
+ */
+export const isAirdropRefused = (
+  error: unknown
+): error is AirdropRefusedError | AirdropClosedError =>
+  error instanceof AirdropRefusedError || error instanceof AirdropClosedError;
+
+/** The cause of a refusal, as the wallet chip and the wallet menu name it */
+export const refusalOf = (error: unknown): AirdropRefusal =>
+  isRateLimited(error) ? "limit" : "other";
+
+/**
+ * What the terminal says after any refusal: the cause, the web faucet filled
+ * in, and its steps (`webFaucetSteps`, worded for a newcomer). The first line is worded
+ * like the tutorial's airdrop card (HOO-2677): the user meets both. The link
+ * asks for an amount the faucet's form offers, so step 2 names that one.
+ */
+export const refusedNote = (error: unknown, fill: FaucetLinkFill): string => {
   const faucet = fill.cluster ? `the ${fill.cluster} faucet` : "the faucet";
-  return `Airdrop refused: ${faucet} is at its limit for now. Get SOL from the web faucet instead: ${faucetLink(
-    fill
-  )}`;
+  const cause = isRateLimited(error)
+    ? `${faucet} is at its limit for now`
+    : `${faucet} did not send SOL`;
+  const amount = offeredAmount(fill.amount);
+  const steps = webFaucetSteps(
+    amount,
+    "Come back here. The SOL is in your wallet once the faucet confirms"
+  ).map((step, i) => `  ${i + 1}. ${step}`);
+  return [
+    `Airdrop refused: ${cause}. Get SOL from the web faucet instead: ${faucetLink(
+      { ...fill, amount }
+    )}`,
+    ...steps,
+  ].join("\n");
 };
+
+/**
+ * The airdrop could not reach the network (offline, the RPC down): no faucet
+ * answered, so it is not a refusal and the web faucet is no way round. The
+ * message is the line every surface shows.
+ */
+export class NetworkUnreachableError extends Error {
+  override readonly name = "NetworkUnreachableError";
+
+  constructor(cause: unknown) {
+    super(NETWORK_UNREACHABLE, { cause });
+  }
+}
+
+/** Whether the `airdrop` command threw because the network was unreachable */
+export const isNetworkUnreachable = (
+  error: unknown
+): error is NetworkUnreachableError => error instanceof NetworkUnreachableError;
+
+const UNREACHABLE_MESSAGE =
+  /failed to fetch|fetch failed|network ?error|load failed|econnrefused|econnreset|enotfound|etimedout|err_internet|err_network|socket hang up|\b50[234]\b|timed? ?out/i;
+
+/**
+ * Whether a failure from the RPC means it could not be reached, as opposed to
+ * an answer that says no: a fetch that threw (a `TypeError` in browsers), a
+ * timeout, or a gateway error. A 429 is the faucet answering, so it is not one.
+ */
+export const isUnreachableFailure = (error: unknown): boolean =>
+  (typeof navigator !== "undefined" && !navigator.onLine) ||
+  error instanceof TypeError ||
+  (error instanceof Error && UNREACHABLE_MESSAGE.test(error.message));

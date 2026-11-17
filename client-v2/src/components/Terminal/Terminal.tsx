@@ -48,6 +48,7 @@ const Terminal: FC<React.PropsWithChildren<TerminalProps>> = ({
         cursorBlink: xterm.cursor.blink,
         cursorStyle: xterm.cursor.kind,
         tabStopWidth: 4,
+        scrollback: 10_000, // xterm keeps 1,000 lines by default, fewer than one printed IDL
         theme: xtermTheme(xterm, resolveColor),
       },
     });

@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 
 import { Outlet } from "@/shared/lib/outlet";
 import { cn } from "@/shared/lib/utils";
-import { BOTTOM_BAR_PX } from "@/views/flow/tokens";
+import { BOTTOM_BAR_PX, PHONE_CONSOLE_BAR_PX } from "@/views/flow/tokens";
 
 import type { TutorialPhoneSlot } from "./BaseLayoutShell";
 
@@ -154,14 +154,19 @@ const BaseTutorialPhone = ({
               // Closed, the console is its bar: the body stays mounted (the
               // terminal keeps its buffer) and is clipped, as on the pager.
               // Open, it takes a share of the space and leaves the editor
-              // room above it.
+              // room above it. Folded, it is the bar's height: 44 px below
+              // 768 px, the wide 28 in the tablet band
               className={cn(
                 "flex min-h-0 shrink-0 flex-col",
                 consoleOpen
                   ? "h-[42dvh] max-h-[42dvh] min-h-32"
                   : "overflow-hidden"
               )}
-              style={consoleOpen ? undefined : { height: BOTTOM_BAR_PX }}
+              style={
+                consoleOpen
+                  ? undefined
+                  : { height: tablet ? BOTTOM_BAR_PX : PHONE_CONSOLE_BAR_PX }
+              }
             />
           </section>
         </div>

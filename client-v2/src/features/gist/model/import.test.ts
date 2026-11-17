@@ -12,7 +12,12 @@ import {
   resetTelemetry,
 } from "@/shared/lib/telemetry";
 
-import { fetchGistFiles, GistImportError, importGist } from "./import";
+import {
+  fetchGistFiles,
+  GistImportError,
+  GistUnreachableError,
+  importGist,
+} from "./import";
 
 const utils = vi.hoisted(() => ({
   PgExplorer: {
@@ -125,10 +130,10 @@ describe("importGist", () => {
       { files: [["src/lib.rs", LIB]], skipNameValidation: true }
     );
     expect(events()).toEqual([
-      { name: "gist_import_started", params: { from: "dialog" } },
+      { name: "gist_import_started", params: { via: "dialog" } },
       {
         name: "gist_import_succeeded",
-        params: { from: "dialog", layout: "manifest" },
+        params: { via: "dialog", layout: "manifest" },
       },
     ]);
   });
@@ -144,7 +149,7 @@ describe("importGist", () => {
 
     expect(events().at(-1)).toEqual({
       name: "gist_import_succeeded",
-      params: { from: "dialog", layout: "loose" },
+      params: { via: "dialog", layout: "loose" },
     });
   });
 
@@ -310,8 +315,8 @@ describe("fetchGistFiles", () => {
     expect(error.reason).toBe(reason);
     expect(error.message).toMatch(message);
     expect(events()).toEqual([
-      { name: "gist_import_started", params: { from: "link" } },
-      { name: "gist_import_failed", params: { from: "link", reason } },
+      { name: "gist_import_started", params: { via: "link" } },
+      { name: "gist_import_failed", params: { via: "link", reason } },
     ]);
   });
 
@@ -432,7 +437,16 @@ describe("fetchGistFiles", () => {
     );
   });
 
-  it("counts a fault of ours as a failed request and reports it", async () => {
+  it("marks a request GitHub never answered as unreachable", async () => {
+    answers({ [API]: new TypeError("Failed to fetch") });
+
+    const error = await failure(fetchGistFiles({ id: ID }, "link"));
+
+    expect(error).toBeInstanceOf(GistUnreachableError);
+    expect(error.reason).toBe("request-failed");
+  });
+
+  it("counts a fault of ours as unexpected and reports it", async () => {
     const logs = logMemory();
     initLogger({ providers: [logs] });
     answers({ [API]: ok(gist({ "lib.rs": { content: LIB } })) });
@@ -442,7 +456,7 @@ describe("fetchGistFiles", () => {
 
     const error = await failure(fetchGistFiles({ id: ID }, "dialog"));
 
-    expect(error.reason).toBe("request-failed");
+    expect(error.reason).toBe("unexpected");
     expect(error.message).toBe(`Could not import gist "${ID}".`);
     expect(error.cause).toBeInstanceOf(TypeError);
     expect(
@@ -450,7 +464,7 @@ describe("fetchGistFiles", () => {
     ).toEqual([{ level: "error", report: true }]);
     expect(events().at(-1)).toEqual({
       name: "gist_import_failed",
-      params: { from: "dialog", reason: "request-failed" },
+      params: { via: "dialog", reason: "unexpected" },
     });
   });
 
@@ -497,7 +511,7 @@ describe("fetchGistFiles", () => {
     ]);
     expect(events().at(-1)).toEqual({
       name: "gist_import_succeeded",
-      params: { from: "dialog", layout: "loose" },
+      params: { via: "dialog", layout: "loose" },
     });
   });
 
@@ -518,7 +532,7 @@ describe("fetchGistFiles", () => {
     );
     expect(events().at(-1)).toEqual({
       name: "gist_import_failed",
-      params: { from: "dialog", reason: "no-program" },
+      params: { via: "dialog", reason: "no-program" },
     });
   });
 });

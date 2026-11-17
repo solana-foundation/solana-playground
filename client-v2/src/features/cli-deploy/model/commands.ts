@@ -1,3 +1,5 @@
+import { Endpoint } from "@/entities/cluster";
+
 /** The tool the guide's commands are for */
 export type CliTool = "solana" | "anchor";
 
@@ -9,7 +11,7 @@ export const cliClusterOf = (
   cluster: string | undefined
 ): CliCluster | undefined => {
   if (cluster === "devnet") return "devnet";
-  if (cluster === "mainnet-beta") return "mainnet";
+  if (cluster === "mainnet") return "mainnet";
   if (cluster === "testnet") return "testnet";
   return undefined;
 };
@@ -54,9 +56,9 @@ export const deployCommands = (p: {
  * not be the cluster step 3 deployed to.
  */
 const RPC_URL: Record<CliCluster, string> = {
-  mainnet: "https://api.mainnet-beta.solana.com",
-  devnet: "https://api.devnet.solana.com",
-  testnet: "https://api.testnet.solana.com",
+  mainnet: Endpoint.MAINNET,
+  devnet: Endpoint.DEVNET,
+  testnet: Endpoint.TESTNET,
 };
 
 /** What a command block of step 3.1 is for */
@@ -141,7 +143,7 @@ if (import.meta.vitest) {
           name: "hello",
           programId: undefined,
         })[0].lines[0]
-      ).toContain("--rpc https://api.testnet.solana.com");
+      ).toContain(`--rpc ${Endpoint.TESTNET}`);
     });
 
     it("reads Playground's testnet as the guide's, and has no line for Localnet", () => {
@@ -171,7 +173,7 @@ if (import.meta.vitest) {
         {
           kind: "program-metadata",
           lines: [
-            `npx @solana-program/program-metadata@latest write idl ${id} hello.json --rpc https://api.devnet.solana.com`,
+            `npx @solana-program/program-metadata@latest write idl ${id} hello.json --rpc ${Endpoint.DEVNET}`,
           ],
         },
       ]);
@@ -183,7 +185,7 @@ if (import.meta.vitest) {
           programId: id,
         })[0].lines
       ).toEqual([
-        `npx @solana-program/program-metadata@latest write idl ${id} hello.json --rpc https://api.mainnet-beta.solana.com`,
+        `npx @solana-program/program-metadata@latest write idl ${id} hello.json --rpc ${Endpoint.MAINNET}`,
       ]);
     });
 
@@ -211,9 +213,9 @@ if (import.meta.vitest) {
       expect(lines.every((l) => l.includes(" <program-id> "))).toBe(true);
     });
 
-    it("maps only devnet and mainnet-beta to a guide cluster", () => {
+    it("maps only devnet and mainnet to a guide cluster", () => {
       expect(cliClusterOf("devnet")).toBe("devnet");
-      expect(cliClusterOf("mainnet-beta")).toBe("mainnet");
+      expect(cliClusterOf("mainnet")).toBe("mainnet");
       expect(cliClusterOf("localnet")).toBeUndefined();
       expect(cliClusterOf(undefined)).toBeUndefined();
     });

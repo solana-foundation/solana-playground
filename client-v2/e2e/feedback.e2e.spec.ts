@@ -71,7 +71,7 @@ test("client-v2-feedback: A link from the menu", async ({
     .toBeTruthy();
   const line = lines.find((l) => l.includes("feedback_github_clicked"));
   expect(line).toContain("link: bug");
-  expect(line).toContain("from: menu");
+  expect(line).toContain("via: menu");
 });
 
 // The form is out of reach here (no Sentry on the dev server), so a draft

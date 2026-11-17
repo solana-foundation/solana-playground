@@ -86,3 +86,31 @@ describe("PgTutorial.open", () => {
     expect(logged.entries[0].report).toBeFalsy();
   });
 });
+
+describe("PgTutorial.isStarted", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // A repository, gist or docs link's view holds no list in memory; a lesson
+  // listed beside it opens from the project list all the same
+  it("reads the stored names beside a link", () => {
+    vi.spyOn(PgExplorer, "allWorkspaceNames", "get").mockReturnValue(undefined);
+    vi.spyOn(PgExplorer, "storedWorkspaceNames", "get").mockReturnValue([
+      "Counter PDA Tutorial",
+    ]);
+
+    expect(PgTutorial.isStarted("Counter PDA Tutorial")).toBe(true);
+    expect(PgTutorial.isStarted("Other")).toBe(false);
+  });
+
+  it("throws while no names are read", () => {
+    vi.spyOn(PgExplorer, "storedWorkspaceNames", "get").mockReturnValue(
+      undefined
+    );
+
+    expect(() => PgTutorial.isStarted("Counter PDA Tutorial")).toThrow(
+      "Explorer not initialized"
+    );
+  });
+});

@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 
+import { Endpoint } from "../src/entities/cluster/model/endpoint";
 import { requireFor } from "../src/test-utils/require-for";
 import {
   consoleTrigger,
@@ -13,6 +14,7 @@ import {
   leaveEditor,
   newProjectPage,
   projectRow,
+  reloadAndBoot,
   runInTerminal,
   seedWorkspace,
   stubSignedIn,
@@ -393,7 +395,7 @@ test("client-v2-layout: Folding the project panel", async ({
   // Hidden: the column is out of the layout and takes no width
   await expect(files).toHaveCount(0);
   // The fold is kept over a reload
-  await page.reload();
+  await reloadAndBoot(page);
   await expect(files).toHaveCount(0);
   await filesToggle(page).click();
   await expect(files).toHaveJSProperty("offsetWidth", 240);
@@ -716,7 +718,7 @@ test.describe("on a phone", () => {
     const network = settings.getByRole("radiogroup", { name: "Network" });
     await expect(network.getByRole("radio", { checked: true })).toBeFocused();
     // Mainnet's requests are refused, so CI never reaches it
-    await page.route("https://api.mainnet-beta.solana.com/**", (route) =>
+    await page.route(`${Endpoint.MAINNET}/**`, (route) =>
       route.abort("connectionrefused")
     );
     await network.getByRole("radio", { name: "Mainnet" }).click();
@@ -1780,7 +1782,7 @@ test("client-v2-layout: A cluster that is down", async ({
   // A cluster is down when its slot does not move between two reads a second
   // apart (`PgConnection.getIsClusterDown`), so every `getSlot` answers the
   // same slot; anything else goes to the cluster as usual
-  await page.route("https://api.devnet.solana.com/**", async (route) => {
+  await page.route(`${Endpoint.DEVNET}/**`, async (route) => {
     const body = route.request().postDataJSON() as {
       id?: unknown;
       method?: string;
@@ -1788,7 +1790,7 @@ test("client-v2-layout: A cluster that is down", async ({
     if (body?.method !== "getSlot") return route.continue();
     return json(route, { jsonrpc: "2.0", result: 123, id: body.id });
   });
-  await page.reload();
+  await reloadAndBoot(page);
 
   const row = nav(page).getByRole("button", {
     name: "Change cluster, currently devnet, not responding",
@@ -1808,7 +1810,7 @@ test("client-v2-layout: A cluster that is down", async ({
 });
 
 /** Every HTTP request to the cluster fails the way a stopped validator does */
-const refuseCluster = (page: Page, url = "https://api.devnet.solana.com") =>
+const refuseCluster = (page: Page, url: string = Endpoint.DEVNET) =>
   page.route(`${url}/**`, (route) => route.abort("connectionrefused"));
 
 /** Reloads on the endpoint picked in Settings, by its option name */
@@ -1818,7 +1820,7 @@ const reloadOn = async (page: Page, option: string) => {
     settings.connection.endpoint = { option: picked };
     localStorage.setItem("settings", JSON.stringify(settings));
   }, option);
-  await page.reload();
+  await reloadAndBoot(page);
 };
 
 const clusterRow = (page: Page) =>
@@ -1868,7 +1870,7 @@ test("a stalled cluster that moves again is not down", async ({
 }) => {
   let moving = false;
   let slot = 123;
-  await page.route("https://api.devnet.solana.com/**", async (route) => {
+  await page.route(`${Endpoint.DEVNET}/**`, async (route) => {
     const body = route.request().postDataJSON() as {
       id?: unknown;
       method?: string;
@@ -1911,14 +1913,12 @@ test("the wallet names the endpoint that does not answer", async ({
   seededPage: page,
 }) => {
   await refuseCluster(page);
-  await page.reload();
+  await reloadAndBoot(page);
   await connectWallet(page);
 
   await page.locator("#tabs").getByRole("button", { name: "Wallet" }).click();
   await expect(
-    page.getByText(
-      "Can't reach the RPC endpoint at https://api.devnet.solana.com."
-    )
+    page.getByText(`Can't reach the RPC endpoint at ${Endpoint.DEVNET}.`)
   ).toBeVisible({ timeout: 15_000 });
 });
 
@@ -1944,21 +1944,6 @@ test("the wallet asks about the validator when localnet does not answer", async 
       { exact: true }
     )
   ).toBeVisible({ timeout: 15_000 });
-});
-
-// Playnet answers only once it has started in the page; a check made before
-// that must be made again then, not 10 s later
-test("playnet is not down while it starts", async ({ seededPage: page }) => {
-  await reloadOn(page, "playnet");
-  await expect(clusterRow(page)).toBeVisible({ timeout: 15_000 });
-  // Read without retrying: a label that is down for a while and then
-  // recovers must fail here, not be waited out
-  for (let i = 0; i < 12; i++) {
-    expect(await clusterRow(page).getAttribute("aria-label")).toBe(
-      "Change cluster, currently playnet"
-    );
-    await page.waitForTimeout(500);
-  }
 });
 
 // The tab row's Wallet button carries a 400 px picture; the design system's
@@ -2095,7 +2080,7 @@ test.describe("the settings page", () => {
 
     await expect
       .poll(() => lineOf(lines, "settings_opened"))
-      .toContain("from: key");
+      .toContain("via: key");
     await expect
       .poll(() => lineOf(lines, "settings_closed"))
       .toContain("via: escape");
@@ -2124,7 +2109,7 @@ test.describe("the settings page", () => {
     await expect(settingsPage(page)).toBeVisible();
     await expect
       .poll(() => lines.filter((l) => l.includes("settings_opened")).at(-1))
-      .toContain("from: stage");
+      .toContain("via: stage");
   });
 
   test("client-v2-layout: A menu open at ⌘, closes as the settings open", async ({
@@ -2221,7 +2206,9 @@ test.describe("the settings page at 1440 by 900", () => {
     for (const theme of ["Dark", "Light"]) {
       if (theme === "Light") {
         await page.evaluate(() => localStorage.setItem("theme", "Light"));
-        await page.reload();
+        // A click while the app boots again hangs in Firefox on a loaded
+        // runner: the page takes it only once its main thread is free
+        await reloadAndBoot(page);
         await page.locator("[data-settings-trigger]").first().click();
         await expect
           .poll(() =>

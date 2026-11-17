@@ -1,4 +1,4 @@
-name: CI
+name: "Upstream: checks"
 
 # Runs on pushes to master and on every pull request: a pull_request run
 # reads this file from the PR's merge commit, so a PR whose merge commit
@@ -16,6 +16,6 @@ permissions:
 
 jobs:
   checks:
-    uses: ./.github/workflows/reusable-checks.yml
+    uses: ./.github/workflows/reusable-checks.yml # zizmor: ignore[self-repository] act rejects the $/ form, and both resolve to this commit
     with:
       build: false

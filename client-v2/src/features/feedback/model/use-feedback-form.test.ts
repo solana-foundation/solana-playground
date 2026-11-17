@@ -97,7 +97,7 @@ describe("useFeedbackForm", () => {
     ]);
   });
 
-  it("should send no contact for a blank handle and track no star as rating none", async () => {
+  it("should send no contact for a blank handle and track no star without a rating", async () => {
     const provider = memoryFeedbackProvider();
     const { hook } = render(provider, { message: "No stars", contact: "  " });
 
@@ -108,7 +108,7 @@ describe("useFeedbackForm", () => {
       contact: undefined,
       rating: undefined,
     });
-    expect(events.events[1].params).toEqual({ rating: "none" });
+    expect(events.events[1].params).toEqual({});
   });
 
   it("should keep an open form's draft when the send fails, and report it under feedback:form", async () => {

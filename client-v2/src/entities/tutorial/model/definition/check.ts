@@ -4,6 +4,8 @@ import Ajv from "ajv";
 
 // Relative on purpose: `yarn tutorial:check` runs this module through tsx,
 // with no `@/` alias, and the schema sits beside the definitions it checks
+// eslint-disable-next-line layers/alias-across-modules -- tsx resolves no `@/` alias
+import { escapeRegExp } from "../../../../shared/lib/escape-reg-exp";
 import schema from "../../../../tutorials/tutorial.schema.json";
 import type {
   Beat,
@@ -94,7 +96,8 @@ const idlAccountsOf = (
  * range, a reason per wrong option and none for the right one, blocks found
  * in their target, instructions some step's target defines, a `next` in
  * `known`, ids used once, patterns that compile, read-only files the step
- * has, a call act's argument names used once, a goal's `creates` the IDL
+ * has, a call act's argument names used once and its `creates` the IDL
+ * lists, a goal's `creates` the IDL
  * lists and an `existsLine` exactly with it, doc files that exist and link
  * only to `https`) run only on a definition
  * the schema accepts, since they read its shape. The folder-name error leads,
@@ -332,16 +335,16 @@ const timesHeld = (file: string, block: string) => {
 /** Whether `file` holds `block`'s lines in a row, indentation and blank lines aside */
 const holds = (file: string, block: string) => timesHeld(file, block) > 0;
 
-const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
 /** Whether any of the files defines `fn <name>` */
 const defines = (files: string[], name: string) => {
+  // eslint-disable-next-line security/detect-non-literal-regexp -- the name is escaped
   const fn = new RegExp(`\\bfn\\s+${escapeRegExp(name)}\\s*[(<]`);
   return files.some((f) => fn.test(f));
 };
 
 const compiles = (pattern: string) => {
   try {
+    // eslint-disable-next-line security/detect-non-literal-regexp -- compiles a shipped tutorial's pattern to report it if broken
     new RegExp(pattern, "i");
     return true;
   } catch {
@@ -632,6 +635,34 @@ const ruleErrors = (
             )}, also at ${first}`,
           });
         });
+        const { creates } = beat.call;
+        // An existing account moves the lesson on to the next beat, so one
+        // must follow, or a second pass ends on this card with nothing live
+        const beats = step.beats.includes(beat)
+          ? step.beats
+          : step.onFail ?? [];
+        if (creates !== undefined && beats.at(-1) === beat) {
+          errors.push({
+            path: `${at}.call.creates`,
+            message: "a beat after this card to go on to, found none",
+          });
+        }
+        const accounts =
+          creates === undefined
+            ? undefined
+            : idlAccountsOf(d.steps, i, beat.call.instruction);
+        if (
+          creates !== undefined &&
+          accounts &&
+          !accounts.some((name) => sameName(name, creates))
+        ) {
+          errors.push({
+            path: `${at}.call.creates`,
+            message: `an account of \`${
+              beat.call.instruction
+            }\` in the step's IDL, found ${JSON.stringify(creates)}`,
+          });
+        }
       }
     }
 
@@ -1317,6 +1348,49 @@ if (import.meta.vitest) {
         expect(lines(d)).toEqual([]);
       });
 
+      it("accepts a call act's `creates` the step's IDL lists, and rejects one it does not", () => {
+        const creating = (creates: string) => {
+          const d = minimal();
+          d.steps[1].idl = JSON.stringify({
+            instructions: [
+              { name: "hello", accounts: [{ name: "player" }], args: [] },
+            ],
+          });
+          d.steps[1].beats[0] = {
+            kind: "act",
+            id: "s2.call",
+            act: "call",
+            title: "Call",
+            context: "Sends hello",
+            button: "Call",
+            call: { instruction: "hello", creates },
+          };
+          return d;
+        };
+        expect(lines(creating("player"))).toEqual([]);
+        expect(lines(creating("map"))).toEqual([
+          'steps[1].beats[0].call.creates: an account of `hello` in the step\'s IDL, found "map"',
+        ]);
+      });
+
+      it("rejects a call act's `creates` on the last card, with nothing to go on to", () => {
+        const d = minimal();
+        d.steps[1].beats = [
+          {
+            kind: "act",
+            id: "s2.call",
+            act: "call",
+            title: "Call",
+            context: "Sends hello",
+            button: "Call",
+            call: { instruction: "hello", creates: "player" },
+          },
+        ];
+        expect(lines(d)).toEqual([
+          "steps[1].beats[0].call.creates: a beat after this card to go on to, found none",
+        ]);
+      });
+
       it("rejects an argument named twice on one act", () => {
         const d = minimal();
         d.steps[1].beats[0] = callAct(["len", { name: "len", value: 1 }]);
@@ -1589,6 +1663,7 @@ if (import.meta.vitest) {
     it("refuses a doc address that is not https", () => {
       const d = minimal();
       d.docs = [
+        // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- the insecure scheme is the input under test
         { title: "IDL", url: "http://anchor-lang.com", file: "idl.md" },
       ];
       expect(lines(d)).toEqual([

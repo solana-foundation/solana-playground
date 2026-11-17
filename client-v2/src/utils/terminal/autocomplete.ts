@@ -274,3 +274,19 @@ export class PgAutocomplete {
     );
   }
 }
+
+if (import.meta.vitest) {
+  const { describe, it, expect } = import.meta.vitest;
+
+  describe("utils/terminal/autocomplete", () => {
+    it("getCandidates offers the next token after a line that ends in a space", () => {
+      const autocomplete = new PgAutocomplete([
+        ["anchor idl init", "anchor idl upgrade"],
+      ]);
+      expect(autocomplete.getCandidates("anchor idl ")).toEqual([
+        "init",
+        "upgrade",
+      ]);
+    });
+  });
+}

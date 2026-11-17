@@ -18,7 +18,7 @@ pace by 1 write per second.
 
 ### Requirement: The send cap is 4 per cluster unless the env sets one
 
-The pace SHALL never rise above the cluster's send cap, in writes per second. Devnet, testnet and mainnet-beta SHALL
+The pace SHALL never rise above the cluster's send cap, in writes per second. Devnet, testnet and mainnet SHALL
 each have a send cap of 4, which a positive `REACT_APP_DEVNET_SEND_TX_PER_SECOND`,
 `REACT_APP_TESTNET_SEND_TX_PER_SECOND` or `REACT_APP_MAINNET_SEND_TX_PER_SECOND` SHALL replace. A value that is unset,
 not a number, or not above 0 SHALL leave the cap at 4; no value turns the cap off. The cap SHALL apply to every RPC
@@ -68,8 +68,9 @@ deploy typed in the terminal SHALL keep its question.
 Every read of a deploy's buffer account SHALL go through the cluster's read-buffer RPC when the env sets one:
 `REACT_APP_DEVNET_READ_BUFFER_RPC_URL`, `REACT_APP_TESTNET_READ_BUFFER_RPC_URL` or
 `REACT_APP_MAINNET_READ_BUFFER_RPC_URL`. This covers deploys typed in the terminal, started from the Deploy stage,
-and run by a tutorial. Sends and every other read SHALL stay on the selected RPC. An unset or empty value SHALL read
-the buffer through the selected RPC.
+and run by a tutorial. Sends and every other read SHALL stay on the selected RPC, apart from a deploy's airdrop,
+which goes through the cluster's native RPC as `client-v2-wallet-funding` requires. An unset or empty value SHALL
+read the buffer through the selected RPC.
 
 #### Scenario: A platform RPC that lags on fresh buffers (manual)
 

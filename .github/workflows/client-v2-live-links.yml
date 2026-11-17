@@ -1,4 +1,4 @@
-name: client-v2 live links
+name: "Client v2: live links"
 
 # The `@live-links` browser specs: the GitHub links the import dialog and the
 # build server's tip offer (`LINKS` in the spec), requested from github.com. Kept
@@ -28,6 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
+          persist-credentials: false
           submodules: true
           fetch-depth: 0
 

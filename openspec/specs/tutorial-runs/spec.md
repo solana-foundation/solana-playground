@@ -310,9 +310,29 @@ A result that passed its goal because the account already exists SHALL show a pa
 
 ### Requirement: The step's pass says it passed on an existing account
 
-`tutorial_step_passed` SHALL carry `reason` with the value `"exists"` when the step passed because the account its goal creates already exists, and SHALL carry no `reason` on any other pass. Its other parameters (`tutorial`, `step`, `via`, `seconds`) are unchanged. A reload SHALL keep the reason with the step's pass.
+`tutorial_step_passed` SHALL carry `reason` with the value `"exists"` when the step passed because the account its goal creates already exists, and SHALL carry no `reason` on any other pass. Its other parameters (`tutorial`, `step_index`, `via`, `seconds`) are unchanged. A reload SHALL keep the reason with the step's pass.
 
 #### Scenario: The event on an existing account (manual)
 
 - **WHEN** Lumberjack's step 2 passes from the Call panel on an existing player
-- **THEN** `tutorial_step_passed` fires once with `step` 2, `via` `call_panel` and `reason` `exists`
+- **THEN** `tutorial_step_passed` fires once with `step_index` 2, `via` `call_panel` and `reason` `exists`
+
+### Requirement: A one-time call on an existing account moves the lesson on
+
+A `call` act whose `call` names `creates` SHALL send that account with its call, before any `creates` of the step's goal.
+When the System Program refuses the act's instruction because that account is already in use, the run SHALL be recorded
+refused, its result card SHALL say the account already exists on devnet, and the lesson SHALL post the next beat. The
+step SHALL NOT pass on it unless its goal does. A refusal for any other reason, or for another account, SHALL stay a
+failure, explained as any other.
+
+#### Scenario: The counter's second pass (manual)
+
+- **GIVEN** the counter fixture, finished once with this wallet
+- **WHEN** the learner presses **Call initialize** on step 2 and the System Program refuses it with "already in use"
+- **THEN** the card says `counter` already exists on devnet, the **Call increment** card posts, and step 2 passes only
+  once `increment` lands
+
+#### Scenario: A refusal for another reason (manual)
+
+- **WHEN** the `initialize` act fails for a reason other than its account being in use
+- **THEN** the run is a failure, explained as any other, and no further beat posts

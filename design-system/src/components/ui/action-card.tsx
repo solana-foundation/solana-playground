@@ -77,7 +77,7 @@ function ActionCardContent({ className, ...props }: React.ComponentProps<"div">)
 }
 
 function ActionCardEyebrow({ className, ...props }: React.ComponentProps<"span">) {
-  return <span data-slot="action-card-eyebrow" className={cn("text-xs text-subtle", className)} {...props} />
+  return <span data-slot="action-card-eyebrow" className={cn("text-xs font-label text-subtle", className)} {...props} />
 }
 
 function ActionCardTitle({ className, children, ...props }: React.ComponentProps<"h3">) {

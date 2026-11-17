@@ -8,8 +8,12 @@ import { setting } from "./setting";
 const READ_BUFFER = "https://read-buffer.test/";
 const ID = "connection.readBufferEndpoint";
 
-const env = vi.hoisted(() => ({
-  selected: { rpcEndpoint: "https://api.devnet.solana.com" },
+const env = await vi.hoisted(async () => ({
+  selected: {
+    rpcEndpoint: (
+      await import("@/test-utils/endpoints.mjs")
+    ).TEST_ENDPOINT.DEVNET,
+  },
   /** What `PgConnection.getReadBufferConnection` answers; the selected connection when unset */
   readBuffer: undefined as { rpcEndpoint: string } | undefined,
 }));

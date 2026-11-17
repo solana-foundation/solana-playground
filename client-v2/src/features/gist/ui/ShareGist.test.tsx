@@ -224,7 +224,7 @@ it("shares a secret gist and shows the Playground link, not the gist URL", async
   expect(sent.events).toEqual([
     {
       name: "gist_export_started",
-      params: { files: 2, visibility: "secret", source: "header" },
+      params: { files: 2, visibility: "secret", via: "header" },
     },
     {
       name: "gist_export_succeeded",
@@ -246,7 +246,7 @@ it("shares a public gist when Public is picked", async () => {
   expect(sent.events[0].params).toEqual({
     files: 2,
     visibility: "public",
-    source: "header",
+    via: "header",
   });
 });
 

@@ -170,8 +170,8 @@ export const ConflictResolver = ({
 
   const wholeFile = (choice: "keep-local" | "take-server") => {
     persistenceTelemetry.track("sync_whole_file_answered", {
-      answer: choice,
-      from: "view",
+      decision: choice,
+      via: "view",
     });
     void answer(choice);
   };

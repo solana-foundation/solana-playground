@@ -40,8 +40,10 @@ export const useSyncMarkers = (): Markers => {
     const readAll = async () => {
       const next = new Map<string, SyncMarker>();
       const failed: unknown[] = [];
-      for (const name of PgExplorer.allWorkspaceNames ?? []) {
-        const id = PgExplorer.workspaceIdOf(name);
+      // The rows the project list shows, a repository, gist or docs link's view
+      // included
+      for (const name of PgExplorer.storedWorkspaceNames ?? []) {
+        const id = PgExplorer.storedWorkspaceIdOf(name);
         if (!id) continue;
         try {
           const marker = await syncMarkerOf(id, name);

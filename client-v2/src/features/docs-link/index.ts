@@ -14,7 +14,7 @@ export { PgDocsLink } from "./model/opened";
 export { PgClientRun } from "./model/run";
 export type { RunState } from "./model/run";
 export { docsLinkTelemetry } from "./model/telemetry";
-export type { RunOutcome, RunSource } from "./model/telemetry";
+export type { RunOutcome } from "./model/telemetry";
 export { default as BaseBrokenLink } from "./ui/BaseBrokenLink";
 export type { BaseBrokenLinkProps } from "./ui/BaseBrokenLink";
 export { default as BaseRunButton } from "./ui/BaseRunButton";

@@ -1,3 +1,5 @@
+import { reportUnhandled } from "@/shared/lib/logger";
+
 import { PgCommon } from "../common";
 import { PgAutocomplete } from "./autocomplete";
 import { PgHistory } from "./history";
@@ -15,6 +17,7 @@ import {
   closestRightBoundary,
   isIncompleteInput,
   parse,
+  parseArgs,
 } from "./utils";
 
 /**
@@ -155,8 +158,8 @@ export class PgShell {
     if (this._waitingForInput) {
       PgCommon.createAndDispatchCustomEvent(PgShell._TERMINAL_WAIT_FOR_INPUT);
     } else {
-      const parsedInput = parse(input).flatMap((token) =>
-        token === "!!" ? parse(this._history.getPrevious() ?? "") : [token]
+      const parsedInput = parseArgs(input).flatMap((token) =>
+        token === "!!" ? parseArgs(this._history.getPrevious() ?? "") : [token]
       );
       return await this._cmdManager.execute(parsedInput);
     }
@@ -362,7 +365,10 @@ export class PgShell {
           if (isIncompleteInput(this._tty.input)) {
             this._handleCursorInsert("\n");
           } else {
-            this.handleReadComplete();
+            // Nothing waits on a typed command: `PgTerm.process` has printed
+            // its failure's line, and the failure is reported here rather
+            // than left as an unhandled rejection
+            this.handleReadComplete().catch(reportUnhandled);
           }
           break;
 

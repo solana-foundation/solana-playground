@@ -81,13 +81,15 @@ const liveMetadata = (name: string): TutorialMetadata | undefined => {
 };
 
 const read = async (): Promise<Map<string, TutorialProgress>> => {
-  // Before the explorer is initialised nothing is started yet, and
-  // `isStarted` would throw
-  if (!PgExplorer.allWorkspaceNames) return new Map();
+  // Before the explorer is initialised nothing is started yet. The stored
+  // names, not `allWorkspaceNames`: the project list shows started lessons
+  // with their progress beside a repository, gist or docs link too
+  const names = PgExplorer.storedWorkspaceNames;
+  if (!names) return new Map();
 
   const entries = await Promise.all(
     PgTutorial.all.map(async (t) => {
-      if (!PgTutorial.isStarted(t.name)) return [t.name, NEW] as const;
+      if (!names.includes(t.name)) return [t.name, NEW] as const;
       if (t.definition) {
         const steps = t.definition.steps.map((s) => s.id);
         const conversation = await readConversation(t.name);
@@ -103,7 +105,7 @@ const read = async (): Promise<Map<string, TutorialProgress>> => {
       }
       const live = liveMetadata(t.name);
       if (live) return [t.name, progressOf(true, live, t.pageCount)] as const;
-      let meta = null;
+      let meta: TutorialMetadata | undefined;
       try {
         meta = await PgTutorial.getMetadata(t.name);
       } catch (e) {

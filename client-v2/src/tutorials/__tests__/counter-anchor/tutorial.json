@@ -189,7 +189,8 @@
           "context": "Sends initialize from your wallet, which pays for the counter",
           "button": "Call initialize",
           "call": {
-            "instruction": "initialize"
+            "instruction": "initialize",
+            "creates": "counter"
           }
         },
         {

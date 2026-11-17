@@ -1,4 +1,4 @@
-import type { LanguageModel, ModelMessage } from "ai";
+import type { LanguageModel, ModelMessage, UserModelMessage } from "ai";
 
 import { agentTelemetry } from "@/features/agent";
 import type { ModelProvider } from "@/shared/lib/ai";
@@ -67,8 +67,39 @@ const modeContext = () => {
 };
 
 /**
+ * The newest message as the request sends it: the user's words, then the
+ * mode's current state as a second text part, so the model reads the state
+ * after the history, whose turns describe the surface as it was then
+ * (HOO-2823). A user message's text parts are what every backend takes; a
+ * system message after the history is not (Anthropic's API takes one only
+ * under a beta).
+ */
+const withModeNow = (said: UserModelMessage & { content: string }) => {
+  const mode = PgAssistant.mode;
+  if (!mode?.now) return said;
+  try {
+    const text = mode.now();
+    // Anthropic refuses an empty text part
+    if (!text.trim()) return said;
+    const now: UserModelMessage = {
+      role: "user",
+      content: [
+        { type: "text", text: said.content },
+        { type: "text", text },
+      ],
+    };
+    return now;
+  } catch (e) {
+    // As with the context: the turn still runs, without the state
+    log.error(e, { report: true, context: { mode: mode.name, what: "now" } });
+    return said;
+  }
+};
+
+/**
  * One conversation with any model provider, on `runTurn`. The history keeps the SDK's messages, so
- * tool calls and Gemini's thought signatures go back as sent; a failed turn leaves it unchanged.
+ * tool calls and Gemini's thought signatures go back as sent; it keeps the user's message as
+ * typed, without the mode's state now (`withModeNow`). A failed turn leaves it unchanged.
  * The thread still stores each call that turn finished (`PgAssistant.addToolResult`), so a provider
  * rebuilt later replays them: they ran, and the model must not run them again.
  */
@@ -95,11 +126,15 @@ export const createProvider = (
       const replies = createReplies();
       let calledTool = false;
 
+      const said = { role: "user" as const, content: input };
+      // Where the newest message sits in the turn's messages
+      const saidAt = history.length;
+
       let result;
       try {
         result = await ai.runTurn({
           model,
-          messages: [...history, { role: "user", content: input }],
+          messages: [...history, withModeNow(said)],
           instructions: [
             {
               role: "system",
@@ -202,7 +237,10 @@ export const createProvider = (
         });
       }
 
-      history = result.messages;
+      // The history keeps the message as typed: the next turn sends the state as it is then
+      history = result.messages.map((message, i) =>
+        i === saidAt ? said : message
+      );
       // A turn the hosted default answered means its limit has lifted
       PgAssistant.limitLifted();
       if (result.reachedStepLimit) {

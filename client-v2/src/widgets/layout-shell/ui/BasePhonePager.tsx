@@ -8,14 +8,12 @@ import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import { Segmented, SegmentedItem } from "@/shared/ui/segmented";
 import { Sheet, SheetContent, SheetTitle } from "@/shared/ui/sheet";
+import { PHONE_CONSOLE_BAR_PX } from "@/views/flow/tokens";
 
 import type { PhonePage, StagePage, WorkView } from "../model/phone-pages";
 import { isWorkView, PHONE_PAGES } from "../model/phone-pages";
 import { isCovered, isWorkInFrame, screenOf } from "../model/screen";
 import { PHONE_ICONS } from "./phone-icons";
-
-/** The folded console's bar on a phone: a finger's 44 px, not the wide 28 */
-const PHONE_CONSOLE_BAR_PX = 44;
 
 /** How long a scroll must rest before it counts as a swipe that settled */
 export const SWIPE_SETTLE_MS = 120;
@@ -559,6 +557,8 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
             <SheetContent
               side="left"
               aria-describedby={undefined}
+              // The shell's ⌘E opens and closes it from inside too (LayoutShell)
+              data-files-sheet=""
               className="w-full p-0 data-[side=left]:w-full data-[side=left]:sm:max-w-full"
               style={props.sheetFont}
             >

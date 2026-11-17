@@ -6,7 +6,7 @@ import type { RunResult } from "@/utils/js-runtime";
 import { missingPackageOf } from "@/utils/js-runtime";
 
 import { PgDocsLink } from "./opened";
-import type { RunOutcome, RunSource, WalletOrigin } from "./telemetry";
+import type { RunOutcome, WalletOrigin } from "./telemetry";
 import { docsLinkTelemetry } from "./telemetry";
 
 const log = createLogger("docs-link:run");
@@ -26,8 +26,11 @@ export type RunState =
   | {
       kind: "running";
       startedAt: number;
-      /** Whether a docs link opened the project, taken when the run starts */
-      source: RunSource;
+      /**
+       * Whether a docs link opened the project, taken when the run starts:
+       * only such a run sends the `docs_link_run_*` events
+       */
+      isFromLink: boolean;
       /** What the callout keeps showing while the run goes */
       previous: RestingState;
     }
@@ -108,13 +111,18 @@ const settleWith =
 const isHelp = (input: string | null) =>
   /^\s*\S+\s+(-h|--help)(\s|$)/.test(input ?? "");
 
-/** Whether a docs link opened the project a run starts on */
-const currentSource = (): RunSource => (PgDocsLink.opened ? "link" : "project");
+/**
+ * Whether a docs link opened the open project: read when a run starts, or
+ * when it ends for a run that started before anything listened
+ */
+const isLinkOpen = () => PgDocsLink.opened !== undefined;
 
 /**
  * Follow the `run` command's own events, so a `run` typed in the terminal
- * shows on the stage row like one from its button. Started on first use, not
- * at import: `PgCommand` reads the command list, which is filled at startup.
+ * shows on the stage row like one from its button. Every run sets the state;
+ * only a run in a project a docs link opened sends the `docs_link_run_*`
+ * events. Started on first use, not at import: `PgCommand` reads the
+ * command list, which is filled at startup.
  */
 const listen = () => {
   if (isListening) return;
@@ -122,12 +130,13 @@ const listen = () => {
   PgCommand.run.onDidStart((input) => {
     if (isHelp(input)) return;
     started++;
-    const source = currentSource();
-    docsLinkTelemetry.track("docs_link_run_started", { source });
+    const isFromLink = isLinkOpen();
+    if (isFromLink)
+      docsLinkTelemetry.track("docs_link_run_started", { via: "link" });
     set({
       kind: "running",
       startedAt: Date.now(),
-      source,
+      isFromLink,
       previous: restingOf(state),
     });
   });
@@ -136,15 +145,17 @@ const listen = () => {
     const run =
       state.kind === "running"
         ? state
-        : { startedAt: Date.now(), source: currentSource() };
+        : { startedAt: Date.now(), isFromLink: isLinkOpen() };
     const ms = Date.now() - run.startedAt;
     const next = settleWith(ms)(result);
-    const outcome: RunOutcome = next.kind;
-    docsLinkTelemetry.track("docs_link_run_finished", {
-      source: run.source,
-      outcome,
-      seconds: Math.floor(ms / 1000),
-    });
+    if (run.isFromLink) {
+      const outcome: RunOutcome = next.kind;
+      docsLinkTelemetry.track("docs_link_run_finished", {
+        via: "link",
+        outcome,
+        seconds: Math.floor(ms / 1000),
+      });
+    }
     set(next);
   });
 
@@ -193,7 +204,9 @@ const fundsFor =
     if (switches !== since) return "project-left";
     if (balance >= needed) return "enough";
 
-    docsLinkTelemetry.track("docs_link_run_funding_shown", { wallet });
+    docsLinkTelemetry.track("docs_link_run_funding_shown", {
+      funding_state: wallet,
+    });
     set({
       kind: "funding",
       address: current.publicKey.toBase58(),
@@ -266,9 +279,10 @@ export const PgClientRun = {
   },
 
   /**
-   * Start following `run`, so every run is shown and measured, typed in the
-   * terminal or not. The stage row calls it once it mounts; it is safe to
-   * call again.
+   * Start following `run`, so every run is shown, typed in the terminal or
+   * not, and a run in a project a docs link opened sends the
+   * `docs_link_run_*` events. The stage row calls it once it mounts; it is
+   * safe to call again.
    */
   follow() {
     listen();

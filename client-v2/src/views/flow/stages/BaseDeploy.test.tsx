@@ -38,11 +38,13 @@ const recordFor =
     at: Date.UTC(2026, 9, 15),
   });
 const record = recordFor("devnet");
-const mainnetRecord = recordFor("mainnet-beta")("m1", "msig");
+const mainnetRecord = recordFor("mainnet")("m1", "msig");
 
 const IDLE_RUN: DeployRunState = {
   // eslint-disable-next-line unicorn/no-null -- `DeployRunState.step` is `null` while no deploy runs
   step: null,
+  // eslint-disable-next-line unicorn/no-null -- `DeployRunState.approval` is `null` while none is asked
+  approval: null,
   percent: 0,
   funds: false,
   upgrade: false,
@@ -174,7 +176,7 @@ describe("BaseDeploy", () => {
         {...props({
           built,
           history,
-          cluster: "mainnet-beta",
+          cluster: "mainnet",
           onOpenCliGuide,
         })}
         onDeploy={onDeploy}
@@ -206,7 +208,7 @@ describe("BaseDeploy", () => {
         {...props({
           built: true,
           history: [],
-          cluster: "mainnet-beta",
+          cluster: "mainnet",
         })}
         onChangeNetwork={onChangeNetwork}
       />
@@ -226,7 +228,7 @@ describe("BaseDeploy", () => {
         {...props({
           built: true,
           history: [record("a", "5sig")],
-          cluster: "mainnet-beta",
+          cluster: "mainnet",
         })}
       />
     );
@@ -590,7 +592,7 @@ describe("BaseDeploy", () => {
   it("leaves out an Explorer link the explorer cannot open", () => {
     const p = props({
       built: true,
-      history: [recordFor("playnet")("a", "5sig")],
+      history: [recordFor("localnet")("a", "5sig")],
     });
     p.addressUrl = () => undefined;
     p.txUrl = () => undefined;
@@ -617,6 +619,34 @@ describe("BaseDeploy", () => {
       "Upgraded. The program id stays the same."
     );
     expect(result.textContent).toContain("1.42 SOL");
+  });
+
+  it("names a connected wallet that pays, and its two approvals", () => {
+    render(
+      <BaseDeploy
+        {...props({
+          built: true,
+          history: [],
+          payer: {
+            address: WALLET,
+            balance: 4.2,
+            playground: false,
+            name: "Phantom",
+          },
+        })}
+      />
+    );
+    expect(screen.getByLabelText("Who pays").textContent).toBe(
+      `From Phantom · ${shortKey(
+        WALLET
+      )} · 4.20 SOLPhantom asks twice: to send SOL for the deploy, then to deploy.`
+    );
+    // The note is a line of its own, so the payer stays one line
+    expect(
+      screen.getByText(
+        "Phantom asks twice: to send SOL for the deploy, then to deploy."
+      ).tagName
+    ).toBe("SPAN");
   });
 
   it("names the wallet that pays, or the Playground wallet before the first deploy", () => {
@@ -687,7 +717,13 @@ describe("BaseDeploy", () => {
           built: true,
           view: RUNNING,
           history: [],
-          run: { step: "write", percent: 40, funds: true, upgrade: false },
+          run: {
+            step: "write",
+            percent: 40,
+            funds: true,
+            upgrade: false,
+            approval: IDLE_RUN.approval,
+          },
         })}
       />
     );

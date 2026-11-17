@@ -9,8 +9,8 @@ import { Button } from "@/shared/ui/button";
 
 const log = createLogger("settings-page:frame");
 
-export interface SettingsSection {
-  id: string;
+export interface SettingsSection<Id extends string = string> {
+  id: Id;
   title: string;
   /** One line under the title, on a wide window */
   description?: string;
@@ -19,14 +19,14 @@ export interface SettingsSection {
   content: ReactNode;
 }
 
-interface BaseSettingsPageProps {
-  sections: SettingsSection[];
+interface BaseSettingsPageProps<Id extends string> {
+  sections: SettingsSection<Id>[];
   /** The section marked as current in the list */
-  current: string;
+  current: Id;
   /** A click in the list; the page brings the section into view itself */
-  onPick: (id: string) => void;
+  onPick: (id: Id) => void;
   /** The section being read changed as the user scrolled */
-  onCurrentChange: (id: string) => void;
+  onCurrentChange: (id: Id) => void;
   onBack: () => void;
   /** Below `LAYOUT_BREAKPOINTS.phone`: a bar instead of the section list */
   phone: boolean;
@@ -44,7 +44,7 @@ const headingId = (id: string) => `settings-section-${id}`;
  * after another at the right. Fixed over the whole window, so the app beneath
  * it can stay mounted.
  */
-const BaseSettingsPage = ({
+const BaseSettingsPage = <Id extends string>({
   sections,
   current,
   onPick,
@@ -53,7 +53,7 @@ const BaseSettingsPage = ({
   phone,
   focus,
   onEscape,
-}: BaseSettingsPageProps) => {
+}: BaseSettingsPageProps<Id>) => {
   const root = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -126,7 +126,7 @@ const BaseSettingsPage = ({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onEscape]);
 
-  const pick = (id: string) => {
+  const pick = (id: Id) => {
     onPick(id);
     pinned.current = true;
     nodes.current.get(id)?.scrollIntoView({ block: "start" });

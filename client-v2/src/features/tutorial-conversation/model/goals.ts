@@ -168,6 +168,7 @@ const reported = new Set<string>();
 const logMatches = (pattern: string, line: string | null): boolean => {
   if (line === null) return false;
   try {
+    // eslint-disable-next-line security/detect-non-literal-regexp -- a shipped tutorial's pattern, which `yarn tutorial:check` compiles
     return new RegExp(pattern, "i").test(line);
   } catch (e) {
     // `tutorial:check` rejects such a pattern, so one here is a definition

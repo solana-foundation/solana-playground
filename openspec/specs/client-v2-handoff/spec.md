@@ -63,7 +63,7 @@ signed in the sheet reads as signed in.
 ### Requirement: The hand-off is measured
 
 The `app-nav` slice SHALL send `nav_handoff_opened` when the sheet opens,
-with `signedIn` (`true` or `false`); `nav_handoff_link_copied` when Copy
+with `signed_in` (`true` or `false`); `nav_handoff_link_copied` when Copy
 succeeds; and `nav_handoff_link_shared` when the share sheet resolves (not
 when it is cancelled). None
 carries the link or the login.
@@ -71,4 +71,4 @@ carries the link or the login.
 #### Scenario: Opening is counted
 
 - **WHEN** a signed-out person opens the sheet
-- **THEN** `nav_handoff_opened` is sent with `signedIn: false`
+- **THEN** `nav_handoff_opened` is sent with `signed_in: false`

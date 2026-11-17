@@ -10,17 +10,23 @@ const LAYERS = ["features", "widgets"];
 const slices = () =>
   LAYERS.flatMap((layer) => {
     const root = join(SRC, layer);
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
     if (!existsSync(root)) return [];
-    return readdirSync(root, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => join(layer, entry.name))
-      .filter((slice) => existsSync(join(SRC, slice, "index.ts")));
+    return (
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
+      readdirSync(root, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => join(layer, entry.name))
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
+        .filter((slice) => existsSync(join(SRC, slice, "index.ts")))
+    );
   });
 
-/** Names of the event-map keys passed to `createTracker<...>()` that have no doc comment */
-const undocumentedEvents = (file: string): string[] => {
+/** The event maps passed to `createTracker<...>()` in `file`, `undefined` for one that is not a type literal */
+const eventMaps = (file: string) => {
   const source = ts.createSourceFile(
     file,
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
     readFileSync(file, "utf8"),
     ts.ScriptTarget.Latest,
     true
@@ -47,17 +53,29 @@ const undocumentedEvents = (file: string): string[] => {
       ? aliases.get(type.typeName.text)
       : type;
 
-  return maps.flatMap((map) => {
-    const literal = resolve(map);
-    if (!literal || !ts.isTypeLiteralNode(literal)) return ["<map not found>"];
-    const hasDocComment = (member: ts.Node) =>
-      (
-        ts.getLeadingCommentRanges(source.text, member.getFullStart()) ?? []
-      ).some(({ pos, end }) => source.text.slice(pos, end).startsWith("/**"));
-    return literal.members
-      .filter((member) => !hasDocComment(member))
-      .map((member) => member.name?.getText(source) ?? "<unnamed>");
-  });
+  return {
+    source,
+    literals: maps.map((map) => {
+      const literal = resolve(map);
+      return literal && ts.isTypeLiteralNode(literal) ? literal : undefined;
+    }),
+  };
+};
+
+/** Names of the event-map keys passed to `createTracker<...>()` that have no doc comment */
+const undocumentedEvents = (file: string): string[] => {
+  const { source, literals } = eventMaps(file);
+  const hasDocComment = (member: ts.Node) =>
+    (ts.getLeadingCommentRanges(source.text, member.getFullStart()) ?? []).some(
+      ({ pos, end }) => source.text.slice(pos, end).startsWith("/**")
+    );
+  return literals.flatMap((literal) =>
+    literal
+      ? literal.members
+          .filter((member) => !hasDocComment(member))
+          .map((member) => member.name?.getText(source) ?? "<unnamed>")
+      : ["<map not found>"]
+  );
 };
 
 /** The one browser module allowed to import the Sentry SDK; craco swaps it out of builds without Sentry */
@@ -65,6 +83,7 @@ const SENTRY_IMPORTER = join("shared", "lib", "reporter", "sentry.ts");
 
 /** Every file under `dir`, as a path relative to `SRC` */
 const filesUnder = (dir: string): string[] =>
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
   readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
     entry.isDirectory()
       ? filesUnder(join(dir, entry.name))
@@ -77,6 +96,7 @@ const sentryImporters = () =>
     .filter((file) => /\.(tsx?|mjs)$/.test(file) && !/\.test\./.test(file))
     .filter((file) =>
       /from\s+["']@sentry\/react["']|import\(\s*["']@sentry\/react["']/.test(
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
         readFileSync(join(SRC, file), "utf8")
       )
     );
@@ -92,6 +112,7 @@ it("should find the slices it checks", () => {
 it.each(slices())(
   "should have %s declare its events in model/telemetry.ts",
   (slice) => {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
     expect(existsSync(join(SRC, slice, "model", "telemetry.ts"))).toBe(true);
   }
 );
@@ -100,8 +121,187 @@ it.each(slices())(
   "should have %s describe every event with a doc comment",
   (slice) => {
     const file = join(SRC, slice, "model", "telemetry.ts");
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
     if (!existsSync(file)) return;
 
     expect(undocumentedEvents(file)).toEqual([]);
+  }
+);
+
+/** The tracker's own type tests, whose event maps are made up */
+const TELEMETRY_LIB = join("shared", "lib", "telemetry");
+
+/**
+ * Every event name declared through `createTracker<...>()` in a non-test
+ * source file anywhere under `src`: the slices and the legacy roots, whose
+ * funnel steps the slice rule above never reached.
+ */
+let declaredCache: Set<string> | undefined;
+const declaredEvents = (): Set<string> =>
+  (declaredCache ??= new Set(
+    filesUnder(SRC)
+      .filter((file) => /\.tsx?$/.test(file) && !/\.test\./.test(file))
+      .filter((file) => !file.startsWith(TELEMETRY_LIB))
+      .flatMap((file) => {
+        const { source, literals } = eventMaps(join(SRC, file));
+        return literals.flatMap((literal) =>
+          (literal?.members ?? []).map(
+            (member) => member.name?.getText(source) ?? ""
+          )
+        );
+      })
+  ));
+
+/**
+ * Every snake_case string literal in a non-test source file, outside its
+ * in-source test block (`if (import.meta.vitest)`), whose expectations name
+ * events too: an event name in quotes is a `track` call's (a map declares its
+ * keys bare), so a declared name that never appears here is never sent.
+ * Literals, not `track` calls: some sends pass a name held elsewhere
+ * (`tutorialTelemetry.track(effect.name, ...)`)
+ */
+let quotedCache: Set<string> | undefined;
+const quotedNames = (): Set<string> =>
+  (quotedCache ??= new Set(
+    filesUnder(SRC)
+      .filter((file) => /\.tsx?$/.test(file) && !/\.test\./.test(file))
+      .filter((file) => !file.startsWith(TELEMETRY_LIB))
+      .flatMap((file) => sentLiterals(join(SRC, file)))
+  ));
+
+/** The in-source test block's guard */
+const isInSourceTests = (node: ts.Node) =>
+  ts.isIfStatement(node) && node.expression.getText() === "import.meta.vitest";
+
+/** The snake_case string literals in `file`, its in-source tests left out */
+const sentLiterals = (file: string): string[] => {
+  const source = ts.createSourceFile(
+    file,
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
+    readFileSync(file, "utf8"),
+    ts.ScriptTarget.Latest,
+    true
+  );
+  const names: string[] = [];
+  const visit = (node: ts.Node) => {
+    if (isInSourceTests(node)) return;
+    if (ts.isStringLiteralLike(node) && /^[a-z][a-z0-9_]*$/.test(node.text)) {
+      names.push(node.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return names;
+};
+
+/** The funnel table: the main spec once archived, the change's delta until then */
+const FUNNEL_SPECS = [
+  join("openspec", "specs", "client-v2-funnels", "spec.md"),
+  join(
+    "openspec",
+    "changes",
+    "funnel-events",
+    "specs",
+    "client-v2-funnels",
+    "spec.md"
+  ),
+].map((path) => join(SRC, "..", "..", path));
+
+interface FunnelRow {
+  step: string;
+  events: string[];
+  failures: string[];
+  /** The Failure events cell as written, for its `none: <why>` */
+  failuresCell: string;
+  source: string;
+}
+
+/** Backticked names in a table cell */
+const namesIn = (cell: string) =>
+  Array.from(cell.matchAll(/`([a-z][a-z0-9_]*)`/g), (match) => match[1]);
+
+/** The rows of the funnel table, whose header starts `| Step | Events | Failure events |` */
+const funnelRows = (): FunnelRow[] => {
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
+  const file = FUNNEL_SPECS.find((path) => existsSync(path));
+  if (!file) return [];
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
+  const lines = readFileSync(file, "utf8").split("\n");
+  const header = lines.findIndex((line) =>
+    /^\| Step \| Events \| Failure events \|/.test(line)
+  );
+  if (header === -1) return [];
+  const rows: FunnelRow[] = [];
+  for (const line of lines.slice(header + 2)) {
+    if (!line.startsWith("|")) break;
+    const cells = line
+      .split("|")
+      .slice(1, -1)
+      .map((cell) => cell.trim());
+    // A cell with a pipe of its own would shift Source and hide the row
+    if (cells.length !== 5) throw new Error(`not five cells: ${line}`);
+    const [step, events, failures, , source] = cells;
+    rows.push({
+      step,
+      events: namesIn(events),
+      failures: namesIn(failures),
+      failuresCell: failures,
+      source,
+    });
+  }
+  return rows;
+};
+
+/** A row whose events GA4 sends, or another change has yet to */
+const isUntracked = (row: FunnelRow) =>
+  row.source === "GA4" || row.source.startsWith("pending (");
+
+it("should find the funnel table", () => {
+  expect(funnelRows().length).toBeGreaterThanOrEqual(15);
+  expect(funnelRows()).toContainEqual(
+    expect.objectContaining({
+      events: ["auth_signed_in"],
+      source: "features/auth",
+    })
+  );
+  expect(declaredEvents()).toContain("auth_signed_in");
+});
+
+it.each(funnelRows().map((row) => [row.step, row] as const))(
+  "should name the funnel step %s's events in backticks",
+  (_, row) => {
+    if (isUntracked(row)) return;
+    expect(row.events.length).toBeGreaterThan(0);
+  }
+);
+
+it.each(funnelRows().map((row) => [row.step, row] as const))(
+  "should declare every event the funnel step %s names",
+  (_, row) => {
+    if (isUntracked(row)) return;
+    const declared = declaredEvents();
+    expect(
+      row.events.concat(row.failures).filter((name) => !declared.has(name))
+    ).toEqual([]);
+  }
+);
+
+it.each(funnelRows().map((row) => [row.step, row] as const))(
+  "should send every event the funnel step %s names from somewhere",
+  (_, row) => {
+    if (isUntracked(row)) return;
+    const quoted = quotedNames();
+    expect(
+      row.events.concat(row.failures).filter((name) => !quoted.has(name))
+    ).toEqual([]);
+  }
+);
+
+it.each(funnelRows().map((row) => [row.step, row] as const))(
+  "should have the funnel step %s name how it fails",
+  (_, row) => {
+    expect(
+      row.failures.length > 0 || row.failuresCell.startsWith("none:")
+    ).toBe(true);
   }
 );

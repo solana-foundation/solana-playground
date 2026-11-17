@@ -13,6 +13,19 @@ export type QuestionResult =
   | "skipped"
   | "call_panel";
 
+/**
+ * The live actions a composer message can name on its own; `word` in
+ * `tutorial_word_sent`, and the conversation engine's words
+ */
+export type ActionWord =
+  | "start"
+  | "build"
+  | "deploy"
+  | "run"
+  | "call"
+  | "next"
+  | "explain";
+
 /** How the feed moved to a step's divider: a bar segment, its narrow menu, or ⌥↑ / ⌥↓ */
 export type StepJumpVia = "bar" | "menu" | "key";
 
@@ -68,7 +81,7 @@ export type TutorialEvents = {
   tutorial_receipt_copied: { tutorial: string };
   /**
    * A step's goal passed on a real result. `via` is how: `chat` (an act
-   * card), `client` (a client run) or `call_panel`. `step` is 1-based;
+   * card), `client` (a client run) or `call_panel`. `step_index` is 1-based;
    * `seconds` is whole seconds from entering the step to its pass, time away
    * from the tab included. A passed step stays passed, so this fires once
    * per step until Start over. `reason` is `exists` when the step passed
@@ -77,44 +90,44 @@ export type TutorialEvents = {
    */
   tutorial_step_passed: {
     tutorial: string;
-    step: number;
+    step_index: number;
     via: "chat" | "client" | "call_panel";
     seconds: number;
     reason?: "exists";
   };
   /**
    * Reset on an appended wrote card put the live step back as it was
-   * entered: its start files, its beats played again. `step` is 1-based.
+   * entered: its start files, its beats played again. `step_index` is 1-based.
    */
-  tutorial_step_reset: { tutorial: string; step: number };
+  tutorial_step_reset: { tutorial: string; step_index: number };
   /**
    * The feed moved to a step's divider: a step bar segment, an item of the
-   * bar's narrow menu, or ⌥↑ / ⌥↓. `step` is the divider's step and `from`
-   * the live step, both 1-based. Not sent for the back pill, which sends
+   * bar's narrow menu, or ⌥↑ / ⌥↓. `step_index` is the divider's step and
+   * `from_step` the live step, both 1-based. Not sent for the back pill, which sends
    * `tutorial_step_back`.
    */
   tutorial_step_jumped: {
     tutorial: string;
-    step: number;
-    from: number;
+    step_index: number;
+    from_step: number;
     via: StepJumpVia;
   };
   /**
    * The back pill took the learner back to the live card, after a jump to
-   * another step or a scroll away from the card. `step` is the live step, or
-   * 0 before Start.
+   * another step or a scroll away from the card. `step_index` is the live
+   * step, or 0 before Start.
    */
-  tutorial_step_back: { tutorial: string; step: number };
+  tutorial_step_back: { tutorial: string; step_index: number };
   /**
    * A composer message reached the live assistant (`typed`; not one that
    * opened Connect a model or waited for an answer), or a finish chip
-   * was pressed (`chip`), whose answer needs no model. `step` is 1-based, 0
+   * was pressed (`chip`), whose answer needs no model. `step_index` is 1-based, 0
    * before Start and the last step after the finish. The text is never sent.
    */
   tutorial_question_asked: {
     tutorial: string;
-    step: number;
-    source: "typed" | "chip";
+    step_index: number;
+    via: "typed" | "chip";
   };
   /**
    * A message typed in the composer was only an action word ("build",
@@ -122,13 +135,13 @@ export type TutorialEvents = {
    * open, was refused (`refused`); a word with nothing live to run goes to
    * the assistant as a question. `word` is the action word it matched,
    * whatever the case, "please" or punctuation ("begin" and "go" send
-   * `start`), never the message itself. `step` is as in
+   * `start`), never the message itself. `step_index` is as in
    * `tutorial_question_asked`.
    */
   tutorial_word_sent: {
     tutorial: string;
-    step: number;
-    word: string;
+    step_index: number;
+    word: ActionWord;
     refused: boolean;
   };
   /**
@@ -145,14 +158,14 @@ export type TutorialEvents = {
    * `outcome` is `ok`, `failed`, `interrupted`, `no_wallet`, `no_funds` (an
    * airdrop the faucet refused or that never reached the wallet, or a deploy
    * that found the wallet short) or `unconfirmed` (a run or call sent, and
-   * not read back from devnet). `step` is
-   * 1-based. `seconds` is the run's whole seconds: from the press to the
+   * not read back from devnet). `step_index`
+   * is 1-based. `seconds` is the run's whole seconds: from the press to the
    * result, from the press to the block for a deploy recognised after a
    * reload, and 0 for an interrupted run, whose length is not known.
    */
   tutorial_action_run: {
     tutorial: string;
-    step: number;
+    step_index: number;
     action:
       | "airdrop"
       | "build"
@@ -173,9 +186,24 @@ export type TutorialEvents = {
 };
 
 /**
+ * Free text, opted in: no type lists the values, so the owner decides
+ * whether to keep each (HOO-2752). Slugs and beat ids come from each
+ * `tutorial.json`, which the loader reads as data, as `string`.
+ */
+type TutorialFreeText = {
+  tutorial: "a tutorial slug, the folder of a tutorial.json, read at run time";
+  next: "the slug of the tutorial a definition names next, a definition's or an upstream Markdown one's";
+  question: "a question's beat id from its tutorial.json";
+  file: "a workspace path the assistant's apply card wrote";
+};
+
+/**
  * Also the tracker of the conversation engine
  * (`features/tutorial-conversation`) and of its feed
  * (`widgets/tutorial-conversation`): the spec names their events
  * `tutorial_*`, and the prefix is this slice's.
  */
-export const tutorialTelemetry = createTracker<TutorialEvents>();
+export const tutorialTelemetry = createTracker<
+  TutorialEvents,
+  TutorialFreeText
+>();

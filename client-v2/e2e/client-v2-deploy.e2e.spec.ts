@@ -1,3 +1,4 @@
+import { Endpoint } from "../src/entities/cluster/model/endpoint";
 import { expect, LONG, test } from "./fixtures";
 
 /**
@@ -12,7 +13,7 @@ test("client-v2-deploy: A devnet record viewed on testnet", async ({
 }) => {
   // Testnet is the selected network; its requests are refused, so CI never reaches
   // it: the cluster is read from the endpoint's URL, not from an answer
-  await page.route("https://api.testnet.solana.com/**", (route) =>
+  await page.route(`${Endpoint.TESTNET}/**`, (route) =>
     route.abort("connectionrefused")
   );
   await page.evaluate(

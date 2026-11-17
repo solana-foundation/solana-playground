@@ -83,7 +83,10 @@ describe("SyncBanner telemetry", () => {
     await act(async () => found.click());
 
     expect(sent.events).toEqual([
-      { name: "sync_whole_file_answered", params: { answer, from: "banner" } },
+      {
+        name: "sync_whole_file_answered",
+        params: { decision: answer, via: "banner" },
+      },
     ]);
     expect(PgProjectSync.resolve).toHaveBeenCalledWith("p1", answer);
   });

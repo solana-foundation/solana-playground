@@ -5,22 +5,33 @@ import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { requestDoc } from "@/entities/tutorial";
+import {
+  initTelemetry,
+  memoryProvider,
+  resetTelemetry,
+} from "@/shared/lib/telemetry";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { PgExplorer } from "@/utils";
 
-const { useEditorLines, callPanel, noop } = vi.hoisted(() => ({
-  noop: () => ({ dispose: () => {} }),
-  useEditorLines: vi.fn(),
-  callPanel: {
-    isOpen: false,
-    callable: false,
-    dot: false,
-    close: vi.fn(),
-    toggle: vi.fn(),
-    onDidChange: () => ({ dispose: () => {} }),
-  },
-}));
-
+const { useEditorLines, callPanel, noop, onDidOpenFile } = vi.hoisted(() => {
+  const noSubscription = () => ({ dispose: () => {} });
+  return {
+    noop: noSubscription,
+    onDidOpenFile:
+      vi.fn<(cb: (file: unknown) => unknown) => { dispose: () => void }>(
+        noSubscription
+      ),
+    useEditorLines: vi.fn(),
+    callPanel: {
+      isOpen: false,
+      callable: false,
+      dot: false,
+      close: vi.fn(),
+      toggle: vi.fn(),
+      onDidChange: () => ({ dispose: () => {} }),
+    },
+  };
+});
 // The utils barrel needs build-time globals the unit runner does not define;
 // the workspace reads only these
 vi.mock("@/utils", () => ({
@@ -36,7 +47,7 @@ vi.mock("@/utils", () => ({
     files: { "/project/src/lib.rs": {} },
     currentFilePath: "/project/src/lib.rs",
     openFile: vi.fn(),
-    onDidOpenFile: noop,
+    onDidOpenFile,
     onDidCreateItem: noop,
     onDidDeleteItem: noop,
   },
@@ -97,6 +108,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.unstubAllGlobals();
+  onDidOpenFile.mockReset();
+  onDidOpenFile.mockImplementation(() => noop());
   useEditorLines.mockClear();
   callPanel.isOpen = false;
 });
@@ -153,14 +166,14 @@ describe("TutorialWorkspace", () => {
     expect(screen.queryByTestId("tutorial-workspace")).toBeNull();
     expect(screen.queryByTestId("tutorial-phone-code-head")).toBeNull();
     expect(screen.getByTestId("stage-content")).toBeTruthy();
-    expect(requestDoc("idl.md")).toBe(false);
+    expect(requestDoc({ file: "idl.md" })).toBe(false);
   });
 
   it("brings a doc page the assistant asks for to the front on the phone", () => {
     workspace("phone");
     let isShown = false;
     act(() => {
-      isShown = requestDoc("idl.md");
+      isShown = requestDoc({ file: "idl.md" });
     });
     expect(isShown).toBe(true);
     expect(
@@ -169,6 +182,59 @@ describe("TutorialWorkspace", () => {
     expect(
       screen.getByTestId("tutorial-phone-code-head").textContent
     ).toContain("IDL");
+  });
+
+  it("opens a doc at the section a link named, and says so in the event", () => {
+    // Dropped first: the collector buffers what earlier tests sent
+    resetTelemetry();
+    const events = memoryProvider();
+    initTelemetry({ providers: [events] });
+    try {
+      workspace("frame");
+      let isShown = false;
+      act(() => {
+        isShown = requestDoc({ file: "idl.md", section: "discriminators" });
+      });
+      expect(isShown).toBe(true);
+      expect(
+        screen.getByTestId("tutorial-doc-page").getAttribute("aria-label")
+      ).toBe("IDL");
+      const opened = events.events.filter(
+        (e) => e.name === "tutorial_workspace_doc_opened"
+      );
+      expect(opened.map((e) => e.params)).toStrictEqual([
+        { doc: "idl.md", via: "assistant", section: "discriminators" },
+      ]);
+
+      // The page already in front: a second section scrolls, no event
+      act(() => {
+        requestDoc({ file: "idl.md", section: "accounts" });
+      });
+      expect(
+        events.events.filter((e) => e.name === "tutorial_workspace_doc_opened")
+      ).toHaveLength(1);
+    } finally {
+      resetTelemetry();
+    }
+  });
+
+  it("sends no section key for a page picked in the tree", async () => {
+    resetTelemetry();
+    const events = memoryProvider();
+    initTelemetry({ providers: [events] });
+    try {
+      workspace("phone");
+      await userEvent.click(screen.getByRole("button", { name: "Files" }));
+      await userEvent.click(screen.getByRole("treeitem", { name: "IDL" }));
+      const opened = events.events.filter(
+        (e) => e.name === "tutorial_workspace_doc_opened"
+      );
+      expect(opened.map((e) => e.params)).toStrictEqual([
+        { doc: "idl.md", via: "tree" },
+      ]);
+    } finally {
+      resetTelemetry();
+    }
   });
 
   it("lists the files and the docs in the phone's Files sheet", async () => {
@@ -209,5 +275,81 @@ describe("TutorialWorkspace", () => {
     workspace("phone");
     await userEvent.keyboard("{Escape}");
     expect(callPanel.close).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("TutorialWorkspace's restored page", () => {
+  const FRONT = JSON.stringify({ "Hello Anchor": "idl.md" });
+  const DOCS = JSON.stringify({ "Hello Anchor": ["idl.md"] });
+  const frontKey = () =>
+    JSON.parse(localStorage.getItem("tutorial-workspace.front-doc") ?? "{}");
+
+  /**
+   * The explorer's `onDidOpenFile` calls a new subscriber at once with the
+   * current file, null while the workspace is still loading; `fire` is the
+   * event reaching every subscriber later
+   */
+  const subscribingWith = (replayed: unknown) => {
+    const subscribers: ((file: unknown) => unknown)[] = [];
+    onDidOpenFile.mockImplementation((cb) => {
+      subscribers.push(cb);
+      cb(replayed);
+      return noop();
+    });
+    return { fire: (file: unknown) => subscribers.forEach((cb) => cb(file)) };
+  };
+  /** A slow boot: nothing is open when the lesson subscribes */
+  const subscribingWithNullReplay = () => subscribingWith(null);
+  /** A fast boot: the workspace's file is already open */
+  const subscribingWithFileReplay = () => subscribingWith({});
+
+  beforeEach(() => {
+    localStorage.setItem("tutorial-workspace.docs", DOCS);
+    localStorage.setItem("tutorial-workspace.front-doc", FRONT);
+  });
+
+  it("keeps the page a reload restored when the workspace's own open arrives after a null replay", () => {
+    const opened = subscribingWithNullReplay();
+    workspace("frame");
+    expect(screen.getByTestId("tutorial-doc-page")).toBeTruthy();
+
+    act(() => opened.fire({}));
+
+    expect(screen.getByTestId("tutorial-doc-page")).toBeTruthy();
+    expect(frontKey()["Hello Anchor"]).toBe("idl.md");
+  });
+
+  it("does not take a null report for the restore", () => {
+    const opened = subscribingWithNullReplay();
+    workspace("frame");
+
+    act(() => opened.fire(null));
+    act(() => opened.fire({}));
+
+    expect(screen.getByTestId("tutorial-doc-page")).toBeTruthy();
+    expect(frontKey()["Hello Anchor"]).toBe("idl.md");
+  });
+
+  it("goes back to the code on a file the lesson opens after the restore", () => {
+    const opened = subscribingWithNullReplay();
+    workspace("frame");
+    act(() => opened.fire({}));
+    expect(screen.getByTestId("tutorial-doc-page")).toBeTruthy();
+
+    act(() => opened.fire({}));
+
+    expect(screen.queryByTestId("tutorial-doc-page")).toBeNull();
+    expect(frontKey()["Hello Anchor"]).toBeUndefined();
+  });
+
+  it("goes back to the code on the first open after a replay that held a file", () => {
+    const opened = subscribingWithFileReplay();
+    workspace("frame");
+    expect(screen.getByTestId("tutorial-doc-page")).toBeTruthy();
+
+    act(() => opened.fire({}));
+
+    expect(screen.queryByTestId("tutorial-doc-page")).toBeNull();
+    expect(frontKey()["Hello Anchor"]).toBeUndefined();
   });
 });

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { dropKeptKey } from "../../../views/sidebar/assistant/model/remembered-backend";
+import { assistantKeyTelemetry } from "../../../views/sidebar/assistant/model/telemetry";
 import {
   KEY_NOT_FORGOTTEN,
   PgAssistant,
 } from "../../../views/sidebar/assistant/store";
-import { settingsTelemetry } from "../model/telemetry";
 import BaseAssistantKey from "./BaseAssistantKey";
 
 const subscribe = (onChange: () => void) =>
@@ -64,7 +64,9 @@ const AssistantKey = ({
         // A key an older build kept and could not drop is not deleted: the
         // row says that instead
         setIsDeleted(isForgotten);
-        settingsTelemetry.track("settings_key_deleted", {});
+        assistantKeyTelemetry.track("assistant_key_deleted", {
+          via: "settings",
+        });
       }}
     />
   );

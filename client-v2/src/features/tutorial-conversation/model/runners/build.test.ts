@@ -12,6 +12,16 @@ const h = vi.hoisted(() => ({
   workspace: "Hello Anchor" as string | undefined,
   idl: null as null | { instructions: { name: string }[] },
   source: undefined as string | undefined,
+  logError: vi.fn(),
+}));
+
+vi.mock("@/shared/lib/logger", () => ({
+  createLogger: () => ({
+    error: h.logError,
+    warn: vi.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
+  }),
 }));
 
 vi.mock("@/utils", () => ({
@@ -50,10 +60,12 @@ vi.mock(
 );
 
 let runBuild: typeof import("./build").runBuild;
+let StoppedError: typeof import("@/utils/stopped").StoppedError;
 /** The build server's real log of Hello Anchor's planned failure */
 let PLANNED: string;
 beforeAll(async () => {
   runBuild = (await import("./build")).runBuild;
+  ({ StoppedError } = await import("@/utils/stopped"));
   PLANNED = (await import("../build-logs.fixture")).PLANNED;
 });
 
@@ -79,6 +91,7 @@ beforeEach(() => {
   h.workspace = "Hello Anchor";
   h.idl = null;
   h.source = undefined;
+  h.logError.mockReset();
 });
 
 describe("features/tutorial-conversation/model/runners/build", () => {
@@ -159,6 +172,28 @@ describe("features/tutorial-conversation/model/runners/build", () => {
       reason: "signed_out",
       error: null,
       log: "Sign in with GitHub to build.",
+    });
+  });
+
+  it("calls a build the learner stopped stopped, and reports nothing", async () => {
+    h.execute.mockRejectedValue(new StoppedError("Stopped."));
+    expect(await run().result).toEqual({
+      act: "build",
+      ok: false,
+      seconds: expect.any(Number),
+      reason: "stopped",
+      error: null,
+      log: "Stopped.",
+    });
+    expect(h.logError).not.toHaveBeenCalled();
+  });
+
+  it("reports a server's refusal to the team", async () => {
+    h.execute.mockRejectedValue(new Error("Invalid path"));
+    await run().result;
+    expect(h.logError).toHaveBeenCalledWith(expect.any(Error), {
+      report: true,
+      context: { act: "build" },
     });
   });
 

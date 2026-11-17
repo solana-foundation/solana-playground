@@ -48,6 +48,8 @@ import type { Judge, Runner, Workspace } from "./ports";
 import { memoryWorkspace, stubRunner } from "./ports";
 import type { RunResult } from "./progress";
 import { freshProgress } from "./progress";
+import { CAPTURE_BUSY } from "./runners/capture";
+import type { ClientRunWatchPort } from "./runners/client-run-watch";
 import {
   INITIAL_CONVERSATION_STATE,
   PgConversation,
@@ -73,6 +75,21 @@ vi.mock("../../../utils/terminal", () => ({
 }));
 
 const NAME = "Hello Anchor";
+
+/** The file's rows at `lines`, in their order: what a landing's text must be */
+const rowsAt = (file: string, lines: readonly number[]) => {
+  const rows = file.split("\n");
+  return lines.map((line) => rows[line - 1]);
+};
+
+/** The lesson's block for the step 1 question, line by line */
+const Q1_BLOCK: string[] = requireFor("the s1.q1 write")(
+  hello.steps[0].beats.flatMap((b) =>
+    b.id === "s1.q1" && "writes" in b && b.writes && "block" in b.writes
+      ? [b.writes.block]
+      : []
+  )[0]
+).split("\n");
 /** A clock past every turn the tests post */
 const LATER = Date.now() + 1e9;
 
@@ -283,12 +300,42 @@ describe("PgConversation", () => {
     );
     expect(PgConversation.state.engine.progress.beats["s1.q1"]).toMatchObject({
       kind: "picked",
-      wrote: { file: "src/lib.rs", lines: [5, 6, 7, 8, 9, 10, 11, 12, 13] },
+      wrote: {
+        file: "src/lib.rs",
+        lines: [5, 6, 7, 8, 9, 10, 11, 12, 13],
+        text: Q1_BLOCK,
+      },
     });
+    // The text is the rows the write put at those lines
+    expect(
+      rowsAt(workspace.files["src/lib.rs"], [5, 6, 7, 8, 9, 10, 11, 12, 13])
+    ).toEqual(Q1_BLOCK);
     const saved = file[STORAGE_KEY] as { beats: Record<string, unknown> };
     expect(saved.beats["s1.q1"]).toMatchObject({
-      wrote: { lines: [5, 6, 7, 8, 9, 10, 11, 12, 13] },
+      wrote: { lines: [5, 6, 7, 8, 9, 10, 11, 12, 13], text: Q1_BLOCK },
     });
+  });
+
+  it("records and saves the written lines' text as the block landed", async () => {
+    const workspace = memoryWorkspace({ "src/lib.rs": "" });
+    open(NAME, { workspace });
+    await settle();
+    PgConversation.start();
+    await settle();
+    const landed = [
+      "use anchor_lang::prelude::*;",
+      "",
+      'declare_id!("11111111111111111111111111111111");',
+    ];
+    expect(PgConversation.state.engine.progress.beats["s1.boil"]).toMatchObject(
+      { wrote: { lines: [1, 2, 3], text: landed } }
+    );
+    // The learner's edit afterwards changes the file, not the record
+    await workspace.write("src/lib.rs", "// mine", NAME);
+    PgConversation.edit("src/lib.rs", "// mine");
+    await settle();
+    const saved = file[STORAGE_KEY] as { beats: Record<string, unknown> };
+    expect(saved.beats["s1.boil"]).toMatchObject({ wrote: { text: landed } });
   });
 
   it("lands a write where its own ref has it", async () => {
@@ -326,12 +373,50 @@ describe("PgConversation", () => {
     await workspace.write("src/lib.rs", typed, NAME);
     PgConversation.edit("src/lib.rs", typed);
     await settle();
-    expect(PgConversation.state.engine.progress.beats["s1.q1"]).toMatchObject({
+    const typedBeat = PgConversation.state.engine.progress.beats["s1.q1"];
+    expect(typedBeat).toMatchObject({
       kind: "typed",
       wrote: { file: "src/lib.rs" },
     });
     expect(workspace.files["src/lib.rs"]).toContain('msg!("Hi there");');
     expect(workspace.files["src/lib.rs"]).toContain("#[program]");
+    // The saved text holds the learner's words, not the lesson's own line,
+    // and is the file's rows at the written lines
+    const wrote = requireFor("the typed answer's landing")(
+      typedBeat?.kind === "typed" ? typedBeat.wrote : undefined
+    );
+    expect(wrote.text).toContain('        msg!("Hi there");');
+    expect(wrote.text).not.toContain('        msg!("Hello, World!");');
+    expect(wrote.text).toEqual(
+      rowsAt(workspace.files["src/lib.rs"], wrote.lines)
+    );
+  });
+
+  it("records an appended block's own lines and text, not the gap or the learner's last line", async () => {
+    const workspace = memoryWorkspace({ "src/lib.rs": "" });
+    open(NAME, { workspace });
+    await settle();
+    PgConversation.start();
+    await settle();
+    // A line neither the step nor the write knows keeps the block from its
+    // place: it goes to the end, after one blank line
+    const MINE = "fn mine() {}";
+    const own = `${workspace.files["src/lib.rs"]}\n${MINE}\n`;
+    await workspace.write("src/lib.rs", own, NAME);
+    PgConversation.edit("src/lib.rs", own);
+    await settle();
+    PgConversation.pick("s1.q1", 1);
+    await settle();
+    const code = workspace.files["src/lib.rs"];
+    const rows = code.split("\n");
+    const last = rows.indexOf(MINE) + 1;
+    expect(rows[last]).toBe("");
+    const lines = Q1_BLOCK.map((_, i) => last + 2 + i);
+    expect(PgConversation.state.engine.progress.beats["s1.q1"]).toMatchObject({
+      kind: "picked",
+      wrote: { file: "src/lib.rs", lines, text: Q1_BLOCK, appended: true },
+    });
+    expect(rowsAt(code, lines)).toEqual(Q1_BLOCK);
   });
 
   it("creates a file for a create beat, once", async () => {
@@ -1018,7 +1103,7 @@ describe("PgConversation", () => {
     expect(actionRuns().map((e) => e.params)).toEqual([
       {
         tutorial: "hello-anchor",
-        step: 2,
+        step_index: 2,
         action: "deploy",
         outcome: "interrupted",
         seconds: 0,
@@ -1484,7 +1569,7 @@ describe("PgConversation's airdrop card", () => {
     ).toEqual([
       expect.objectContaining({
         tutorial: "hello-anchor",
-        step: 2,
+        step_index: 2,
         action: "airdrop",
         outcome: "no_funds",
       }),
@@ -2094,7 +2179,169 @@ describe("PgCallPanel", () => {
     expect(
       events.events.filter((e) => e.name === "tutorial_step_passed").at(-1)
         ?.params
-    ).toMatchObject({ via: "call_panel", step: 3 });
+    ).toMatchObject({ via: "call_panel", step_index: 3 });
+  });
+
+  // HOO-2806: a `run` typed in the terminal ran client.ts fine, and the step
+  // waited on: nothing outside the card was judged
+  describe("a client run outside the card", () => {
+    const HELLO: RunResult = {
+      act: "run",
+      ok: true,
+      seconds: 1,
+      signatures: ["sig"],
+      line: "Program log: Hello, World!",
+      called: [{ instruction: "hello", args: {} }],
+    };
+    const NO_HELLO: RunResult = {
+      act: "run",
+      ok: false,
+      seconds: 1,
+      reason: "no_transaction",
+      message: "client.ts sent no transaction. See the terminal.",
+      log: "",
+    };
+
+    /** A `run` command the test starts and finishes, read as `result` */
+    const runCommand = (result: RunResult, busy: boolean) => {
+      const start = new Set<(input: string | null) => void>();
+      const finish = new Set<(r: { err?: unknown }) => void>();
+      const read = vi.fn(async () => result);
+      const port: ClientRunWatchPort = {
+        onDidStart: (cb) => {
+          start.add(cb);
+          return { dispose: () => start.delete(cb) };
+        },
+        onDidFinish: (cb) => {
+          finish.add(cb);
+          return { dispose: () => finish.delete(cb) };
+        },
+        onDidEnd: () => ({ dispose: () => {} }),
+        prepare: () => {},
+        capture: async (until) => {
+          if (busy) return { captured: [], error: new Error(CAPTURE_BUSY) };
+          await until;
+          return { captured: [], error: undefined };
+        },
+        read,
+        now: () => 0,
+      };
+      const run = async () => {
+        start.forEach((cb) => cb("run"));
+        finish.forEach((cb) => cb({}));
+        await settle();
+      };
+      return { port, read, run };
+    };
+
+    it("passes step 3 as client when it calls hello", async () => {
+      const idl = helloIdl([]);
+      await toDeployed(idl);
+      PgConversation.next();
+      await settle();
+      const { port, read, run } = runCommand(HELLO, false);
+      const watch = PgConversation.watchClientRuns(port);
+
+      await run();
+
+      expect(read).toHaveBeenCalledWith(
+        expect.objectContaining({ idl, log: "Hello, World!" }),
+        expect.anything(),
+        0
+      );
+      const { progress } = PgConversation.state.engine;
+      expect(progress.passed).toContain("call-client");
+      expect(progress.times["call-client"].via).toBe("client");
+      watch.dispose();
+    });
+
+    it("passes nothing when it sends no hello", async () => {
+      await toDeployed();
+      PgConversation.next();
+      await settle();
+      const { port, run } = runCommand(NO_HELLO, false);
+      const watch = PgConversation.watchClientRuns(port);
+
+      await run();
+
+      expect(PgConversation.state.engine.progress.passed).not.toContain(
+        "call-client"
+      );
+      watch.dispose();
+    });
+
+    it("leaves the card's own run to the card", async () => {
+      await toDeployed();
+      PgConversation.next();
+      await settle();
+      const { port, read, run } = runCommand(HELLO, true);
+      const watch = PgConversation.watchClientRuns(port);
+
+      await run();
+
+      expect(read).not.toHaveBeenCalled();
+      expect(PgConversation.state.engine.progress.passed).not.toContain(
+        "call-client"
+      );
+      watch.dispose();
+    });
+
+    it("passes nothing when it lands after the tutorial started over", async () => {
+      await toDeployed();
+      PgConversation.next();
+      await settle();
+      let land: (r: RunResult) => void = () => {};
+      const { port, read, run } = runCommand(HELLO, false);
+      read.mockImplementationOnce(
+        () => new Promise<RunResult>((resolve) => (land = resolve))
+      );
+      const watch = PgConversation.watchClientRuns(port);
+
+      await run();
+      expect(read).toHaveBeenCalledTimes(1);
+      // Started over and back on step 3: only the restart tells this run's
+      // result from one of the new walk
+      PgConversation.startOver();
+      await settle();
+      PgConversation.start();
+      await settle();
+      PgConversation.pick("s1.q1", 1);
+      await settle();
+      PgConversation.act("s1.build");
+      await settle();
+      PgConversation.next();
+      await settle();
+      PgConversation.skip("s2.q2");
+      await settle();
+      PgConversation.act("s2.airdrop");
+      await settle();
+      PgConversation.act("s2.deploy");
+      await settle();
+      PgConversation.next();
+      await settle();
+      expect(PgConversation.state.engine.progress.cursor).toMatchObject({
+        stepId: "call-client",
+      });
+      land(HELLO);
+      await settle();
+
+      expect(PgConversation.state.engine.progress.passed).not.toContain(
+        "call-client"
+      );
+      watch.dispose();
+    });
+
+    it("is not judged on a step whose goal is no call", async () => {
+      await toDeployed();
+      const { port, read, run } = runCommand(HELLO, false);
+      const watch = PgConversation.watchClientRuns(port);
+
+      // Still on step 2's win: the deploy step has passed
+      await run();
+
+      expect(read).not.toHaveBeenCalled();
+      watch.dispose();
+    });
   });
 
   it("shows no new field for a build that was not deployed", async () => {
@@ -2127,7 +2374,7 @@ describe("PgConversation's composer", () => {
     PgConversation.asked({ kind: "intro" });
     await settle();
     expect(named("tutorial_question_asked")).toMatchObject([
-      { name: "tutorial_question_asked", params: { step: 0 } },
+      { name: "tutorial_question_asked", params: { step_index: 0 } },
     ]);
   });
 
@@ -2301,7 +2548,7 @@ describe("PgConversation's composer", () => {
     expect(named("tutorial_word_sent")[0].params).toMatchObject({
       word: "start",
       refused: false,
-      step: 0,
+      step_index: 0,
     });
     // The pill sits before what its action posted, outside step 1
     const turns = PgConversation.view(LATER)?.turns ?? [];

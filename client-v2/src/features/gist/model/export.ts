@@ -91,7 +91,7 @@ export const exportProjectWith =
     gistTelemetry.track("gist_export_started", {
       files: size.files,
       visibility,
-      source,
+      via: source,
     });
     // The manifest and the title count against GitHub's limit too
     if (
@@ -250,7 +250,7 @@ if (import.meta.vitest) {
       expect(sent.events).toEqual([
         {
           name: "gist_export_started",
-          params: { files: 3, visibility: "secret", source: "header" },
+          params: { files: 3, visibility: "secret", via: "header" },
         },
         {
           name: "gist_export_succeeded",
@@ -272,7 +272,7 @@ if (import.meta.vitest) {
       );
       expect(sent.events[0]).toEqual({
         name: "gist_export_started",
-        params: { files: 3, visibility: "public", source: "project_menu" },
+        params: { files: 3, visibility: "public", via: "project_menu" },
       });
     });
 

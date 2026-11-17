@@ -200,9 +200,14 @@ export const StatusPanel = ({
         className="w-72"
         aria-labelledby={titleId}
       >
-        <PopoverHeader>
-          <PopoverTitle id={titleId}>{indicator.name}</PopoverTitle>
-          <PopoverDescription>{stateWords(indicator)}</PopoverDescription>
+        <PopoverHeader className="gap-1">
+          <PopoverTitle id={titleId} className="font-act">
+            {indicator.name}
+          </PopoverTitle>
+          <PopoverDescription className="flex items-center gap-1.5 font-label text-foreground">
+            <StatusDot variant={DOT[indicator.state]} />
+            {stateWords(indicator)}
+          </PopoverDescription>
         </PopoverHeader>
         <StatusDetail
           indicator={indicator}

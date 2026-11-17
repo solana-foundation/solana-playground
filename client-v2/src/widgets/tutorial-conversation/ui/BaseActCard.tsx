@@ -44,14 +44,17 @@ const LIVE_PRESSES = 3;
 
 /**
  * Outside the phone layout the card can still be narrow (the chat beside the
- * editor on a 1024 px tablet): under 32rem of card, where the title's line
- * and the button no longer fit side by side, a lone button takes a line of
- * its own, the card's width, so the title and its line keep theirs
+ * editor on a 1024 px tablet, 304 px): under 22rem of card, where the title's
+ * line and the button no longer fit side by side, a lone button takes a line
+ * of its own, the card's width, so the title and its line keep theirs. From
+ * 22rem, the desktop chat's width, it sits beside them with its key hint. The
+ * query reads the content box: 22rem of card is 326 px inside its padding
+ * and border
  */
-const NARROW_CTA = "@max-lg/act:w-full";
+const NARROW_CTA = "@max-[326px]/act:w-full";
 
 /** The key hint, where there is no room for it or no keyboard to press it */
-const NARROW_HIDE = "@max-lg/act:hidden pointer-coarse:hidden";
+const NARROW_HIDE = "@max-[326px]/act:hidden pointer-coarse:hidden";
 
 const ICONS: Record<Act, LucideIcon> = {
   airdrop: Droplets,
@@ -385,7 +388,7 @@ const BaseActCard = ({
           </p>
         </div>
         {single && !phone && !running && (
-          <div className="ml-auto shrink-0 @max-lg/act:basis-full">
+          <div className="ml-auto shrink-0 @max-[326px]/act:basis-full">
             {button}
           </div>
         )}

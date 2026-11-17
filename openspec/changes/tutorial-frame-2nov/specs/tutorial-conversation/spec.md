@@ -28,10 +28,11 @@ A segment or a menu row of a done or current step SHALL scroll its divider to
 file in the workspace, scrolled to the top, and reset nothing. ⌥↑ and ⌥↓
 SHALL move to the previous and next divider, up to the live step.
 
-While the live card is off screen, a pill SHALL float above the composer. It
-reads "Back to step n", or "Back to the start" before Start, with an arrow
-toward the card. A click SHALL scroll to the live card and focus its first
-control. After the finish there SHALL be no pill.
+While the live card is wholly off screen, a pill SHALL float above the
+composer, and never while any of the live card is in view, so it cannot cover
+the card's action. It reads "Back to step n", or "Back to the start" before
+Start, with an arrow toward the card. A click SHALL scroll to the live card
+and focus its first control. After the finish there SHALL be no pill.
 
 #### Scenario: Jumping back from step 3
 
@@ -39,8 +40,8 @@ control. After the finish there SHALL be no pill.
 - **THEN** the feed lands on step 1's heading, `lib.rs` opens at the top,
   segment 1 has `aria-current="location"` and segment 3
   `aria-current="step"`
-- **AND** a "Back to step 3" pill shows, and nothing in step 1 can be run
-  again
+- **AND**, with step 3's live card scrolled off screen, a "Back to step 3"
+  pill shows, and nothing in step 1 can be run again
 
 #### Scenario: The step head on step 2 (manual)
 

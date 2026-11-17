@@ -392,7 +392,7 @@ Preview until step 16 has seen the database answer.
 
 ## 15. Migrate the shared preview database
 
-With this change on `master`, run Actions → preview-shared-db → Run workflow. It migrates `solpg_preview` as
+With this change on `master`, run Actions → Preview: shared database → Run workflow. It migrates `solpg_preview` as
 `github-ci`. The run proves the GitHub federation, the IAM login, and the role
 memberships from step 12 at once; a failure names the step that broke.
 
@@ -408,7 +408,7 @@ Then, with sync on:
 - A PR labelled `preview` gets the comment naming `solpg_preview_pr_<n>`, and its preview answers
   `{ "enabled": true, "db": "ok" }`.
 - Removing the label drops the database; the comment says so.
-- A dry run of Actions → preview-sweep lists nothing for an open labelled PR and never lists `solpg_preview`.
+- A dry run of Actions → Preview: sweep lists nothing for an open labelled PR and never lists `solpg_preview`.
 
 ## Adding an operator
 

@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 
 import { isAirdropSignInGated } from "../../../commands/airdrop/sign-in-gate";
+import { withAirdropVia } from "../../../commands/airdrop/via";
 import { PgSession } from "../../../features/auth";
+import type { AirdropVia } from "../../../features/fund-wallet";
 import { PgCommand, PgConnection } from "../../../utils";
 
 /**
@@ -18,7 +20,12 @@ const faucetOf = (cluster: unknown): Faucet => {
     : "none";
 };
 
-export const useAirdrop = () => {
+/**
+ * The faucet's availability and an airdrop that signs in first where the
+ * faucet asks for it; `via` names the control that runs it, for
+ * `fund_airdropped`
+ */
+export const useAirdrop = (via: AirdropVia) => {
   const [faucet, setFaucet] = useState(() => faucetOf(PgConnection.cluster));
 
   useEffect(() => {
@@ -36,7 +43,7 @@ export const useAirdrop = () => {
     if (isAirdropSignInGated(PgConnection.cluster) && !PgSession.get()) {
       await PgSession.signIn();
     }
-    await PgCommand.airdrop.execute();
+    await withAirdropVia(() => PgCommand.airdrop.execute(), via);
   };
 
   return { airdrop, faucet };

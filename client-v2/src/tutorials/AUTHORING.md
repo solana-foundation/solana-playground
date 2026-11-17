@@ -550,18 +550,16 @@ the failure. `onFail` holds the beats after the learner presses Explain: a
   assistant explains.
 
 **The call that creates an account runs again too.** It is a `call` act
-before the goal's, and a learner who comes back presses it a second time,
-when the account already exists. Anchor's `init` refuses that press and
-the learner is stuck on the card. So write its accounts struct with
-`init_if_needed` in place of `init`. Playground's build server turns on
-the Anchor feature it needs, so there is no `Cargo.toml` to change. Let its body leave the data alone:
-`#[account(init_if_needed, payer = user, space = 8 + 8, seeds = [b"counter", user.key().as_ref()], bump)]`
-over `pub counter: Account<'info, Counter>` (`space` is 8 for Anchor's
-discriminator plus the account's fields, here one `u64`), and `Ok(())` as
-the body.
-Anchor fills a new account with zeros, so `initialize` needs no
-`counter.count = 0`; that line would reset a returning learner's count.
-Keep such calls to the step that creates the account.
+before the goal's, and a learner who comes back, or takes the tutorial
+again with the same wallet, presses it a second time, when the account
+already exists. Anchor's `init` refuses that press. Name the account in the
+act's `call`, as the goal's `creates` does:
+`"call": { "instruction": "initialize", "creates": "counter" }`. When the
+call is refused because that account is in use, the card says the account
+already exists on devnet and the lesson goes on to the next beat; the step
+still passes only on its goal. The account must be one the step's `idl`
+lists for the instruction. Any other refusal stays a failure the assistant
+explains. Keep such calls to the step that creates the account.
 
 `win` closes the step: `headline` says what is now true ("Your program
 compiles"), `line` says what that means. A headline, like a step's

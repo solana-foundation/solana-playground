@@ -33,11 +33,16 @@ type TutorialWorkspaceEvents = {
   tutorial_workspace_file_opened: { via: FileSource };
   /**
    * The learner brought a doc page to the front from the tree or from a
-   * link in the assistant's answer; `doc` is its Markdown file (`idl.md`).
-   * Not sent for the page already in front, nor from its tab or the All
-   * tabs menu.
+   * link in the assistant's answer; `doc` is its Markdown file (`idl.md`),
+   * and `section` the heading id the link named (`account-discriminator`),
+   * absent for a link to the page alone or a pick in the tree. Not sent for
+   * the page already in front, nor from its tab or the All tabs menu.
    */
-  tutorial_workspace_doc_opened: { doc: string; via: DocSource };
+  tutorial_workspace_doc_opened: {
+    doc: string;
+    via: DocSource;
+    section?: string;
+  };
   /**
    * The terminal's drawer opened on its own: a build failed, or the
    * tutorial's first deploy landed. The learner's own toggles are the
@@ -46,5 +51,16 @@ type TutorialWorkspaceEvents = {
   tutorial_workspace_terminal_opened: { reason: TerminalReason };
 };
 
-export const tutorialWorkspaceTelemetry =
-  createTracker<TutorialWorkspaceEvents>();
+/**
+ * Free text, opted in: no type lists the values, so the owner decides
+ * whether to keep it (HOO-2752)
+ */
+type TutorialWorkspaceFreeText = {
+  doc: "a Markdown file name in a tutorial's `docs/` folder, read from the tutorial at run time";
+  section: "a heading id in that Markdown file, read from the tutorial at run time";
+};
+
+export const tutorialWorkspaceTelemetry = createTracker<
+  TutorialWorkspaceEvents,
+  TutorialWorkspaceFreeText
+>();

@@ -34,6 +34,7 @@ export interface BaseFeedProps {
   /** Draw one exchange with the assistant */
   renderExchange: (entry: Exclude<FeedEntry, { kind: "lesson" }>) => ReactNode;
   /** The feed moved to step `index`'s divider, from the live step `from` */
+  // eslint-disable-next-line max-params -- the prop contract TutorialConversation implements; currying it reaches past this file
   onJump: (index: number, from: number, via: StepJumpVia) => void;
   /** The back pill took the learner to the live card; `step` is its index, null before Start */
   onBack: (step: number | null) => void;
@@ -223,7 +224,10 @@ const BaseFeed = ({
       reducedMotion() ? 0 : SCROLL_MS
     );
     setViewing(null);
-    setLiveOffScreen(false);
+    // Unknown stays unknown: with no IntersectionObserver the step rule decides
+    setLiveOffScreen((offScreen) =>
+      offScreen === undefined ? undefined : false
+    );
     onBack(liveIndex);
   };
 

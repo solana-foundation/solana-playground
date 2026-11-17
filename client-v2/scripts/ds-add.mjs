@@ -96,9 +96,9 @@ if (status !== 0 || flags.length > 0) process.exit(status);
 const written = INSTALLED.filter((dir) => existsSync(path.join(CLIENT, dir)));
 const scripts = written.filter((dir) => SCRIPT_DIRS.includes(dir));
 // ESLint runs before prettier: its fixes are not prettier-formatted.
-// ESLint 8's `--quiet` limits `--fix` to errors (`quietFixPredicate`), so no warning's autofix applies.
+// ESLint 9's `--quiet` skips the warning rules, so `--fix` applies only the errors' fixes.
 if (scripts.length > 0) {
-  const eslintArgs = ["--fix", "--quiet", "--ext", ".ts,.tsx,.mjs,.mts"];
+  const eslintArgs = ["--fix", "--quiet"];
   status = run(ESLINT, [...eslintArgs, ...scripts], { cwd: CLIENT });
   const rerun = `yarn eslint ${[...eslintArgs, ...scripts].join(" ")}`;
   const where = scripts.join(", ");

@@ -32,6 +32,16 @@ const lastDrawerProps = () =>
 const requestOpen = (open: boolean) =>
   act(() => lastDrawerProps().onOpenChange(open));
 
+// The wallet chip reads the wallet, the cluster and the session; it has tests
+// of its own, so the strip's tests draw nothing in its place
+vi.mock("../../../features/fund-wallet", () => ({
+  WalletChip: () => undefined,
+}));
+vi.mock("../../../features/auth", () => ({
+  useSignedIn: () => true,
+  isSignInFailure: () => false,
+}));
+
 vi.mock("../../main/secondary/terminal/Component/Terminal", () => ({
   default: () => <div className="xterm" />,
 }));

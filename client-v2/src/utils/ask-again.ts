@@ -22,10 +22,8 @@ export const askAgain = () => listeners.forEach((cb) => cb());
  * stall check that could not read the slot again (`null`) is not a stall, so
  * a cluster that answered is not reported as one that did not.
  */
-export const hasAnsweredAgain = (
-  connected: boolean | null,
-  stalled: boolean | null
-) => connected === true && stalled !== true;
+export const hasAnsweredAgain = (connected: boolean, stalled: boolean | null) =>
+  connected === true && stalled !== true;
 
 if (import.meta.vitest) {
   const { describe, it, expect, vi } = import.meta.vitest;

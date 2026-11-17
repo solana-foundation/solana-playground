@@ -210,7 +210,9 @@ impl fmt::Display for AccountKeyType<'_> {
     }
 }
 
-fn transform_lookups_to_unknown_keys(lookups: &[MessageAddressTableLookup]) -> Vec<AccountKeyType> {
+fn transform_lookups_to_unknown_keys(
+    lookups: &[MessageAddressTableLookup],
+) -> Vec<AccountKeyType<'_>> {
     let unknown_writable_keys = lookups
         .iter()
         .enumerate()
@@ -1598,18 +1600,13 @@ impl From<&Lockup> for CliLockup {
     }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Default, Serialize, Deserialize, PartialEq, Eq)]
 pub enum CliStakeType {
     Stake,
     RewardsPool,
+    #[default]
     Uninitialized,
     Initialized,
-}
-
-impl Default for CliStakeType {
-    fn default() -> Self {
-        Self::Uninitialized
-    }
 }
 
 #[derive(Default, Serialize, Deserialize)]

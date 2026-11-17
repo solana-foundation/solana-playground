@@ -41,11 +41,13 @@ import lumberjackCustomErrors from "../../../tutorials/lumberjack/docs/custom-er
 import lumberjackPdas from "../../../tutorials/lumberjack/docs/pdas.md";
 import lumberjackSysvarAccounts from "../../../tutorials/lumberjack/docs/sysvar-accounts.md";
 import lumberjack from "../../../tutorials/lumberjack/tutorial.json";
+import zeroCopy from "../../../tutorials/zero-copy/tutorial.json";
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import { writeWorkspaceFile } from "../../../utils/explorer/workspace-file";
 import { PgTutorial } from "../../../utils/tutorial/tutorial";
 import type { Disposable } from "../../../utils/types";
 import { PgView } from "../../../utils/view";
+import { judgeGoal } from "./goals";
 import type { Judge, Runner } from "./ports";
 import { memoryWorkspace } from "./ports";
 import type { RunResult } from "./progress";
@@ -72,7 +74,8 @@ const settle = async () => {
 
 /**
  * A goal passes on a result of its own kind; a `refused` goal only on a
- * refusal of its own instruction
+ * refusal of its own instruction; a `call` goal with `creates` also on a
+ * failed run whose account was already there, as `judgeGoal` rules it
  */
 const byKind: Judge = (goal, result) => {
   if (goal.kind === "refused") {
@@ -82,6 +85,7 @@ const byKind: Judge = (goal, result) => {
       result.refused?.instruction === goal.instruction
     );
   }
+  if (goal.kind === "call" && !result.ok) return judgeGoal(goal, result);
   if (!result.ok) return false;
   if (goal.kind === "build") return result.act === "build";
   if (goal.kind === "deploy")
@@ -224,6 +228,86 @@ const goalRunner = (d: TutorialDefinition): Runner => {
   };
 };
 
+/** The beats of call acts that name the account their own call creates */
+const ownCreates = (d: TutorialDefinition): Set<string> =>
+  new Set(
+    d.steps.flatMap((s) =>
+      s.beats
+        .filter(
+          (b): b is ActBeat =>
+            b.kind === "act" && b.act === "call" && b.call.creates !== undefined
+        )
+        .map((b) => b.id)
+    )
+  );
+
+/**
+ * The runner of a second pass with the same wallet: a call act's own
+ * one-time call is refused by the System Program, since the account it
+ * creates is already on devnet. Goals' `creates` are `goals.ts`'s to judge.
+ */
+const secondPass = (d: TutorialDefinition, runner: Runner): Runner => ({
+  run: async (act, input, onStage) => {
+    const { creates } = input;
+    if (act !== "call" || !creates || !ownCreates(d).has(input.beatId)) {
+      return runner.run(act, input, onStage);
+    }
+    return {
+      act: "call",
+      ok: false,
+      seconds: 1,
+      message: "custom program error: 0x0",
+      log: "",
+      refused: {
+        instruction: creates.instruction,
+        error: { code: 0, name: null },
+      },
+      exists: { instruction: creates.instruction, account: creates.account },
+    };
+  },
+});
+
+/**
+ * The runner of a Start over in the same workspace: the program keypair is
+ * the same, so every deploy is an upgrade, and the call of the account the
+ * run names in `creates` (the act's own, else its step goal's, as the reducer
+ * picks it) is refused because that account is already at its address. Each
+ * act otherwise answers as `runner` does.
+ */
+const startOverPass = (runner: Runner): Runner => ({
+  run: async (act, input, onStage) => {
+    const result = await runner.run(act, input, onStage);
+    // Safe only while `runner` returns a fresh result per run, as goalRunner does
+    if (
+      result.ok &&
+      (result.act === "deploy" || result.act === "buildDeploy")
+    ) {
+      result.upgraded = true;
+      return result;
+    }
+    const { creates, call } = input;
+    if (
+      act !== "call" ||
+      !creates ||
+      call?.instruction !== creates.instruction
+    ) {
+      return result;
+    }
+    return {
+      act: "call",
+      ok: false,
+      seconds: 1,
+      message: "custom program error: 0x0",
+      log: "",
+      refused: {
+        instruction: creates.instruction,
+        error: { code: 0, name: null },
+      },
+      exists: { instruction: creates.instruction, account: creates.account },
+    };
+  },
+});
+
 /** The call acts of steps whose goal is a refusal, by beat */
 const refusedCalls = (d: TutorialDefinition) =>
   d.steps.flatMap((s) =>
@@ -248,47 +332,66 @@ const expectTarget = (
   }
 };
 
-/** Answers whatever the conversation waits on, until the finish */
-const walk = async (d: TutorialDefinition) => {
-  const workspace = memoryWorkspace(
-    Object.assign({}, d.steps[0].start) as Record<string, string>
-  );
-  (PgExplorer as { currentWorkspaceName: string | null }).currentWorkspaceName =
-    d.name;
-  vi.mocked(PgTutorial).all = [{ name: d.name, definition: d }] as never;
-  sub = PgConversation.init({
-    workspace,
-    runner: goalRunner(d),
-    judge: byKind,
-  });
-  await settle();
-
-  for (let moves = 0; moves < 200; moves++) {
-    const live = PgConversation.view(Date.now() + 1e9)?.live;
-    if (!live) break;
-    if (live.kind === "intro") PgConversation.start();
-    else if (live.kind === "ask")
-      PgConversation.pick(live.beatId, live.ask.answer);
-    else if (live.kind === "act") {
-      const args = Object.fromEntries(
-        (live.act.call?.args ?? []).map((a) => [a, "x"])
+/**
+ * Answers whatever the conversation waits on, until the finish, or until
+ * `stopAfter` has passed: then it returns at once, as a reload would leave
+ * it. `workspace` is the one a walk stopped that way left, for its reload.
+ */
+const walkWith =
+  (resume: {
+    stopAfter?: string;
+    workspace?: ReturnType<typeof memoryWorkspace>;
+  }) =>
+  async (d: TutorialDefinition, runner: Runner) => {
+    const workspace =
+      resume.workspace ??
+      memoryWorkspace(
+        Object.assign({}, d.steps[0].start) as Record<string, string>
       );
-      PgConversation.act(live.beatId, args);
-    } else if (live.kind === "result" && live.open)
-      PgConversation.explain(live.beatId);
-    else if (live.kind === "win") {
-      expectTarget(d, live.stepId, workspace.files);
-      PgConversation.next();
-    } else throw new Error(`the walk cannot answer a live ${live.kind}`);
+    (
+      PgExplorer as { currentWorkspaceName: string | null }
+    ).currentWorkspaceName = d.name;
+    vi.mocked(PgTutorial).all = [{ name: d.name, definition: d }] as never;
+    sub = PgConversation.init({
+      workspace,
+      runner,
+      judge: byKind,
+    });
     await settle();
-  }
-  await vi.waitFor(
-    () =>
-      expect(PgConversation.state.engine.progress.finishedAt).not.toBeNull(),
-    { timeout: 2000 }
-  );
-  return workspace;
-};
+
+    for (let moves = 0; moves < 200; moves++) {
+      const { passed } = PgConversation.state.engine.progress;
+      if (resume.stopAfter && passed.includes(resume.stopAfter)) {
+        return workspace;
+      }
+      const live = PgConversation.view(Date.now() + 1e9)?.live;
+      if (!live) break;
+      if (live.kind === "intro") PgConversation.start();
+      else if (live.kind === "ask")
+        PgConversation.pick(live.beatId, live.ask.answer);
+      else if (live.kind === "act") {
+        const args = Object.fromEntries(
+          (live.act.call?.args ?? []).map((a) => [a, "x"])
+        );
+        PgConversation.act(live.beatId, args);
+      } else if (live.kind === "result" && live.open)
+        PgConversation.explain(live.beatId);
+      else if (live.kind === "win") {
+        expectTarget(d, live.stepId, workspace.files);
+        PgConversation.next();
+      } else throw new Error(`the walk cannot answer a live ${live.kind}`);
+      await settle();
+    }
+    await vi.waitFor(
+      () =>
+        expect(PgConversation.state.engine.progress.finishedAt).not.toBeNull(),
+      { timeout: 2000 }
+    );
+    return workspace;
+  };
+
+/** Answers whatever the conversation waits on, until the finish */
+const walk = walkWith({});
 
 beforeEach(() => {
   file = {};
@@ -354,7 +457,7 @@ describe.each([
 
   it("walks from the intro to the finish", async () => {
     const d = json as unknown as TutorialDefinition;
-    await walk(d);
+    await walk(d, goalRunner(d));
 
     const saved = file[STORAGE_KEY] as {
       passed: string[];
@@ -371,5 +474,87 @@ describe.each([
     }
     expect(logged.entries.filter((e) => e.level === "error")).toEqual([]);
     expect(PgView.setToast).not.toHaveBeenCalled();
+  });
+});
+
+describe("A second pass with the same wallet (HOO-2730)", () => {
+  it("goes past the counter that already exists and reaches increment", async () => {
+    const d = counter as unknown as TutorialDefinition;
+    await walk(d, secondPass(d, goalRunner(d)));
+
+    const saved = file[STORAGE_KEY] as {
+      passed: string[];
+      runs: Record<string, { status: string }[]>;
+    };
+    expect(saved.runs["s2.init"].map((r) => r.status)).toEqual(["refused"]);
+    expect(saved.runs["s2.inc"].map((r) => r.status)).toEqual(["ok"]);
+    expect(saved.passed).toEqual(d.steps.map((s) => s.id));
+  });
+
+  it("goes past Zero Copy's big map that already exists and reaches paint", async () => {
+    const d = zeroCopy as unknown as TutorialDefinition;
+    await walk(d, secondPass(d, goalRunner(d)));
+
+    const saved = file[STORAGE_KEY] as {
+      passed: string[];
+      runs: Record<string, { status: string }[]>;
+    };
+    expect(saved.runs["s4.create"].map((r) => r.status)).toEqual(["refused"]);
+    expect(saved.passed).toEqual(d.steps.map((s) => s.id));
+  });
+});
+
+describe("Start over in the same workspace (HOO-2741)", () => {
+  type Saved = {
+    passed: string[];
+    startedAt: number | null;
+    runs: Record<string, { status: string; result?: { upgraded?: boolean } }[]>;
+  };
+
+  it("walks Hello Anchor to the finish when every deploy is an upgrade", async () => {
+    const d = hello as unknown as TutorialDefinition;
+    await walk(d, startOverPass(goalRunner(d)));
+
+    const saved = file[STORAGE_KEY] as Saved;
+    expect(
+      saved.runs["s2.deploy"].map((r) => [r.status, r.result?.upgraded])
+    ).toEqual([["ok", true]]);
+    expect(saved.passed).toEqual(d.steps.map((s) => s.id));
+  });
+
+  it("walks Zero Copy to the finish when the map and the big map are both there", async () => {
+    const d = zeroCopy as unknown as TutorialDefinition;
+    await walk(d, startOverPass(goalRunner(d)));
+
+    const saved = file[STORAGE_KEY] as Saved;
+    expect(
+      saved.runs["s2.deploy"].map((r) => [r.status, r.result?.upgraded])
+    ).toEqual([["ok", true]]);
+    expect(saved.runs["s2.create"].map((r) => r.status)).toEqual(["refused"]);
+    expect(saved.runs["s4.create"].map((r) => r.status)).toEqual(["refused"]);
+    expect(saved.passed).toEqual(d.steps.map((s) => s.id));
+  });
+
+  it("keeps Zero Copy's existing-map pass across a reload and goes on to the finish", async () => {
+    const d = zeroCopy as unknown as TutorialDefinition;
+    const workspace = await walkWith({ stopAfter: "deploy" })(
+      d,
+      startOverPass(goalRunner(d))
+    );
+    sub?.dispose();
+    const before = file[STORAGE_KEY] as Saved;
+    expect(before.passed).toEqual(["create", "deploy"]);
+    expect(before.startedAt).not.toBeNull();
+    const start = vi.spyOn(PgConversation, "start");
+
+    await walkWith({ workspace })(d, startOverPass(goalRunner(d)));
+
+    const saved = file[STORAGE_KEY] as Saved;
+    // The same walk, read back from the save: never a fresh Start
+    expect(start).not.toHaveBeenCalled();
+    start.mockRestore();
+    expect(saved.startedAt).toBe(before.startedAt);
+    expect(saved.runs["s2.create"].map((r) => r.status)).toEqual(["refused"]);
+    expect(saved.passed).toEqual(d.steps.map((s) => s.id));
   });
 });

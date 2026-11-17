@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 
+import { Endpoint } from "../src/entities/cluster/model/endpoint";
 import { expect, json, LONG, test } from "./fixtures";
 
 /**
@@ -22,7 +23,7 @@ const DEPLOYED_ACCOUNT = {
 
 /** The cluster says the program is deployed; every other call goes through */
 const stubDeployedProgram = (page: Page) =>
-  page.route("https://api.devnet.solana.com/**", async (route) => {
+  page.route(`${Endpoint.DEVNET}/**`, async (route) => {
     const body = route.request().postDataJSON() as {
       id?: unknown;
       method?: string;

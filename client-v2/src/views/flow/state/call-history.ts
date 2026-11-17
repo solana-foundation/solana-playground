@@ -1,3 +1,4 @@
+import { currentMonikerOf } from "@/entities/cluster";
 import { createLogger } from "@/shared/lib/logger";
 
 import type { Disposable } from "../../../utils";
@@ -97,7 +98,9 @@ export class PgCallHistory {
     try {
       const parsed: unknown = JSON.parse(localStorage.getItem(KEY) ?? "[]");
       if (!Array.isArray(parsed)) throw new Error("Not a list");
-      return parsed.filter(isCallRecord);
+      return parsed
+        .filter(isCallRecord)
+        .map((r) => ({ ...r, cluster: currentMonikerOf(r.cluster) }));
     } catch (e) {
       // Left alone rather than overwritten, so every add stops here; the
       // team hears of it once a session, not on every render
@@ -193,6 +196,24 @@ if (import.meta.vitest) {
       localStorage.setItem(KEY, JSON.stringify([good, noInstruction, badOk]));
 
       expect(PgCallHistory.list("P", "devnet")).toEqual([good]);
+    });
+
+    it("lists a call stored on mainnet-beta under mainnet", () => {
+      const old = {
+        id: "a",
+        programId: "P",
+        cluster: "mainnet-beta",
+        instruction: "increment",
+        ok: true,
+        signature: "sig",
+        failingLine: NONE,
+        at: 1,
+      };
+      localStorage.setItem(KEY, JSON.stringify([old]));
+
+      expect(PgCallHistory.list("P", "mainnet").map((r) => r.id)).toEqual([
+        "a",
+      ]);
     });
 
     it("reads unparseable storage as empty and never overwrites it", () => {

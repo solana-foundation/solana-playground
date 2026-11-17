@@ -1,4 +1,4 @@
-name: Server release
+name: "Server: release"
 
 # Makes a deployed version of the server live, or rolls back. cicd.yml only parks versions. See docs/server-release.md.
 on:
@@ -49,7 +49,7 @@ jobs:
           persist-credentials: false
 
       - name: Sign in to GCP
-        uses: ./.github/actions/gcp-auth
+        uses: ./.github/actions/gcp-auth # zizmor: ignore[self-repository] act rejects the $/ form, and both resolve to this commit
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.SERVICE_ACCOUNT }}
