@@ -144,7 +144,7 @@ All Unmasked in Doppler: none is a secret, and `migrate-production-db` reads the
 | `AUTH_BASE_URL` | `https://<VERCEL_APP_DOMAIN>`, then `https://<CUSTOM_DOMAIN>` from step 9. No trailing slash. Production accepts sign-in and writes from this origin only | Unmasked | Step 6, step 9 |
 | `GITHUB_CLIENT_ID` | The production OAuth app's Client ID (step 5) | Unmasked | Step 6 |
 | `GITHUB_CLIENT_SECRET` | The production OAuth app's client secret (step 5) | Masked | Step 6 |
-| `AUTH_OAUTH_PROXY_SECRET`, `AUTH_OAUTH_PROXY_URL` | Never on Production: they let previews sign in through production, and this project has no previews | | |
+| `AUTH_OAUTH_PROXY_SECRET`, `AUTH_OAUTH_PROXY_URL` | Unset until it is decided whether preproduction previews sign in with GitHub, and through which deployment. Set on Production, `AUTH_OAUTH_PROXY_SECRET` makes production the OAuth proxy host for every preview that carries the same secret and names production in `AUTH_OAUTH_PROXY_URL`; unset, production runs no proxy (`oauthProxyPlugins` in `src/features/auth/model/auth.mjs`) | | |
 
 ### Assistant default backend (Nous Research)
 
@@ -232,7 +232,10 @@ Optional. Without them the app uses the public Solana endpoints.
    Integrations → Vercel: authorize Doppler's Vercel app, then Setup Integration with Team `<TEAM_SLUG>`, project
    `<VERCEL_PROJECT>`, Vercel environment **Production**, variable type **Dynamic**, config `<DOPPLER_CONFIG>`. Leave
    its redeploy on sync off until step 8: every value saved in steps 3 to 6 would otherwise start a build before
-   the checked one in step 7. One integration only: this project has no Preview or Development variables. Never
+   the checked one in step 7. One integration only, for Production. The project's Preview environment is preproduction
+   ([deploy-client-vercel.md, "Environments"](deploy-client-vercel.md#environments)); its variables, such as
+   `CLOUD_SQL_DATABASE` for the shared preview database ([Preview databases](preview-databases.md)), do not come from
+   this integration. Never
    sync a variable named in Doppler's reserved list (`AWS_*`, `TZ` and the others on
    [its Vercel page](https://docs.doppler.com/docs/vercel)); none of ours is.
 9. In your checkout, put `VERCEL_DEPLOY_TEAM=<TEAM_SLUG>` and `VERCEL_DEPLOY_PROJECT_ID=<VERCEL_PROJECT_ID>` in

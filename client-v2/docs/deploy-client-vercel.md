@@ -13,8 +13,10 @@ This guide uses three names:
 | Name | What it is | Database |
 | --- | --- | --- |
 | Production | The Production environment of the Foundation's Vercel project, built from `master` of `solana-foundation/solana-playground`. `https://playground.solana.com` is its domain; `https://solana-playground-two.vercel.app` is the project's internal domain for the same releases | Cloud SQL (`DB_PROVIDER=cloud-sql`) |
-| Preproduction | The Preview environment of the same project. These previews exist and are rarely used | The `cloud-sql` provider on a preview database, never production's ([Preview databases](preview-databases.md)) |
-| Staging | The developers' own Vercel project, `https://solana-playground-teal.vercel.app`, with its Production and Preview environments | Neon. Only staging uses Neon |
+| Preproduction | The Preview environment of the same project. These previews exist and are rarely used | The `cloud-sql` provider on a preview database, never production's, once the repository variable `PREVIEW_DB_PROVIDER` is `cloud-sql` and the Preview environment is switched with it; Neon until then ([Preview databases](preview-databases.md)) |
+| Staging | The developers' own Vercel project, `https://solana-playground-teal.vercel.app`, with its Production and Preview environments | Neon |
+
+Production never uses Neon. `preview.yml` deploys to the Vercel project the repository variables `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` name, and runs only in the repository `PREVIEW_REPOSITORY` names; which project that is, is repository configuration, not code.
 
 The [production runbook](production-runbook.md) sets up production and is the operator's reference for it. Where this guide and the runbook describe the same step, the runbook decides for production.
 
@@ -44,7 +46,7 @@ has never been run end to end as one pass ([Known gaps](#known-gaps)).
    - `DB_PROVIDER=cloud-sql`, with the `CLOUD_SQL_*` and `GCP_*` variables
      ([Cloud SQL for client-v2](cloud-sql.md), steps 6 and 7). Production
      sets no `DATABASE_URL`: that variable belongs to the `url` provider,
-     which only staging uses.
+     which production never uses.
    - `SYNC_ENABLED=true`.
    - `AUTH_SECRET`: generated for production, never reused from staging or a
      preview.
@@ -85,7 +87,10 @@ has never been run end to end as one pass ([Known gaps](#known-gaps)).
    This uses that git branch's Neon branch, `preview/<git-branch>`, cut from
    staging's Neon project, so the dry run runs on staging data. On the
    preview URL: `/api/sync` answers `{"enabled":true,"db":"ok"}`, sign-in
-   works, and a project edited in one browser shows up in a second.
+   works, and a project edited in one browser shows up in a second. The Neon
+   targets this step runs, and a deployed preview's reach to its database,
+   have not been verified end to end ([Known gaps](#known-gaps)); a failure here
+   may be the tooling's, not the release's.
 6. **Migrate production**, from the same checkout, linked to the production
    project. An operator whose `client-v2/.env` names it runs the command as it
    stands; from a staging checkout, set the production project's ID for the
@@ -204,7 +209,7 @@ Add the Vercel deployment origin to the server's [`PG_CLIENT_URLS`](https://gith
 
 ## Deploy
 
-- **Automatic:** push. The Git integration builds `client-v2`, the dashboard's Root Directory. A push to the Production Branch deploys to production; a push to `master-production` or to a `scope/*`, `integration/*` or `new-face-polish-<n>` branch deploys a preview (any other branch is skipped), reachable at its per-commit URL and at the branch's alias. On staging both sign in; a preproduction preview has no proxy to sign in through ([Sign-in on previews](#sign-in-on-previews)).
+- **Automatic:** push. The Git integration builds `client-v2`, the dashboard's Root Directory. A push to the Production Branch deploys to production; a push to `master-production` or to a `scope/*`, `integration/*` or `new-face-polish-<n>` branch deploys a preview (any other branch is skipped), reachable at its per-commit URL and at the branch's alias. On staging both sign in; whether a preproduction preview does is an open question ([Sign-in on previews](#sign-in-on-previews)).
 - **Local preview:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-preview`. Promote later with `vercel promote <url> --prod`.
 - **Local production:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-production`. The target prints the branch and commit, asks for a typed `yes`, and then runs `vercel build --prod` and `vercel deploy --prebuilt --prod`. Run `migrate-production-db` first when migrations are pending. It deploys to the project `VERCEL_DEPLOY_PROJECT_ID` names, as the fast deploy does; [Migrations](#migrations) shows how to name the production project for one run from a staging checkout.
 - **Local production, fast:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-prod-fast`. Rebuilds from the working tree in ~5 minutes by skipping `installCommand` (rustup + `wasm/build.sh`, about an hour). It refuses to run unless a previous full build left `client-v2/node_modules` and the real `wasm/*/pkg` packages, not the stubs, on disk. It deploys whatever is in the working tree, committed or not.
@@ -658,7 +663,7 @@ before this existed.
 
 | Variable | Meaning |
 | --- | --- |
-| `DB_PROVIDER` | Which database provider the functions open (`providers/<name>.mjs` in `src/features/persistence/model/`). Unset means `url`. Production and preproduction set `cloud-sql`, with the `CLOUD_SQL_*` and `GCP_*` variables of [Cloud SQL for client-v2](cloud-sql.md); staging leaves it on `url` |
+| `DB_PROVIDER` | Which database provider the functions open (`providers/<name>.mjs` in `src/features/persistence/model/`). Unset means `url`. Production sets `cloud-sql`, with the `CLOUD_SQL_*` and `GCP_*` variables of [Cloud SQL for client-v2](cloud-sql.md), and preproduction does once switched ([Preview databases](preview-databases.md)); staging leaves it on `url` |
 | `DATABASE_URL` | Read only when `DB_PROVIDER` is `url`: staging. Postgres connection string. **Must be a pooled endpoint.** A serverless function opens a connection per invocation and will exhaust `max_connections` against a direct one. TLS is required and the certificate verified unless the URL sets `sslmode`, so a provider needing a looser mode has to say so in the URL, where it is visible in review |
 | `SYNC_ENABLED` | Kill switch. Only the exact string `true` enables sync; unset or anything else keeps the app local-only |
 | `AUTH_SECRET` | Better Auth signing secret. Generate one per environment; rotating it signs everyone out |
@@ -816,10 +821,11 @@ Set once in the staging project's Vercel dashboard:
   `AUTH_OAUTH_PROXY_SECRET`, and the host's `GITHUB_CLIENT_ID` and
   `GITHUB_CLIENT_SECRET`.
 
-Production sets neither proxy variable (runbook,
-[Sync and sign-in](production-runbook.md#sync-and-sign-in)). Without
-`AUTH_OAUTH_PROXY_SECRET` a deployment runs no proxy at all, so production is
-no host, and a preproduction preview has no proxy to sign in through.
+Without `AUTH_OAUTH_PROXY_SECRET` a deployment runs no proxy at all, and a
+preview signs in only through a host that sets it. **Open:** whether
+preproduction previews sign in with GitHub, and through which deployment, is
+not decided (runbook, [Sync and sign-in](production-runbook.md#sync-and-sign-in)).
+This section describes staging until it is.
 
 Only a deployment with `VERCEL_ENV=preview` and a proxy URL naming another
 origin completes a proxied sign-in. Every other one is the host and drops the
