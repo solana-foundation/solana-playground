@@ -29,10 +29,12 @@
  * The answer keeps the build server's status and content type: a failed
  * compile's stderr is in the body and the client reads it. A build's answer
  * is read whole as text, for the audit; a deploy's binary is piped through. A build
- * can take minutes, so `vercel.json` gives this function `maxDuration` 300;
- * the build server keeps a build's whole time, queue wait included, inside
- * it, so change the two together. A caller that leaves aborts the request to
- * the server.
+ * can take minutes, so `vercel.json` gives this function `maxDuration` 300.
+ * The build server's own bound on a request, 280 s from arrival with the
+ * queue wait included, comes with HOO-2874 (#174) and is sized to fit inside
+ * this one, so change the two together. Without it the 300 s here is the only
+ * bound: the user sees the build fail while the server may go on building.
+ * A caller that leaves aborts the request to the server.
  *
  * Plain ESM on raw Node request/response APIs — see `api/health.mjs` for why.
  */
