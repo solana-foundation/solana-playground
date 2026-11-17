@@ -510,7 +510,10 @@ export class PgChatSync {
       // Nothing left belongs to this account, so the next account's sign-in
       // has nothing to fence. A partial hand-over keeps the owner: what failed
       // to upload is this account's, and must not upload into the next one.
-      await PgThreadFence.clearOwner();
+      // So does a removal that failed, which `clear` only reports: checked
+      // on what is left, not on what was meant to go
+      const left = await PgChatStorage.threadIds();
+      if (left?.length === 0) await PgThreadFence.clearOwner();
       return;
     }
 
@@ -1199,6 +1202,20 @@ if (import.meta.vitest) {
         await PgChatSync.forget(await PgChatSync.pushAll());
 
         expect(await PgThreadFence.isOwnedByAnother("u2")).toBe(false);
+      });
+
+      it("keeps whose threads these are when the folder could not be removed", async () => {
+        accepted();
+        await signedIn();
+        await PgThreadFence.settle("u1");
+        await PgChatStorage.write(threadId, [item(1)]);
+        // `clear` reports a failed removal and returns as if it went
+        vi.spyOn(PgChatStorage, "clear").mockResolvedValue(undefined);
+
+        await PgChatSync.forget(await PgChatSync.pushAll());
+
+        expect(await PgThreadFence.isOwnedByAnother("u2")).toBe(true);
+        await PgThreadFence.clearOwner();
       });
 
       it("keeps whose threads these are while one stays behind", async () => {

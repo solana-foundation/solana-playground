@@ -378,16 +378,20 @@ export class PgThreadFence {
         try {
           userId = decodeURIComponent(name);
         } catch (e) {
-          report(`list fenced chats: ${name}`, e);
-          return undefined;
+          // Not a folder the fence writes, so no account's record: skipped,
+          // since refusing on it would refuse every push and settle for good
+          report(`list fenced chats: skipped ${name}`, e);
+          return "skipped" as const;
         }
         const record = await PgThreadFence._readRecord(userId);
         return record && { userId, record };
       })
     );
-    return records.every((r) => r !== undefined)
-      ? (records as { userId: string; record: FenceRecord }[])
-      : undefined;
+    if (records.some((r) => r === undefined)) return undefined;
+    return records.filter(
+      (r): r is { userId: string; record: FenceRecord } =>
+        r !== undefined && r !== "skipped"
+    );
   }
 
   /**
@@ -550,7 +554,8 @@ export class PgThreadFence {
    * Fence again any thread a record names that is back in `/.config/chats`:
    * a tab that had it open wrote to it before it noticed the new account.
    *
-   * @returns whether none is left in `/.config/chats`
+   * @returns whether every thread a record names is out of `/.config/chats`
+   * again; a thread no record names is not looked at
    */
   private static async _refenceStragglers(): Promise<boolean> {
     const stored = await PgChatStorage.threadIds();
@@ -579,10 +584,13 @@ export class PgThreadFence {
    * it; that thread is uploaded to `userId` in the same dump. A thread no
    * entry named goes back unnamed, as it was.
    *
-   * Each thread leaves the record once it is back, so a restore that fails
-   * partway keeps only the rest fenced: a record still naming a restored
-   * thread would make `push` refuse it. The folder goes with the last one.
+   * The record is rewritten once, after the loop, naming only the threads
+   * that failed to go back, so a restore that fails partway keeps only those
+   * fenced; with none left the folder goes. A rewrite that fails leaves the
+   * restored threads named, and `push` refuses them until the next settle.
    */
+  // TODO(HOO-2757 follow-up): rewrite the record per thread, so a failed
+  // rewrite cannot leave restored threads refused while `settle` says true
   private static async _restore(userId: string) {
     const record = await PgThreadFence._readRecord(userId);
     if (!record) return;
@@ -622,6 +630,9 @@ export class PgThreadFence {
     }
   }
 
+  // TODO(HOO-2757 follow-up): merged into the thread the panel has open, the
+  // panel's next persist can write its memory over the merge (offline, with
+  // the fenced account back on a workspace that took another thread)
   /** One fenced thread back into `/.config/chats`; throws when it is not */
   private static async _putBack(
     userId: string,
@@ -657,6 +668,9 @@ if (import.meta.vitest) {
     .vitest;
   type ChatItem = import("../../../views/sidebar/assistant/store").ChatItem;
 
+  // TODO(HOO-2757 follow-up): fail-closed branches still untested here: an
+  // unreadable owner, `claimUnowned` at sign-out, a partial restore and a
+  // failed record rewrite, the merge cases of `_putBack`
   describe("features/persistence/model/thread-fence", () => {
     const item = (n: number): ChatItem => ({
       kind: "user",
@@ -828,6 +842,17 @@ if (import.meta.vitest) {
       await writeConfigFile(`${dirOf("ada")}/%E0%A4%A.json`, "{}");
       await writeConfigFile(recordPathOf("ada"), "{broken");
 
+      expect(await PgThreadFence.isFenced(threadId)).toBe(true);
+      expect(await PgThreadFence.settle("bob")).toBe(true);
+    });
+
+    it("skips a fenced folder whose name does not decode", async () => {
+      await PgThreadFence.settle("ada");
+      const threadId = await chat("w1", [item(1)]);
+      await PgThreadFence.settle("bob");
+      await writeConfigFile(`${FENCED_DIR}/%E0%A4%A/index.json`, "{}");
+
+      expect(await PgThreadFence.isFenced(uuidOf(9))).toBe(false);
       expect(await PgThreadFence.isFenced(threadId)).toBe(true);
       expect(await PgThreadFence.settle("bob")).toBe(true);
     });
