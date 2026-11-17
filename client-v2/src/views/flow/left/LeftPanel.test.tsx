@@ -1,4 +1,10 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /** What the mocked explorer reports; each test sets its own */
@@ -7,6 +13,13 @@ const given = vi.hoisted(() => ({
   workspace: "a" as string | undefined,
   /** How many times the tree mounted */
   treeMounts: 0,
+  /**
+   * Whether the tree's new-file field listens, as `CreateItem` does from a
+   * passive effect of a child
+   */
+  fieldListens: false,
+  /** `fieldListens` at each `createItem` */
+  listenedAtCreate: [] as boolean[],
 }));
 
 // The utils barrel needs build-time globals the unit runner does not define.
@@ -15,6 +28,9 @@ vi.mock("../../../utils", () => ({
     get currentWorkspaceId() {
       return given.workspace;
     },
+    // No file is open, so `selectActiveFile` leaves the selection be
+    currentFilePath: undefined,
+    getRootFolderEl: () => document.getElementById("root-dir"),
   },
 }));
 
@@ -24,16 +40,34 @@ vi.mock("../../sidebar/explorer/Component", async () => {
     default: function Tree() {
       useEffect(() => {
         given.treeMounts += 1;
+        given.fieldListens = true;
+        return () => {
+          given.fieldListens = false;
+        };
       }, []);
       return <div id="root-dir">tree</div>;
     },
   };
 });
 
-const createItem = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+const createItem = vi.hoisted(() =>
+  vi.fn(() => {
+    given.listenedAtCreate.push(given.fieldListens);
+    return Promise.resolve();
+  })
+);
 vi.mock("../../sidebar/explorer/Component/useCreateItem", () => ({
   useCreateItem: () => ({ createItem }),
 }));
+
+// The request model itself, not a stand-in: what is tested is that the tree
+// picks up a request left before it was drawn
+vi.mock("@/widgets/layout-shell", () =>
+  vi.importActual("@/widgets/layout-shell/model/new-file-request")
+);
+vi.mock("@/utils/view", () => ({ PgView: { showFiles: vi.fn() } }));
+
+import { requestNewFile } from "@/widgets/layout-shell/model/new-file-request";
 
 import { requireFor } from "../../../test-utils/require-for";
 import { forgetColumn } from "./kept-column";
@@ -52,6 +86,8 @@ beforeEach(() => {
   forgetColumn();
   given.workspace = "a";
   given.treeMounts = 0;
+  given.listenedAtCreate = [];
+  createItem.mockClear();
 });
 
 describe("LeftPanel in the flush frame", () => {
@@ -92,6 +128,35 @@ describe("LeftPanel in the flush frame", () => {
     // Not even its landmark: an empty, unnamed <aside> is still listed by a
     // screen reader
     expect(container.firstChild).toBeNull();
+  });
+});
+
+describe("LeftPanel and a new-file request", () => {
+  it("starts a file asked for before the tree was drawn, once, with the field listening", () => {
+    requestNewFile();
+    expect(createItem).not.toHaveBeenCalled();
+
+    draw(false);
+    expect(given.listenedAtCreate).toEqual([true]);
+
+    // Taken: a later mount starts nothing
+    cleanup();
+    draw(false);
+    expect(createItem).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts a file at once when the tree is already drawn", () => {
+    draw(false);
+    act(() => requestNewFile());
+    expect(createItem).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a request alone while hidden", () => {
+    const panel = draw(true);
+    requestNewFile();
+    expect(createItem).not.toHaveBeenCalled();
+    panel.rerender(<LeftPanel collapsed={false} hasProgram />);
+    expect(createItem).toHaveBeenCalledTimes(1);
   });
 });
 

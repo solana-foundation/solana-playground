@@ -6,18 +6,16 @@ import { PgClientRun } from "@/features/docs-link";
 import { useExplorer, useKeybind, useRenderOnChange } from "@/hooks";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { isEditable } from "@/shared/lib/is-editable";
-import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { canDockAt } from "@/shared/lib/tree-dock";
 import { PgCommand, PgCommon, PgExplorer, PgView } from "@/utils";
 import type { StageStatus } from "@/views/flow/state/stage";
 import { PgFlow } from "@/views/flow/state/stage";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
-import { useCreateItem } from "@/views/sidebar/explorer/Component/useCreateItem";
 
-import { selectActiveFile } from "../model/active-file";
 import { onDidRequestConsole } from "../model/console-request";
 import { editorHeadHost } from "../model/editor-head-host";
 import { CONSOLE_KEY, FILES_KEY, keyLabel } from "../model/keys";
+import { requestNewFile } from "../model/new-file-request";
 import type {
   PageSource,
   PhonePage,
@@ -190,7 +188,6 @@ const LayoutShell = ({
   const [page, setPage] = useState<PhonePage>("work");
   const [view, setView] = useState<WorkView>("code");
   const [filesOpen, setFilesOpen] = useState(false);
-  const { createItem } = useCreateItem();
   const [phoneConsole, setPhoneConsole] = useState(false);
   // Held in state, not read off `PgFlow.state`, so a stage change re-renders
   const [flowStage, setFlowStage] = useState(PgFlow.state.stage);
@@ -824,20 +821,7 @@ const LayoutShell = ({
               ? undefined
               : PgExplorer.currentWorkspaceName ?? undefined
           }
-          onNewFile={() => {
-            PgView.showFiles();
-            // A folded column mounts on the request; the tree is drawn a
-            // moment after (`NoFileOpen` waits the same)
-            void PgCommon.sleep(100)
-              .then(() => {
-                // `createItem` starts beside the tree's selected row, which
-                // can be a folder picked since; the new file goes beside
-                // the active file
-                selectActiveFile();
-                return createItem();
-              })
-              .catch(reportButtonFailure("start a new file"));
-          }}
+          onNewFile={requestNewFile}
           controls={
             <BaseBarControls
               // The assistant's head has its own Collapse, so the row offers

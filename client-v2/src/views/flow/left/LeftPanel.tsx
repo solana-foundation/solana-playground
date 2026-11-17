@@ -1,8 +1,9 @@
 import type { FC } from "react";
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { cn } from "@/shared/lib/utils";
+import { onNewFileRequest } from "@/widgets/layout-shell";
 
 import { PgExplorer } from "../../../utils";
 import Explorer from "../../sidebar/explorer/Component";
@@ -75,6 +76,17 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
   // The same upstream hook `ExplorerButtons.tsx` calls for its own hidden
   // "New file" icon button (`NewItemButton` -> `useCreateItem`)
   const { createItem } = useCreateItem();
+  // The editor head's + and the empty editor's Add a file leave a request
+  // (`requestNewFile`) that the tree runs once it is drawn, or at once when
+  // it already is: the asker cannot know when that is. A passive effect,
+  // not a layout one: the new-file field's own listener (`CreateItem`'s
+  // `useSetStatic`) subscribes in a passive effect of a child, which runs
+  // before this one, so the field is listening when the request runs.
+  useEffect(() => {
+    if (collapsed) return;
+    const { dispose } = onNewFileRequest(createItem);
+    return dispose;
+  }, [collapsed, createItem]);
 
   // Hidden, the column takes no width: no landmark either, since an empty,
   // unnamed <aside> is still listed by a screen reader
