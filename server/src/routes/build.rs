@@ -10,7 +10,7 @@ use solpg_server::{program, utils::Files, Result};
 use tokio::{
     sync::Semaphore,
     task,
-    time::{interval, Duration},
+    time::{interval, timeout_at, Duration, Instant},
 };
 use uuid::Uuid;
 
@@ -47,6 +47,15 @@ pub struct BuildState {
     /// A set of current requests based on availability (capped by `sem`)
     ids: Arc<Mutex<Vec<bool>>>,
 }
+
+/// How long the server spends on one build request, from its arrival: the wait for a slot and the
+/// build itself.
+///
+/// It must stay inside the `maxDuration` of `api/build-server.mjs` in `client-v2/vercel.json`
+/// (300 s), the proxy in front of this route; past that the proxy has already answered the user
+/// with a failure, so a build still running would hold its slot for nothing. The 20 s left over
+/// cover the transfer through the proxy.
+const REQUEST_TIME_LIMIT: Duration = Duration::from_secs(280);
 
 /// How often old build directories are looked for
 const BUILD_DIR_CLEANUP_INTERVAL: Duration = Duration::from_secs(60 * 60);
@@ -90,10 +99,18 @@ pub async fn build(
         None => (Uuid::new_v4().to_string(), true),
     };
 
+    let deadline = Instant::now() + REQUEST_TIME_LIMIT;
+
     // Only permit a certain number of builds concurrently
-    let permit = concurrent::Permit::acquire(state).await?;
+    let permit = timeout_at(deadline, concurrent::Permit::acquire(state))
+        .await
+        .map_err(|_| anyhow!("The build server is busy, try again in a few minutes"))??;
     let (build_result, uuid) = run_holding(permit, move |concurrency_id| {
-        (program::build(concurrency_id, &uuid, &payload.files), uuid)
+        let time_limit = deadline.saturating_duration_since(Instant::now());
+        (
+            program::build(concurrency_id, &uuid, &payload.files, time_limit),
+            uuid,
+        )
     })
     .await?;
     let stderr = build_result?;

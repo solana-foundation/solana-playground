@@ -40,11 +40,6 @@ pub const MAX_STDERR_LEN: usize = 1024 * 1024; // 1 MiB
 /// How many characters of a failed build's stderr the server log keeps
 const LOGGED_STDERR_LEN: usize = 4096;
 
-/// How long a build may run before its process tree is stopped.
-///
-/// Generous on purpose: the first build in a concurrency slot compiles every dependency.
-const BUILD_TIME_LIMIT: Duration = Duration::from_secs(10 * 60);
-
 /// How long a program's build directory is kept after its last build
 const BUILD_DIR_RETENTION: Duration = Duration::from_secs(24 * 60 * 60);
 
@@ -56,13 +51,20 @@ const BUILD_DIR_RETENTION: Duration = Duration::from_secs(24 * 60 * 60);
 /// Only Rust source files starting with `/src` are allowed to be passed in, an error is returned
 /// otherwise.
 ///
+/// The build's process tree is stopped once `time_limit` passes, and an error is returned.
+///
 /// NOTE: This function doesn't return an error in the case of a compiler error, only for other
 /// build failures.
 ///
 /// No IDL is produced: Anchor 1.x builds one only by compiling and running user code
 /// (`idl-build`), which this route does not do.
 // TODO: Remove
-pub fn build(concurrency_id: usize, program_name: &str, files: &Files) -> anyhow::Result<String> {
+pub fn build(
+    concurrency_id: usize,
+    program_name: &str,
+    files: &Files,
+    time_limit: Duration,
+) -> anyhow::Result<String> {
     // Check file count
     if files.len() > MAX_FILE_AMOUNT {
         return Err(anyhow!(
@@ -159,7 +161,7 @@ pub fn build(concurrency_id: usize, program_name: &str, files: &Files) -> anyhow
         .arg(&program_path)
         .arg("--offline")
         .args(["--", "--locked"]);
-    let (status, stderr) = run_with_time_limit(&mut cmd, BUILD_TIME_LIMIT, STDERR_GRACE)
+    let (status, stderr) = run_with_time_limit(&mut cmd, time_limit, STDERR_GRACE)
         .inspect_err(|e| warn!("Build of {program_name} in slot {concurrency_id}: {e}"))?;
 
     // Check output length
