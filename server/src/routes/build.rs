@@ -7,7 +7,11 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use solpg_server::{program, utils::Files, Result};
-use tokio::{sync::Semaphore, task};
+use tokio::{
+    sync::Semaphore,
+    task,
+    time::{interval, timeout_at, Duration, Instant},
+};
 use uuid::Uuid;
 
 /// Build request
@@ -44,9 +48,38 @@ pub struct BuildState {
     ids: Arc<Mutex<Vec<bool>>>,
 }
 
+/// How long the server spends on one build request, from its arrival: the wait for a slot and the
+/// build itself.
+///
+/// It must stay inside the `maxDuration` of `api/build-server.mjs` in `client-v2/vercel.json`
+/// (300 s), the proxy in front of this route; past that the proxy has already answered the user
+/// with a failure, so a build still running would hold its slot for nothing. The 20 s left over
+/// cover the transfer through the proxy.
+const REQUEST_TIME_LIMIT: Duration = Duration::from_secs(280);
+
+/// How often old build directories are looked for
+const BUILD_DIR_CLEANUP_INTERVAL: Duration = Duration::from_secs(60 * 60);
+
 impl BuildState {
-    /// Create a new value with the maximum amount of concurrent builds.
+    /// Create a new value with the maximum amount of concurrent builds, and start removing old
+    /// build directories in the background.
+    ///
+    /// Must be called inside a Tokio runtime.
     pub fn new(concurrency: usize) -> Self {
+        tokio::spawn(async {
+            let mut ticks = interval(BUILD_DIR_CLEANUP_INTERVAL);
+            loop {
+                ticks.tick().await;
+                if let Err(e) = task::spawn_blocking(program::remove_old_build_dirs).await {
+                    crate::log::error!("Failed to remove old build directories: {e}");
+                }
+            }
+        });
+        Self::with_concurrency(concurrency)
+    }
+
+    /// Create a new value with the maximum amount of concurrent builds.
+    fn with_concurrency(concurrency: usize) -> Self {
         Self {
             sem: Arc::new(Semaphore::new(concurrency)),
             ids: Arc::new(Mutex::new(vec![false; concurrency])),
@@ -66,15 +99,20 @@ pub async fn build(
         None => (Uuid::new_v4().to_string(), true),
     };
 
-    // Only permit a certain number of builds concurrently
-    let permit = concurrent::Permit::acquire(state).await?;
-    let concurrency_id = permit.id();
+    let deadline = Instant::now() + REQUEST_TIME_LIMIT;
 
-    // Spawn a blocking `tokio::task` to avoid blocking the thread
-    let (build_result, uuid) =
-        task::spawn_blocking(move || (program::build(concurrency_id, &uuid, &payload.files), uuid))
-            .await
-            .map_err(|e| anyhow!("Failed to run `spawn_blocking`: {e}"))?;
+    // Only permit a certain number of builds concurrently
+    let permit = timeout_at(deadline, concurrent::Permit::acquire(state))
+        .await
+        .map_err(|_| anyhow!("The build server is busy, try again in a few minutes"))??;
+    let (build_result, uuid) = run_holding(permit, move |concurrency_id| {
+        let time_limit = deadline.saturating_duration_since(Instant::now());
+        (
+            program::build(concurrency_id, &uuid, &payload.files, time_limit),
+            uuid,
+        )
+    })
+    .await?;
     let stderr = build_result?;
 
     Ok(Json(BuildResponse {
@@ -82,6 +120,24 @@ pub async fn build(
         uuid: if respond_with_uuid { Some(uuid) } else { None },
         idl: None,
     }))
+}
+
+/// Run `f` with the permit's id on the blocking pool, so it does not block an async worker.
+///
+/// The permit moves into the blocking task and is released when `f` returns. A request that ends
+/// early drops only this future: the build goes on, and keeps its slot until it has ended.
+async fn run_holding<T, F>(permit: concurrent::Permit, f: F) -> Result<T>
+where
+    T: Send + 'static,
+    F: FnOnce(usize) -> T + Send + 'static,
+{
+    task::spawn_blocking(move || {
+        let output = f(permit.id());
+        drop(permit);
+        output
+    })
+    .await
+    .map_err(|e| anyhow!("Failed to run `spawn_blocking`: {e}").into())
 }
 
 /// Concurrency helpers
@@ -150,5 +206,59 @@ mod concurrent {
 
             ids[self.id] = false;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::mpsc;
+
+    use tokio::time::{sleep, timeout, Instant};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn a_request_that_ends_early_keeps_the_slot_until_the_build_ends() {
+        let state = BuildState::with_concurrency(1);
+        let permit = concurrent::Permit::acquire(state.clone()).await.unwrap();
+        let (finish, finished) = mpsc::channel::<()>();
+
+        // The request ends while its build is still running
+        let request = run_holding(permit, move |_| finished.recv().ok());
+        assert!(timeout(Duration::from_millis(50), request).await.is_err());
+        sleep(Duration::from_millis(50)).await;
+        assert_eq!(state.sem.available_permits(), 0);
+
+        finish.send(()).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while state.sem.available_permits() == 0 && Instant::now() < deadline {
+            sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(state.sem.available_permits(), 1);
+        let next = concurrent::Permit::acquire(state).await.unwrap();
+        assert_eq!(next.id(), 0);
+    }
+
+    #[tokio::test]
+    async fn a_build_within_the_limit_returns_its_output_and_frees_the_slot() {
+        let state = BuildState::with_concurrency(1);
+        let permit = concurrent::Permit::acquire(state.clone()).await.unwrap();
+        assert_eq!(run_holding(permit, |id| id).await.unwrap(), 0);
+        assert_eq!(state.sem.available_permits(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_build_that_fails_or_panics_frees_the_slot() {
+        let state = BuildState::with_concurrency(1);
+        let permit = concurrent::Permit::acquire(state.clone()).await.unwrap();
+        let timed_out = run_holding(permit, |_| Err::<(), _>("Build timed out"));
+        assert!(timed_out.await.unwrap().is_err());
+        assert_eq!(state.sem.available_permits(), 1);
+
+        let permit = concurrent::Permit::acquire(state.clone()).await.unwrap();
+        assert!(run_holding(permit, |_| panic!("build panicked"))
+            .await
+            .is_err());
+        assert_eq!(state.sem.available_permits(), 1);
     }
 }
