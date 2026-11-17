@@ -1,5 +1,6 @@
 import { PgSession } from "../../features/auth";
 import { report } from "../../features/persistence/model/diagnostics";
+import { PgThreadFence } from "../../features/persistence/model/thread-fence";
 import { PgThreadIndex } from "../../features/persistence/model/thread-index";
 // Deep import rather than the `utils` barrel: the barrel reaches `settings.ts`,
 // which reads `GLOBAL_SETTINGS`, a global only webpack defines, so the unit
@@ -60,6 +61,20 @@ export const chatThread = (): Disposable => {
     // message sent in the gap is filed under the project the user has just
     // left. With no thread open, `loadThread` adopts it instead.
     PgAssistant.closeThread();
+
+    // The sign-in could not fence another account's threads: a thread opened
+    // or minted now would land in that account's folder and be fenced as its
+    // own. Settled again here, so a project switch retries; until it works
+    // the panel holds what is typed in memory, as with no project open.
+    const userId = PgSession.get()?.id;
+    if (userId && PgThreadFence.isUnsettledFor(userId)) {
+      const settled = await PgThreadFence.settle(userId);
+      if (PgExplorer.currentWorkspaceId !== workspaceId) return;
+      if (!settled) {
+        openedFor = null;
+        return;
+      }
+    }
 
     // Synchronous whenever the index is already in memory, which is what
     // `warm` below is for: opening the thread in the same tick as the switch

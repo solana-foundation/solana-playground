@@ -142,9 +142,10 @@ export class PgThreadFence {
    * The retry for a sign-in whose owner write failed: `push` refuses every
    * thread until an owner is recorded, and a sign-out with none recorded
    * would leave this account's threads unowned for whoever signs in next.
-   * If the store refuses this write as well, nothing on this device can say
-   * whose the threads are; that is accepted, see the archived change's
-   * design.md.
+   * If the store keeps refusing this one file while thread writes still
+   * land, nothing on this device can say whose the threads are, and the
+   * next account's sign-in takes them; accepted, since every push and the
+   * sign-out retry it first.
    *
    * @returns whether the folder is `userId`'s now
    */
@@ -182,6 +183,24 @@ export class PgThreadFence {
    * caller must not adopt or upload the threads there
    */
   static async settle(userId: string): Promise<boolean> {
+    const settled = await PgThreadFence._settle(userId);
+    PgThreadFence._unsettled = settled ? undefined : userId;
+    return settled;
+  }
+
+  /**
+   * Whether this tab's last `settle` failed for `userId`. While it holds, no
+   * thread may open on this device for that account: one minted then would
+   * be written into a folder still recorded as another account's, and the
+   * next fence would file it as that account's.
+   */
+  static isUnsettledFor(userId: string): boolean {
+    return PgThreadFence._unsettled === userId;
+  }
+
+  private static _unsettled: string | undefined;
+
+  private static async _settle(userId: string): Promise<boolean> {
     return withSyncLock(async () => {
       const owner = await PgThreadFence._readOwner();
       // Most likely a passing storage fault: the next sign-in reads again

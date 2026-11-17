@@ -289,7 +289,9 @@ when a session reads a file matching the `paths` in the frontmatter.
   (`forget`'s wholesale branch) clears the owner. `push` uploads only when
   the owner is the signed-in account (`claimUnowned` records it over a folder
   nobody owns, which retries a failed owner write), and a sign-in whose
-  `settle` fails skips the chat adoption and dump; every doubt about the
+  `settle` fails skips the chat adoption and dump, and the chat effect opens
+  no thread until a retried `settle` succeeds (`isUnsettledFor`), since a
+  thread minted meanwhile would be fenced as the old owner's; every doubt about the
   owner or a record fails closed. Never drop the owner gate from `push` as
   redundant with `settle`: it is what holds when `settle` could not write.
 - **Persistence failures are reported, not swallowed.** `chat-storage`,

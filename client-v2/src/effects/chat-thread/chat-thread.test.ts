@@ -2,6 +2,7 @@ import type { MockInstance } from "vitest";
 
 import { PgSession } from "../../features/auth";
 import { PgChatSync } from "../../features/persistence/model/chat-sync";
+import { PgThreadFence } from "../../features/persistence/model/thread-fence";
 import { PgThreadIndex } from "../../features/persistence/model/thread-index";
 import { PgExplorer } from "../../utils/explorer/explorer";
 import type { Disposable } from "../../utils/types";
@@ -242,6 +243,39 @@ describe("the chat-thread effect", () => {
     expect(PgSession.expiredUser).toBeDefined();
     expect(close).not.toHaveBeenCalled();
     expect(load).not.toHaveBeenCalled();
+  });
+
+  describe("after a sign-in that could not fence another account's threads", () => {
+    beforeEach(async () => {
+      await PgSession.refreshWith({
+        id: "u1",
+        name: undefined,
+        image: undefined,
+        login: undefined,
+      });
+      vi.spyOn(PgThreadFence, "isUnsettledFor").mockReturnValue(true);
+    });
+
+    it("opens no thread while the fence still fails", async () => {
+      // A thread minted now would be written into the other account's folder
+      // and fenced as that account's on the next settle
+      vi.spyOn(PgThreadFence, "settle").mockResolvedValue(false);
+
+      effect = chatThread();
+      await settle();
+
+      expect(PgAssistant.loadThread).not.toHaveBeenCalled();
+    });
+
+    it("opens the thread once the fence succeeds on a retry", async () => {
+      const retry = vi.spyOn(PgThreadFence, "settle").mockResolvedValue(true);
+
+      effect = chatThread();
+      await settle();
+
+      expect(retry).toHaveBeenCalledWith("u1");
+      expect(PgAssistant.loadThread).toHaveBeenCalled();
+    });
   });
 
   it("stops listening once disposed", async () => {
