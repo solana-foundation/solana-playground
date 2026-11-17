@@ -17,8 +17,8 @@ const given = vi.hoisted(() => ({
    * Whether the tree's new-file field listens, as `CreateItem` does from a
    * passive effect of a child
    */
-  fieldListens: false,
-  /** `fieldListens` at each `createItem` */
+  isFieldListening: false,
+  /** `isFieldListening` at each `createItem` */
   listenedAtCreate: [] as boolean[],
 }));
 
@@ -40,9 +40,9 @@ vi.mock("../../sidebar/explorer/Component", async () => {
     default: function Tree() {
       useEffect(() => {
         given.treeMounts += 1;
-        given.fieldListens = true;
+        given.isFieldListening = true;
         return () => {
-          given.fieldListens = false;
+          given.isFieldListening = false;
         };
       }, []);
       return <div id="root-dir">tree</div>;
@@ -52,7 +52,7 @@ vi.mock("../../sidebar/explorer/Component", async () => {
 
 const createItem = vi.hoisted(() =>
   vi.fn(() => {
-    given.listenedAtCreate.push(given.fieldListens);
+    given.listenedAtCreate.push(given.isFieldListening);
     return Promise.resolve();
   })
 );
