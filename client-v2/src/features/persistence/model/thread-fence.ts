@@ -30,6 +30,9 @@ import { PgThreadIndex } from "./thread-index";
  * its own, so a thread merely unindexed would be uploaded on the next load.
  */
 
+/** `PgThreadIndex`'s map, which a fence must leave gone */
+const INDEX_PATH = "/.config/chats/index.json";
+
 /** The account whose threads `/.config/chats` holds */
 const OWNER_PATH = "/.config/chats-owner.json";
 
@@ -165,14 +168,19 @@ export class PgThreadFence {
       // Bytes that will never parse would stop chat sync for good, so the
       // threads go to a fence of their own, kept on this device for nobody
       const previous = previousOwnerOf(owner);
-      if (previous !== undefined && previous !== userId) {
-        if (!(await PgThreadFence._fenceAll(previous))) return false;
-      }
+      const fencing = previous !== undefined && previous !== userId;
+      if (fencing && !(await PgThreadFence._fenceAll(previous))) return false;
       // The new owner goes down while the folder holds nobody's threads,
       // before any of this account's: an owner left naming the previous
       // account would have the next sign-in fence this account's threads as
-      // that account's, and hand them to it
-      if (!(await PgThreadFence._writeOwner(userId))) return false;
+      // that account's, and hand them to it. Already this account's, there
+      // is nothing to write, and nothing a failed write could undo.
+      if (previous !== userId) {
+        const written = fencing
+          ? await PgThreadFence._writeOwnerOverEmpty(userId)
+          : await PgThreadFence._writeOwner(userId);
+        if (!written) return false;
+      }
       if (!(await PgThreadFence._refenceStragglers())) return false;
       await PgThreadFence._restore(userId);
       return true;
@@ -180,9 +188,10 @@ export class PgThreadFence {
   }
 
   /**
-   * Record `userId` as the owner. When the write fails, the owner file is
-   * removed instead, so no account's name stands over threads it does not
-   * hold; with neither, the caller still refuses the dump.
+   * Record `userId` as the owner of threads nobody owned. A failure leaves
+   * them unowned, and the caller refuses the dump: uploaded without an owner
+   * on record, they would be uploaded again into whoever signs in after this
+   * account's session ends.
    */
   private static async _writeOwner(userId: string): Promise<boolean> {
     try {
@@ -190,9 +199,20 @@ export class PgThreadFence {
       return true;
     } catch (e) {
       report("write chat owner", e);
-      await PgThreadFence.clearOwner();
       return false;
     }
+  }
+
+  /**
+   * `_writeOwner` right after a fence emptied the folder. When the write
+   * fails, the old owner file is removed instead: the folder holds nobody's
+   * threads, and a name left over them would have the next sign-in fence
+   * this account's threads as the old account's.
+   */
+  private static async _writeOwnerOverEmpty(userId: string): Promise<boolean> {
+    if (await PgThreadFence._writeOwner(userId)) return true;
+    await PgThreadFence.clearOwner();
+    return false;
   }
 
   /**
@@ -338,8 +358,14 @@ export class PgThreadFence {
    */
   private static async _clearIndex(): Promise<boolean> {
     await PgThreadIndex.clear();
-    PgThreadIndex.reload();
-    return Object.keys(await PgThreadIndex.all()).length === 0;
+    // The file itself, not `PgThreadIndex.all`, which reads a failure as an
+    // empty map and so would pass exactly when storage fails
+    try {
+      return !(await PgFs.exists(INDEX_PATH));
+    } catch (e) {
+      report("check chat index", e);
+      return false;
+    }
   }
 
   /**
@@ -408,6 +434,8 @@ export class PgThreadFence {
     const threadIds = Object.keys(record);
     if (!threadIds.length) return;
 
+    // Past this tab's cache: another tab may have given a workspace a thread
+    PgThreadIndex.reload();
     const index = await PgThreadIndex.all();
     const left: FenceRecord = {};
     for (const threadId of threadIds) {
@@ -451,6 +479,12 @@ export class PgThreadFence {
     const target = occupant && occupant !== threadId ? occupant : threadId;
     if (target === threadId && workspaceId) {
       await PgThreadIndex.set(workspaceId, threadId);
+      // `set` reports a failed write and returns nothing, and a file put
+      // back with no entry would be adopted as a workspace of its own
+      PgThreadIndex.reload();
+      if ((await PgThreadIndex.get(workspaceId)) !== threadId) {
+        throw new Error(`index entry for ${workspaceId} was not written`);
+      }
     }
     const live = await readRaw(livePathOf(target));
     await writeConfigFile(
@@ -668,6 +702,26 @@ if (import.meta.vitest) {
 
       expect(await PgThreadFence.settle("bob")).toBe(false);
       expect(await PgThreadFence.isOwnedByAnother("bob")).toBe(true);
+    });
+
+    it("keeps the owner when it is already the arriving account", async () => {
+      await PgThreadFence.settle("ada");
+      const threadId = await chat("w1", [item(1)]);
+      vi.spyOn(PgFs, "writeFile").mockRejectedValue(new Error("QuotaExceeded"));
+
+      expect(await PgThreadFence.settle("ada")).toBe(true);
+      vi.restoreAllMocks();
+
+      expect(await PgThreadFence.isOwnedByAnother("bob")).toBe(true);
+      await PgThreadFence.settle("bob");
+      expect(await PgThreadFence.isFenced(threadId)).toBe(true);
+    });
+
+    it("does not settle threads nobody owned when the owner cannot be written", async () => {
+      await chat("w1", [item(1)]);
+      vi.spyOn(PgFs, "writeFile").mockRejectedValue(new Error("QuotaExceeded"));
+
+      expect(await PgThreadFence.settle("ada")).toBe(false);
     });
   });
 }
