@@ -79,8 +79,9 @@ export const session = (): Disposable => {
    */
   const adopt = async ({ openLatest }: { openLatest: boolean }) => {
     let result;
-    // Whether the panel's thread was another account's and is closed now
-    let left = false;
+    // Whether the panel left another account's thread, and whether the
+    // device's threads are now this account's to adopt and upload
+    let fence = { left: false, settled: false };
     try {
       // Inside the `try`, all of it. Pushes are held from the moment this
       // effect is created, and this is the only thing that releases them --
@@ -88,11 +89,20 @@ export const session = (): Disposable => {
       // explorer or handing the chat threads over, leaves every project on
       // this device unable to save for the rest of the session, silently.
       await explorerReady();
-      left = await leaveAnotherAccountsThreads();
-      // Before the dump: it would upload a thread minted while signed out as
-      // a conversation of its own, and the account's would never be found
-      await PgChatSync.adoptAccountThreads();
-      await PgChatSync.pushAll();
+      try {
+        fence = await leaveAnotherAccountsThreads();
+      } catch (e) {
+        report("fence chats", e);
+      }
+      // Unsettled, the threads here may be another account's, so none is
+      // adopted or uploaded; the next sign-in settles again
+      if (fence.settled) {
+        // Before the dump: it would upload a thread minted while signed out
+        // as a conversation of its own, and the account's would never be
+        // found
+        await PgChatSync.adoptAccountThreads();
+        await PgChatSync.pushAll();
+      }
       result = await reconcile();
     } finally {
       // Whatever happened, pushes stop waiting here. A reconcile that failed
@@ -126,15 +136,16 @@ export const session = (): Disposable => {
       const open = PgAssistant.threadId;
       // A thread fenced from under the panel leaves the workspace with none:
       // a fresh one opens, and `openThread` adopts the account's own
+      const reopen = fence.left && fence.settled;
       const wanted =
         workspaceId &&
-        (left
+        (reopen
           ? await PgThreadIndex.ensure(workspaceId)
           : await PgThreadIndex.get(workspaceId));
       if (
         workspaceId &&
         wanted &&
-        (open || left) &&
+        (open || reopen) &&
         PgExplorer.currentWorkspaceId === workspaceId
       ) {
         await openThread(workspaceId, wanted);
@@ -185,11 +196,14 @@ export const session = (): Disposable => {
    * nothing unsaved, and with none open what it holds is the arriving user's
    * typing.
    *
-   * @returns whether the panel's thread was closed
+   * @returns `left`, whether the panel left another account's thread and
+   * needs a thread opened, and `settled`, whether the device's threads are
+   * this account's now. Unsettled, the panel stays closed rather than reopen
+   * a thread the fence could not move.
    */
   const leaveAnotherAccountsThreads = async () => {
     const userId = PgSession.get()?.id;
-    if (!userId) return false;
+    if (!userId) return { left: false, settled: false };
     const open = PgAssistant.threadId;
     const leaving =
       (await PgThreadFence.isOwnedByAnother(userId)) ||
@@ -199,8 +213,7 @@ export const session = (): Disposable => {
       PgAssistant.closeThread();
       await PgAssistant.whenPersisted();
     }
-    await PgThreadFence.settle(userId);
-    return leaving;
+    return { left: leaving, settled: await PgThreadFence.settle(userId) };
   };
 
   /**

@@ -8,6 +8,7 @@ import type { SyncResult } from "../../features/persistence/model/project-restor
 import * as restore from "../../features/persistence/model/project-restore";
 import { PgProjectSync } from "../../features/persistence/model/project-sync";
 import { PgSyncClient } from "../../features/persistence/model/sync-client";
+import { PgThreadFence } from "../../features/persistence/model/thread-fence";
 import { PgThreadIndex } from "../../features/persistence/model/thread-index";
 import { requireFor } from "../../test-utils/require-for";
 import { PgExplorer } from "../../utils/explorer/explorer";
@@ -879,6 +880,7 @@ describe("another account after a session ended", () => {
     PgSyncClient.reset();
     await PgChatStorage.clear();
     await PgThreadIndex.clear();
+    await PgThreadFence.clearOwner();
     vi.spyOn(globalThis, "fetch").mockImplementation((input, init) =>
       answer(String(input), init)
     );
@@ -937,7 +939,18 @@ describe("another account after a session ended", () => {
 
     await read(ada);
 
-    expect(posted).toEqual(expect.arrayContaining(adas ?? []));
+    expect(adas).toHaveLength(1);
+    expect(posted).toContain(adas?.[0]);
     expect(await PgThreadIndex.get("w1")).toBe(adas?.[0]);
+  });
+
+  it("uploads nothing when the fence cannot finish", async () => {
+    vi.spyOn(PgThreadFence, "settle").mockResolvedValue(false);
+    const pushAll = vi.spyOn(PgChatSync, "pushAll");
+
+    await read(bob);
+
+    expect(pushAll).not.toHaveBeenCalled();
+    expect(posted).toEqual([]);
   });
 });

@@ -165,9 +165,18 @@ export class PgChatSync {
   static async push(threadId: string): Promise<PushOutcome> {
     if (!(await PgChatSync._ready())) return "failed";
 
-    // Another account's, written back by a tab that had it open: it is kept
-    // for that account, and failing it keeps it out of a sign-out's `forget`
-    if (await PgThreadFence.isFenced(threadId)) return "failed";
+    // Not this account's to upload: the device's threads still belong to
+    // another account until the sign-in's `PgThreadFence.settle` has fenced
+    // them, and a fenced thread can be written back by a tab that had it
+    // open. Failing it keeps it out of a sign-out's `forget` too.
+    const userId = PgSession.get()?.id;
+    if (
+      !userId ||
+      (await PgThreadFence.isOwnedByAnother(userId)) ||
+      (await PgThreadFence.isFenced(threadId))
+    ) {
+      return "failed";
+    }
 
     const items = await PgChatStorage.read(threadId);
     // "The thread is now on the server" is a claim, and the caller deletes on
@@ -614,6 +623,23 @@ if (import.meta.vitest) {
         threadId = await PgThreadIndex.ensure("w1");
       });
 
+      it("refuses a thread while the device's threads are another account's", async () => {
+        respondingWith(() =>
+          Promise.resolve({ ok: true, json: async () => ({ written: 1 }) })
+        );
+        await PgThreadFence.settle("someone-else");
+        await signedIn();
+        await PgChatStorage.write(threadId, [item(1)]);
+
+        const outcome = await PgChatSync.push(threadId);
+        await PgThreadFence.clearOwner();
+
+        expect(outcome).toBe("failed");
+        expect(
+          fetchMock.mock.calls.some(([, init]) => init?.method === "POST")
+        ).toBe(false);
+      });
+
       it("does nothing when signed out", async () => {
         await PgChatStorage.write(threadId, [item(1)]);
 
@@ -1036,6 +1062,31 @@ if (import.meta.vitest) {
         await PgChatSync.forget(await PgChatSync.pushAll());
 
         expect(await PgChatStorage.threadIds()).toEqual([]);
+      });
+
+      it("forgets whose threads these were once all of them are handed over", async () => {
+        accepted();
+        await signedIn();
+        await PgThreadFence.settle("u1");
+        await PgChatStorage.write(threadId, [item(1)]);
+
+        await PgChatSync.forget(await PgChatSync.pushAll());
+
+        expect(await PgThreadFence.isOwnedByAnother("u2")).toBe(false);
+      });
+
+      it("keeps whose threads these are while one stays behind", async () => {
+        respondingWith(() =>
+          Promise.resolve({ ok: false, status: 500, json: async () => ({}) })
+        );
+        await signedIn();
+        await PgThreadFence.settle("u1");
+        await PgChatStorage.write(threadId, [item(1)]);
+
+        await PgChatSync.forget(await PgChatSync.pushAll());
+
+        expect(await PgThreadFence.isOwnedByAnother("u2")).toBe(true);
+        await PgThreadFence.clearOwner();
       });
 
       it("keeps them when a push failed", async () => {

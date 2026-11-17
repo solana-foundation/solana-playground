@@ -46,6 +46,14 @@
   sign-out's wholesale clear never see them. The record is written before the
   files move, and `push` refuses any thread a record names, so a page that dies
   mid-move uploads nothing either.
+- **Every doubt fails closed.** An owner file that cannot be read counts as
+  another account's, a record that cannot be read makes `isFenced` answer yes,
+  and `push` refuses every thread while the owner is not the signed-in
+  account. `settle` answers whether the folder is the arriving account's now;
+  when it is not, `adopt` skips the chat adoption and the dump for this
+  sign-in, and the next sign-in settles again. A copy that is not JSON is
+  dropped from a merge and reported, since nothing can read it anyway;
+  throwing there would fail the fence on every sign-in.
 - **Stragglers are fenced again.** A tab that had the old thread open can write
   it back into `/.config/chats` before it notices the new account. Every
   settle moves a file whose id a fence record names back into its fence,
@@ -70,6 +78,11 @@
 - [A session that ended before this ships has no owner file] → the next
   sign-in records one and fences nothing: the leak this fixes can happen once
   per device across the deploy. Accepted; the window is a session lifetime.
+- [A fence that cannot finish (storage full, an unreadable file)] → nothing
+  uploads, but the old account's thread stays indexed, and the chat effect can
+  open it on the next project switch. The arriving account could read it
+  until a later sign-in settles. Accepted for a failure this rare; the upload
+  leak, which crosses to the server, stays closed.
 - [Threads written while signed out after a partial sign-out] → they are fenced
   as the previous account's, and come back when that account signs in. Today
   they upload into whoever signs in next; keeping them is the safer error.

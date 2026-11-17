@@ -64,33 +64,66 @@ const readRaw = async (path: string): Promise<string | undefined> => {
   }
 };
 
-/** Both copies of a thread as one, newest copy of each item winning */
-const mergeRaw = (kept: string, incoming: string) =>
-  JSON.stringify(
-    mergeThreads(
-      decodeThread(JSON.parse(kept)),
-      decodeThread(JSON.parse(incoming))
-    )
-  );
+/** A copy's items, or `undefined` for bytes that are not JSON */
+const parseRaw = (raw: string) => {
+  try {
+    return decodeThread(JSON.parse(raw));
+  } catch {
+    // `mergeRawFor` reports the copy it drops for this
+    return undefined;
+  }
+};
+
+/**
+ * Both copies of a thread as one, newest copy of each item winning.
+ *
+ * A copy that is not JSON is dropped, and said so: `PgChatStorage.read`
+ * cannot read it either, so it was already lost to the panel and to every
+ * push. Throwing instead would fail the fence on every sign-in for good.
+ */
+const mergeRawFor = (threadId: string) => (kept: string, incoming: string) => {
+  const keptItems = parseRaw(kept);
+  const incomingItems = parseRaw(incoming);
+  if (keptItems === undefined || incomingItems === undefined) {
+    report(`merge thread ${threadId}: dropped a copy that is not JSON`, kept);
+    if (keptItems !== undefined) return kept;
+    return incoming;
+  }
+  return JSON.stringify(mergeThreads(keptItems, incomingItems));
+};
+
+/**
+ * Who owns `/.config/chats`. `unreadable` is kept apart from `none`, because
+ * reading a failure as "nobody" would hand another account's threads to
+ * whoever signs in: every caller fails closed on it.
+ */
+type Owner =
+  | { kind: "none" }
+  | { kind: "user"; userId: string }
+  | { kind: "unreadable" };
 
 export class PgThreadFence {
   /**
-   * Whether `userId` signing in finds another account's threads here, which
-   * `settle` will fence: the arriving account must not see them, and a turn
-   * running in one has to stop before its file moves.
+   * Whether `userId` signing in finds threads that may be another account's,
+   * which `settle` will fence: the arriving account must not see them, and a
+   * turn running in one has to stop before its file moves. An owner that
+   * cannot be read counts as another.
    */
   static async isOwnedByAnother(userId: string): Promise<boolean> {
     const owner = await PgThreadFence._readOwner();
-    return owner !== undefined && owner !== userId;
+    if (owner.kind === "unreadable") return true;
+    return owner.kind === "user" && owner.userId !== userId;
   }
 
   /**
-   * Whether a fenced account's record names this thread. A push of one is
-   * refused: a tab that still had it open can write it back into
-   * `/.config/chats` before it learns of the new account.
+   * Whether a fenced account's record names this thread, or the records
+   * cannot be read. A push of one is refused: a tab that still had it open
+   * can write it back into `/.config/chats` before it learns of the new
+   * account.
    */
   static async isFenced(threadId: string): Promise<boolean> {
     const records = await PgThreadFence._readRecords();
+    if (!records) return true;
     return records.some(({ record }) => threadId in record);
   }
 
@@ -101,18 +134,31 @@ export class PgThreadFence {
    *
    * The owner moves to `userId` only once another owner's threads are out. A
    * fence that could not finish leaves the old owner recorded, so the next
-   * sign-in tries again; meanwhile `pushAll` cannot list the folder either,
-   * or `push` refuses each thread the record already names.
+   * sign-in tries again, and `push` refuses every thread while the owner is
+   * not the signed-in account.
+   *
+   * @returns whether `/.config/chats` is `userId`'s now; `false` means the
+   * caller must not adopt or upload the threads there
    */
-  static async settle(userId: string): Promise<void> {
-    await withSyncLock(async () => {
+  static async settle(userId: string): Promise<boolean> {
+    return withSyncLock(async () => {
       const owner = await PgThreadFence._readOwner();
-      if (owner !== undefined && owner !== userId) {
-        if (!(await PgThreadFence._fenceAll(owner))) return;
+      if (owner.kind === "unreadable") return false;
+      if (owner.kind === "user" && owner.userId !== userId) {
+        if (!(await PgThreadFence._fenceAll(owner.userId))) return false;
       }
       await PgThreadFence._refenceStragglers();
       await PgThreadFence._restore(userId);
-      await writeConfigFile(OWNER_PATH, JSON.stringify({ userId }));
+      try {
+        await writeConfigFile(OWNER_PATH, JSON.stringify({ userId }));
+      } catch (e) {
+        report("write chat owner", e);
+        // Fenced or not, what is left is this account's; only the next
+        // sign-in of another account depends on the owner, and it reads the
+        // old one and fences what is there, which is this account's work
+        return owner.kind === "none" || owner.userId === userId;
+      }
+      return true;
     });
   }
 
@@ -129,52 +175,75 @@ export class PgThreadFence {
     }
   }
 
-  private static async _readOwner(): Promise<string | undefined> {
-    const raw = await readRaw(OWNER_PATH).catch((e) => {
-      report("read chat owner", e);
-      return undefined;
-    });
-    if (raw === undefined) return undefined;
+  private static async _readOwner(): Promise<Owner> {
+    let raw: string | undefined;
     try {
-      const userId: unknown = JSON.parse(raw)?.userId;
-      return typeof userId === "string" ? userId : undefined;
+      raw = await readRaw(OWNER_PATH);
     } catch (e) {
       report("read chat owner", e);
-      return undefined;
+      return { kind: "unreadable" };
     }
+    if (raw === undefined) return { kind: "none" };
+    try {
+      const userId: unknown = JSON.parse(raw)?.userId;
+      if (typeof userId === "string") return { kind: "user", userId };
+    } catch (e) {
+      report("read chat owner", e);
+      return { kind: "unreadable" };
+    }
+    report("read chat owner: no user id", raw);
+    return { kind: "unreadable" };
   }
 
-  /** Every fenced account's record; an unreadable one is reported and skipped */
+  /**
+   * Every fenced account's record, or `undefined` when any of them, or the
+   * folder, cannot be read: the callers refuse rather than guess.
+   */
   private static async _readRecords(): Promise<
-    { userId: string; record: FenceRecord }[]
+    { userId: string; record: FenceRecord }[] | undefined
   > {
     let names: string[];
     try {
       names = await PgFs.readDir(FENCED_DIR);
     } catch (e) {
-      if (!isMissing(e)) report("list fenced chats", e);
-      return [];
+      if (isMissing(e)) return [];
+      report("list fenced chats", e);
+      return undefined;
     }
     const records = await Promise.all(
       names.map(async (name) => {
-        const userId = decodeURIComponent(name);
-        return { userId, record: await PgThreadFence._readRecord(userId) };
+        let userId: string;
+        try {
+          userId = decodeURIComponent(name);
+        } catch (e) {
+          report(`list fenced chats: ${name}`, e);
+          return undefined;
+        }
+        const record = await PgThreadFence._readRecord(userId);
+        return record && { userId, record };
       })
     );
-    return records;
+    return records.every((r) => r !== undefined)
+      ? (records as { userId: string; record: FenceRecord }[])
+      : undefined;
   }
 
-  private static async _readRecord(userId: string): Promise<FenceRecord> {
+  /** `userId`'s record, `{}` when it has none, `undefined` when unreadable */
+  private static async _readRecord(
+    userId: string
+  ): Promise<FenceRecord | undefined> {
     try {
       const raw = await readRaw(recordPathOf(userId));
       if (raw === undefined) return {};
       const parsed = JSON.parse(raw);
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-        ? (parsed as FenceRecord)
-        : {};
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as FenceRecord;
+      }
+      report(`read fenced chats of ${userId}: not a record`, raw);
+      return undefined;
     } catch (e) {
       report(`read fenced chats of ${userId}`, e);
-      return {};
+      return undefined;
     }
   }
 
@@ -193,8 +262,7 @@ export class PgThreadFence {
     PgThreadIndex.reload();
     const index = await PgThreadIndex.all();
     const stored = await PgChatStorage.threadIds();
-    // Nothing can be fenced from a folder that cannot be listed, and nothing
-    // can be pushed from it either: `pushAll` gives up on the same answer
+    // Nothing can be fenced from a folder that cannot be listed
     if (stored === null) return false;
 
     const workspaceOf = new Map(
@@ -206,9 +274,12 @@ export class PgThreadFence {
       return true;
     }
 
+    // Rewritten over an unreadable record, it would lose the threads it named
     const record = await PgThreadFence._readRecord(userId);
-    for (const id of threadIds)
+    if (!record) return false;
+    for (const id of threadIds) {
       record[id] ??= { workspaceId: workspaceOf.get(id) };
+    }
     try {
       await writeConfigFile(recordPathOf(userId), JSON.stringify(record));
     } catch (e) {
@@ -239,7 +310,7 @@ export class PgThreadFence {
       const fenced = await readRaw(fencedPath);
       await writeConfigFile(
         fencedPath,
-        fenced === undefined ? live : mergeRaw(fenced, live)
+        fenced === undefined ? live : mergeRawFor(threadId)(fenced, live)
       );
     } catch (e) {
       report(`fence thread ${threadId}`, e);
@@ -255,7 +326,8 @@ export class PgThreadFence {
   private static async _refenceStragglers() {
     const stored = await PgChatStorage.threadIds();
     if (!stored?.length) return;
-    for (const { userId, record } of await PgThreadFence._readRecords()) {
+    for (const { userId, record } of (await PgThreadFence._readRecords()) ??
+      []) {
       const back = stored.filter((id) => id in record);
       await Promise.all(back.map((id) => PgThreadFence._moveIn(userId, id)));
     }
@@ -271,53 +343,71 @@ export class PgThreadFence {
    * it; that thread is uploaded to `userId` in the same dump. A thread no
    * entry named goes back unnamed, as it was.
    *
-   * The fence folder goes only when every thread is back.
+   * Each thread leaves the record once it is back, so a restore that fails
+   * partway keeps only the rest fenced: a record still naming a restored
+   * thread would make `push` refuse it. The folder goes with the last one.
    */
   private static async _restore(userId: string) {
     const record = await PgThreadFence._readRecord(userId);
+    if (!record) return;
     const threadIds = Object.keys(record);
     if (!threadIds.length) return;
 
     const index = await PgThreadIndex.all();
-    let restored = true;
+    const left: FenceRecord = {};
     for (const threadId of threadIds) {
+      const workspaceId = record[threadId]?.workspaceId;
+      const occupant = workspaceId ? index[workspaceId] : undefined;
       try {
-        const fenced = await readRaw(fencedPathOf(userId, threadId));
-        const { workspaceId } = record[threadId];
-        const occupant = workspaceId ? index[workspaceId] : undefined;
-        if (fenced === undefined) continue;
-
-        if (occupant && occupant !== threadId) {
-          const live = await readRaw(livePathOf(occupant));
-          await writeConfigFile(
-            livePathOf(occupant),
-            live === undefined ? fenced : mergeRaw(live, fenced)
-          );
-          continue;
-        }
-        if (workspaceId) await PgThreadIndex.set(workspaceId, threadId);
-        const live = await readRaw(livePathOf(threadId));
-        await writeConfigFile(
-          livePathOf(threadId),
-          live === undefined ? fenced : mergeRaw(live, fenced)
-        );
+        await PgThreadFence._putBack(userId, {
+          threadId,
+          workspaceId,
+          occupant,
+        });
       } catch (e) {
         report(`restore thread ${threadId}`, e);
-        restored = false;
+        left[threadId] = record[threadId];
       }
     }
-    if (!restored) return;
 
     try {
-      await removeConfigDir(dirOf(userId));
+      if (Object.keys(left).length) {
+        await writeConfigFile(recordPathOf(userId), JSON.stringify(left));
+      } else {
+        await removeConfigDir(dirOf(userId));
+      }
     } catch (e) {
-      if (!isMissing(e)) report(`drop fenced chats of ${userId}`, e);
+      report(`settle fenced chats of ${userId}`, e);
     }
+  }
+
+  /** One fenced thread back into `/.config/chats`; throws when it is not */
+  private static async _putBack(
+    userId: string,
+    {
+      threadId,
+      workspaceId,
+      occupant,
+    }: { threadId: string; workspaceId?: string; occupant?: string }
+  ) {
+    const fenced = await readRaw(fencedPathOf(userId, threadId));
+    if (fenced === undefined) return;
+
+    const target = occupant && occupant !== threadId ? occupant : threadId;
+    if (target === threadId && workspaceId) {
+      await PgThreadIndex.set(workspaceId, threadId);
+    }
+    const live = await readRaw(livePathOf(target));
+    await writeConfigFile(
+      livePathOf(target),
+      live === undefined ? fenced : mergeRawFor(target)(live, fenced)
+    );
   }
 }
 
 if (import.meta.vitest) {
-  const { describe, it, expect, beforeEach } = import.meta.vitest;
+  const { describe, it, expect, beforeEach, afterEach, vi } = import.meta
+    .vitest;
   type ChatItem = import("../../../views/sidebar/assistant/store").ChatItem;
 
   describe("features/persistence/model/thread-fence", () => {
@@ -336,6 +426,8 @@ if (import.meta.vitest) {
       await PgChatStorage.write(threadId, items);
       return threadId;
     };
+
+    afterEach(() => vi.restoreAllMocks());
 
     beforeEach(async () => {
       await PgChatStorage.clear();
@@ -413,6 +505,44 @@ if (import.meta.vitest) {
       expect(idsOf(await PgChatStorage.read(threadId)).sort()).toEqual(
         [item(1).id, item(2).id].sort()
       );
+    });
+
+    it("leaves the owner and every thread where they are when the record cannot be written", async () => {
+      await PgThreadFence.settle("ada");
+      const threadId = await chat("w1", [item(1)]);
+      const write = PgFs.writeFile.bind(PgFs);
+      vi.spyOn(PgFs, "writeFile").mockImplementation(
+        // eslint-disable-next-line max-params -- `PgFs.writeFile`'s own signature
+        async (path, data, opts) => {
+          if (path.startsWith(FENCED_DIR)) throw new Error("QuotaExceeded");
+          return write(path, data, opts);
+        }
+      );
+
+      expect(await PgThreadFence.settle("bob")).toBe(false);
+
+      expect(await PgThreadFence.isOwnedByAnother("bob")).toBe(true);
+      expect(await PgChatStorage.threadIds()).toEqual([threadId]);
+    });
+
+    it("treats an owner it cannot read as another account's", async () => {
+      await writeConfigFile(OWNER_PATH, "{not json");
+
+      expect(await PgThreadFence.isOwnedByAnother("ada")).toBe(true);
+      expect(await PgThreadFence.settle("ada")).toBe(false);
+    });
+
+    it("keeps the thread that decodes when a fenced copy is not JSON", async () => {
+      await PgThreadFence.settle("ada");
+      const threadId = await chat("w1", [item(1)]);
+      await PgThreadFence.settle("bob");
+      await writeConfigFile(fencedPathOf("ada", threadId), "{broken");
+      await PgChatStorage.write(threadId, [item(2)]);
+
+      expect(await PgThreadFence.settle("bob")).toBe(true);
+      expect(await PgChatStorage.threadIds()).toEqual([]);
+      await PgThreadFence.settle("ada");
+      expect(idsOf(await PgChatStorage.read(threadId))).toEqual([item(2).id]);
     });
   });
 }
