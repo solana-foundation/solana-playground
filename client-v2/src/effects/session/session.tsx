@@ -136,6 +136,10 @@ export const session = (): Disposable => {
       const open = PgAssistant.threadId;
       // A thread fenced from under the panel leaves the workspace with none:
       // a fresh one opens, and `openThread` adopts the account's own
+      // Unsettled, the panel stays closed. The old account's thread is still
+      // indexed, so a project switch can open it before a later sign-in
+      // settles; accepted for a full or failing store (see the change's
+      // design.md), because nothing uploads meanwhile
       const reopen = fence.left && fence.settled;
       const wanted =
         workspaceId &&

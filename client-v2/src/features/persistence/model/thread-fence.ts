@@ -85,7 +85,12 @@ const mergeRawFor = (threadId: string) => (kept: string, incoming: string) => {
   const keptItems = parseRaw(kept);
   const incomingItems = parseRaw(incoming);
   if (keptItems === undefined || incomingItems === undefined) {
-    report(`merge thread ${threadId}: dropped a copy that is not JSON`, kept);
+    // No content in the report: it reaches Sentry, and a thread is the
+    // person's prompts and code
+    report(
+      `merge thread ${threadId}: dropped a copy that is not JSON`,
+      new Error("not JSON")
+    );
     if (keptItems !== undefined) return kept;
     return incoming;
   }
@@ -100,7 +105,22 @@ const mergeRawFor = (threadId: string) => (kept: string, incoming: string) => {
 type Owner =
   | { kind: "none" }
   | { kind: "user"; userId: string }
-  | { kind: "unreadable" };
+  | { kind: "unreadable" }
+  | { kind: "corrupt" };
+
+/**
+ * The fence for threads whose owner file was readable but meaningless. Not
+ * an id an account can have, so no sign-in ever restores them; they stay on
+ * the device, where a person can still recover them by hand.
+ */
+const UNKNOWN_OWNER = "~unknown";
+
+/** Whose threads the folder holds, for an owner that could be read */
+const previousOwnerOf = (owner: Owner): string | undefined => {
+  if (owner.kind === "user") return owner.userId;
+  if (owner.kind === "corrupt") return UNKNOWN_OWNER;
+  return undefined;
+};
 
 export class PgThreadFence {
   /**
@@ -111,7 +131,7 @@ export class PgThreadFence {
    */
   static async isOwnedByAnother(userId: string): Promise<boolean> {
     const owner = await PgThreadFence._readOwner();
-    if (owner.kind === "unreadable") return true;
+    if (owner.kind === "unreadable" || owner.kind === "corrupt") return true;
     return owner.kind === "user" && owner.userId !== userId;
   }
 
@@ -143,23 +163,39 @@ export class PgThreadFence {
   static async settle(userId: string): Promise<boolean> {
     return withSyncLock(async () => {
       const owner = await PgThreadFence._readOwner();
+      // Most likely a passing storage fault: the next sign-in reads again
       if (owner.kind === "unreadable") return false;
-      if (owner.kind === "user" && owner.userId !== userId) {
-        if (!(await PgThreadFence._fenceAll(owner.userId))) return false;
+      // Bytes that will never parse would stop chat sync for good, so the
+      // threads go to a fence of their own, kept on this device for nobody
+      const previous = previousOwnerOf(owner);
+      if (previous !== undefined && previous !== userId) {
+        if (!(await PgThreadFence._fenceAll(previous))) return false;
       }
-      await PgThreadFence._refenceStragglers();
+      // The new owner goes down while the folder holds nobody's threads,
+      // before any of this account's: an owner left naming the previous
+      // account would have the next sign-in fence this account's threads as
+      // that account's, and hand them to it
+      if (!(await PgThreadFence._writeOwner(userId))) return false;
+      if (!(await PgThreadFence._refenceStragglers())) return false;
       await PgThreadFence._restore(userId);
-      try {
-        await writeConfigFile(OWNER_PATH, JSON.stringify({ userId }));
-      } catch (e) {
-        report("write chat owner", e);
-        // Fenced or not, what is left is this account's; only the next
-        // sign-in of another account depends on the owner, and it reads the
-        // old one and fences what is there, which is this account's work
-        return owner.kind === "none" || owner.userId === userId;
-      }
       return true;
     });
+  }
+
+  /**
+   * Record `userId` as the owner. When the write fails, the owner file is
+   * removed instead, so no account's name stands over threads it does not
+   * hold; with neither, the caller still refuses the dump.
+   */
+  private static async _writeOwner(userId: string): Promise<boolean> {
+    try {
+      await writeConfigFile(OWNER_PATH, JSON.stringify({ userId }));
+      return true;
+    } catch (e) {
+      report("write chat owner", e);
+      await PgThreadFence.clearOwner();
+      return false;
+    }
   }
 
   /**
@@ -188,11 +224,11 @@ export class PgThreadFence {
       const userId: unknown = JSON.parse(raw)?.userId;
       if (typeof userId === "string") return { kind: "user", userId };
     } catch (e) {
-      report("read chat owner", e);
-      return { kind: "unreadable" };
+      report("read chat owner: not JSON", e);
+      return { kind: "corrupt" };
     }
-    report("read chat owner: no user id", raw);
-    return { kind: "unreadable" };
+    report("read chat owner: no user id", new Error("no user id"));
+    return { kind: "corrupt" };
   }
 
   /**
@@ -265,6 +301,11 @@ export class PgThreadFence {
     // Nothing can be fenced from a folder that cannot be listed
     if (stored === null) return false;
 
+    // Not a problem here: a thread a lagging tab of the old account mints
+    // after this listing is in no record, but minting needs a workspace
+    // switch in that tab, and a switch there reads the session first; the
+    // owner is the new account by then, so `push` refuses nothing it should
+    // not, and the thread is that tab's new account's anyway.
     const workspaceOf = new Map(
       Object.entries(index).map(([workspaceId, id]) => [id, workspaceId])
     );
@@ -322,15 +363,24 @@ export class PgThreadFence {
   /**
    * Fence again any thread a record names that is back in `/.config/chats`:
    * a tab that had it open wrote to it before it noticed the new account.
+   *
+   * @returns whether none is left in `/.config/chats`
    */
-  private static async _refenceStragglers() {
+  private static async _refenceStragglers(): Promise<boolean> {
     const stored = await PgChatStorage.threadIds();
-    if (!stored?.length) return;
-    for (const { userId, record } of (await PgThreadFence._readRecords()) ??
-      []) {
+    if (stored === null) return false;
+    if (!stored.length) return true;
+    const records = await PgThreadFence._readRecords();
+    if (!records) return false;
+    let moved = true;
+    for (const { userId, record } of records) {
       const back = stored.filter((id) => id in record);
-      await Promise.all(back.map((id) => PgThreadFence._moveIn(userId, id)));
+      const results = await Promise.all(
+        back.map((id) => PgThreadFence._moveIn(userId, id))
+      );
+      moved &&= results.every(Boolean);
     }
+    return moved;
   }
 
   /**
@@ -417,6 +467,7 @@ if (import.meta.vitest) {
       createdAt: new Date(n * 1000).toISOString(),
       text: `m${n}`,
     });
+    const uuidOf = (n: number) => `6f1c2b0e-0000-4000-8000-00000000000${n}`;
     const idsOf = (items: readonly ChatItem[] | null) =>
       (items ?? []).map(({ id }) => id);
 
@@ -525,11 +576,62 @@ if (import.meta.vitest) {
       expect(await PgChatStorage.threadIds()).toEqual([threadId]);
     });
 
-    it("treats an owner it cannot read as another account's", async () => {
+    it("fences the threads under an owner that is not JSON for nobody", async () => {
+      const threadId = await chat("w1", [item(1)]);
       await writeConfigFile(OWNER_PATH, "{not json");
 
       expect(await PgThreadFence.isOwnedByAnother("ada")).toBe(true);
-      expect(await PgThreadFence.settle("ada")).toBe(false);
+      expect(await PgThreadFence.settle("ada")).toBe(true);
+
+      expect(await PgChatStorage.threadIds()).toEqual([]);
+      expect(await PgThreadFence.isFenced(threadId)).toBe(true);
+      expect(await PgThreadFence.isOwnedByAnother("ada")).toBe(false);
+    });
+
+    it("names no owner when the new one cannot be written after a fence", async () => {
+      await PgThreadFence.settle("ada");
+      await chat("w1", [item(1)]);
+      const write = PgFs.writeFile.bind(PgFs);
+      vi.spyOn(PgFs, "writeFile").mockImplementation(
+        // eslint-disable-next-line max-params -- `PgFs.writeFile`'s own signature
+        async (path, data, opts) => {
+          if (path === OWNER_PATH) throw new Error("QuotaExceeded");
+          return write(path, data, opts);
+        }
+      );
+
+      expect(await PgThreadFence.settle("bob")).toBe(false);
+
+      // Not Ada: a thread Bob writes next must never be fenced as hers
+      expect(await PgThreadFence.isOwnedByAnother("bob")).toBe(false);
+      expect(await PgThreadFence.isOwnedByAnother("carol")).toBe(false);
+      expect(await PgChatStorage.threadIds()).toEqual([]);
+    });
+
+    it("refuses every thread while a fence record cannot be read", async () => {
+      await PgThreadFence.settle("ada");
+      await chat("w1", [item(1)]);
+      await PgThreadFence.settle("bob");
+      await writeConfigFile(recordPathOf("ada"), "{broken");
+
+      expect(await PgThreadFence.isFenced(uuidOf(9))).toBe(true);
+    });
+
+    it("does not settle while a straggler stays in the folder", async () => {
+      await PgThreadFence.settle("ada");
+      const threadId = await chat("w1", [item(1)]);
+      await PgThreadFence.settle("bob");
+      await PgChatStorage.write(threadId, [item(2)]);
+      const write = PgFs.writeFile.bind(PgFs);
+      vi.spyOn(PgFs, "writeFile").mockImplementation(
+        // eslint-disable-next-line max-params -- `PgFs.writeFile`'s own signature
+        async (path, data, opts) => {
+          if (path.startsWith(FENCED_DIR)) throw new Error("QuotaExceeded");
+          return write(path, data, opts);
+        }
+      );
+
+      expect(await PgThreadFence.settle("bob")).toBe(false);
     });
 
     it("keeps the thread that decodes when a fenced copy is not JSON", async () => {

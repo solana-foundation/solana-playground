@@ -46,14 +46,23 @@
   sign-out's wholesale clear never see them. The record is written before the
   files move, and `push` refuses any thread a record names, so a page that dies
   mid-move uploads nothing either.
+- **The owner moves before the arriving account's threads arrive.** Right
+  after the fence empties the folder, `settle` records the arriving account,
+  and only then restores its threads or lets the dump run. When that write
+  fails, the owner file is removed: an owner left naming the previous account
+  would have a later sign-in fence the new account's threads as the previous
+  one's and hand them to it.
 - **Every doubt fails closed.** An owner file that cannot be read counts as
   another account's, a record that cannot be read makes `isFenced` answer yes,
   and `push` refuses every thread while the owner is not the signed-in
   account. `settle` answers whether the folder is the arriving account's now;
   when it is not, `adopt` skips the chat adoption and the dump for this
   sign-in, and the next sign-in settles again. A copy that is not JSON is
-  dropped from a merge and reported, since nothing can read it anyway;
-  throwing there would fail the fence on every sign-in.
+  dropped from a merge and reported, without its content, since nothing can
+  read it anyway; throwing there would fail the fence on every sign-in. An
+  owner file that reads but means nothing is not a passing fault, so its
+  threads go to a fence of their own (`~unknown`) that no sign-in restores,
+  and chat sync goes on.
 - **Stragglers are fenced again.** A tab that had the old thread open can write
   it back into `/.config/chats` before it notices the new account. Every
   settle moves a file whose id a fence record names back into its fence,
