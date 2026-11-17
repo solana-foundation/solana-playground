@@ -10,7 +10,7 @@ import { selectActiveFile } from "./active-file";
  * dropdown, a phone's Files page), so the request waits here for it rather
  * than the asker guessing how long the drawing takes.
  */
-let pending = false;
+let isPending = false;
 const trees = new Set<() => void>();
 
 /**
@@ -21,7 +21,7 @@ const trees = new Set<() => void>();
  * Add a file.
  */
 export const requestNewFile = () => {
-  pending = true;
+  isPending = true;
   PgView.showFiles();
   trees.forEach((run) => run());
 };
@@ -36,8 +36,8 @@ export const requestNewFile = () => {
  */
 export const onNewFileRequest = (create: () => Promise<void>): Disposable => {
   const run = () => {
-    if (!pending) return;
-    pending = false;
+    if (!isPending) return;
+    isPending = false;
     // `createItem` starts beside the tree's selected row, which can be a
     // folder picked since; the new file goes beside the active file
     selectActiveFile();
