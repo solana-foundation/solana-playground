@@ -4,14 +4,13 @@
 
 ### Requirement: The build server can require an API key
 
-When `PG_API_KEYS` (a comma-separated list, one key per client) or
-`PG_API_KEY` (one more key) is set, the build server SHALL answer `401` to
-`/build`, `/deploy/<uuid>` and every `/unstable` route unless the request's
-`x-api-key` header equals one of the keys, compared in constant time. No key
-SHALL appear in the server's logs. When neither is set, the server SHALL
+When `PG_API_KEYS` (comma-separated, one key per client) or `PG_API_KEY` is
+set, the build server SHALL answer `401` to `/build`, `/deploy/<uuid>` and
+every `/unstable` route unless `x-api-key` equals one of the keys, compared in
+constant time. No key SHALL appear in its logs. With neither set, it SHALL
 behave as before. The route SHALL send `PG_BUILD_SERVER_API_KEY` as
-`x-api-key` when it is set, and a production deployment without it SHALL
-report once per instance that the build server is open.
+`x-api-key` when set; a production deployment without it SHALL report once
+per instance that the build server is open.
 
 #### Scenario: A direct request to a keyed server (manual)
 
