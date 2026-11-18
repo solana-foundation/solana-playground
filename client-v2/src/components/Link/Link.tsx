@@ -26,8 +26,8 @@ const Link = forwardRef<HTMLAnchorElement, LinkProps>((props, ref) => {
     props.className
   );
 
-  // `//host` and `/\host` start with a slash too, yet name another site;
-  // the URL parser, not the first character, says which ones stay here
+  // A leading slash is not enough: `//host` and `/\host` start with one yet
+  // name another site, so the URL parser confirms the origin
   if (props.href.startsWith("/") && isSameOrigin(props.href)) {
     return (
       <RouterLink ref={ref} to={props.href} {...props} className={className} />
