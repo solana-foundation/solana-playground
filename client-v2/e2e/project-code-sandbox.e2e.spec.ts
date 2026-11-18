@@ -1,21 +1,17 @@
 import type { Page } from "@playwright/test";
 
+import { expect, LONG, runInTerminal, terminalRows, test } from "./fixtures";
 import {
   deployHelloWorldWith,
-  expect,
   greetWithAnchor,
   HELLO_ANCHOR_IDL,
-  LONG,
-  runInTerminal,
-  seedPlaynetProject,
-  terminalRows,
-  test,
-} from "./fixtures";
+  seedSandboxProject,
+} from "./sandbox-project";
 
 /**
  * `run` and `test` execute project code in a sandboxed, opaque-origin frame
- * (`utils/js-runtime`, `runtime.html`). Every case runs on Playnet, so
- * nothing leaves the browser.
+ * (`utils/js-runtime`, `runtime.html`). Every case runs on Localnet, which
+ * LiteSVM answers in Playwright's own process, so nothing leaves the machine.
  */
 
 /** Runs a command and waits for the line that says it is over */
@@ -55,7 +51,7 @@ test.describe("project-code-sandbox", () => {
     context,
     page,
   }) => {
-    const { address } = await seedPlaynetProject(context, page);
+    const { address } = await seedSandboxProject(context, page);
 
     await runFor(page)("run", /My balance: [\d.]+ SOL/);
 
@@ -66,7 +62,7 @@ test.describe("project-code-sandbox", () => {
     context,
     page,
   }) => {
-    const { writeClient } = await seedPlaynetProject(context, page);
+    const { writeClient } = await seedSandboxProject(context, page);
     await writeClient(
       [
         'import * as anchor from "@coral-xyz/anchor";',
@@ -82,7 +78,7 @@ test.describe("project-code-sandbox", () => {
     context,
     page,
   }) => {
-    const { writeClient } = await seedPlaynetProject(context, page);
+    const { writeClient } = await seedSandboxProject(context, page);
     await writeClient('console.log("a" "b");');
 
     await runInTerminal(page, "run");
@@ -96,7 +92,7 @@ test.describe("project-code-sandbox", () => {
     context,
     page,
   }) => {
-    const { writeClient } = await seedPlaynetProject(context, page);
+    const { writeClient } = await seedSandboxProject(context, page);
     await writeClient(
       [
         "await new Promise(() => {",
@@ -121,7 +117,7 @@ test.describe("project-code-sandbox", () => {
     context,
     page,
   }) => {
-    const { writeClient } = await seedPlaynetProject(context, page);
+    const { writeClient } = await seedSandboxProject(context, page);
     await writeClient(
       'pg.connection.getBalance(pg.wallet.publicKey).then((b) => console.log("late balance:", b));'
     );
@@ -136,7 +132,7 @@ test.describe("project-code-sandbox", () => {
     context,
     page,
   }) => {
-    const { writeClient } = await seedPlaynetProject(context, page);
+    const { writeClient } = await seedSandboxProject(context, page);
     await writeClient(
       'setTimeout(() => { throw new Error("late"); }, 500);\nconsole.log("ran");'
     );
@@ -153,7 +149,7 @@ test.describe("project-code-sandbox", () => {
     context,
     page,
   }) => {
-    const { writeTest } = await seedPlaynetProject(context, page);
+    const { writeTest } = await seedSandboxProject(context, page);
     await writeTest(
       [
         'describe("Suite", () => {',
@@ -177,7 +173,7 @@ test.describe("project-code-sandbox", () => {
     page,
   }) => {
     test.slow();
-    const { writeTest } = await seedPlaynetProject(context, page);
+    const { writeTest } = await seedSandboxProject(context, page);
     // Written before the deploy, while the editor still has the focus
     await writeTest(greetWithAnchor("signers"));
     await deployHelloWorldWith(HELLO_ANCHOR_IDL)(page);
@@ -193,7 +189,7 @@ test.describe("project-code-sandbox", () => {
     page,
   }) => {
     test.slow();
-    const { writeClient } = await seedPlaynetProject(context, page);
+    const { writeClient } = await seedSandboxProject(context, page);
     await writeClient(
       [
         'import * as anchor from "@coral-xyz/anchor";',
@@ -218,13 +214,14 @@ test.describe("project-code-sandbox", () => {
     );
   });
 
-  test("project-code-sandbox: A script runs against Playnet", async ({
+  test("project-code-sandbox: A script runs against Localnet", async ({
     context,
     page,
   }) => {
-    const { writeClient } = await seedPlaynetProject(context, page);
+    const { writeClient, unanswered } = await seedSandboxProject(context, page);
     await writeClient(
       [
+        "const start = await pg.connection.getBalance(pg.wallet.publicKey);",
         "const airdrop = await pg.connection.requestAirdrop(pg.wallet.publicKey, 2 * web3.LAMPORTS_PER_SOL);",
         "await pg.connection.confirmTransaction(airdrop);",
         "const before = await pg.connection.getBalance(pg.wallet.publicKey);",
@@ -232,18 +229,20 @@ test.describe("project-code-sandbox", () => {
         "const sig = await web3.sendAndConfirmTransaction(pg.connection, new web3.Transaction().add(",
         "  web3.SystemProgram.transfer({ fromPubkey: pg.wallet.publicKey, toPubkey: to, lamports: 1000000 })",
         "), [pg.wallet.keypair]);",
-        'console.log("balance:", before > 0, "received:", await pg.connection.getBalance(to));',
+        'console.log("airdropped:", before - start, "received:", await pg.connection.getBalance(to));',
       ].join("\n")
     );
 
-    await runFor(page)("run", /balance: true received: 1000000/);
+    await runFor(page)("run", /airdropped: 2000000000 received: 1000000/);
+    // Every request reached the cluster, none fell through to an error
+    expect(Array.from(unanswered)).toEqual([]);
   });
 
   test("project-code-sandbox: A sandboxed script cannot read the page's storage", async ({
     context,
     page,
   }) => {
-    const { writeClient, address } = await seedPlaynetProject(context, page);
+    const { writeClient, address } = await seedSandboxProject(context, page);
     await writeClient(
       [
         "const results = [];",
@@ -283,7 +282,7 @@ test.describe("project-code-sandbox", () => {
     context,
     page,
   }) => {
-    const { writeClient } = await seedPlaynetProject(context, page);
+    const { writeClient } = await seedSandboxProject(context, page);
     await writeClient(
       [
         "const results = [];",
@@ -315,7 +314,7 @@ test.describe("project-code-sandbox", () => {
     context,
     page,
   }) => {
-    const { writeClient, keypair } = await seedPlaynetProject(context, page);
+    const { writeClient, keypair } = await seedSandboxProject(context, page);
     const privateKeyHex = Buffer.from(keypair.secretKey.slice(0, 32)).toString(
       "hex"
     );
@@ -364,7 +363,7 @@ test.describe("project-code-sandbox", () => {
     context,
     page,
   }) => {
-    const { writeClient } = await seedPlaynetProject(context, page);
+    const { writeClient } = await seedSandboxProject(context, page);
     await writeClient(
       [
         "try {",
@@ -391,7 +390,7 @@ test.describe("project-code-sandbox", () => {
     context,
     page,
   }) => {
-    const { writeClient } = await seedPlaynetProject(context, page);
+    const { writeClient } = await seedSandboxProject(context, page);
     await writeClient(
       [
         'console.log("reloading");',
@@ -424,7 +423,7 @@ test.describe("project-code-sandbox", () => {
     context,
     page,
   }) => {
-    await seedPlaynetProject(context, page);
+    await seedSandboxProject(context, page);
     // The runtime's page as a `srcdoc`, which has no CSP of its own: without
     // a `sandbox` attribute it runs on the app's origin
     const runtimePage = await (await page.request.get("/runtime.html")).text();
@@ -462,7 +461,7 @@ test.describe("project-code-sandbox", () => {
     context,
     page,
   }) => {
-    const { writeClient } = await seedPlaynetProject(context, page);
+    const { writeClient } = await seedSandboxProject(context, page);
     // The first run keeps announcing itself as a fresh runtime, and answers
     // any port it is handed as if it ran the next run's code
     await writeClient(
@@ -503,7 +502,7 @@ test.describe("project-code-sandbox", () => {
         return post.apply(this, args);
       };
     });
-    const { writeClient, address } = await seedPlaynetProject(context, page);
+    const { writeClient, address } = await seedSandboxProject(context, page);
     await writeClient(
       [
         'console.log("waiting");',

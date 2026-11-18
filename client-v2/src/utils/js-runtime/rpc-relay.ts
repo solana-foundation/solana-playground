@@ -78,10 +78,9 @@ const reasonOf = (error: unknown) =>
   error instanceof Error ? error.message : "RPC request failed";
 
 /**
- * Carries the sandbox's RPC requests out with the page's `fetch`, read at
- * each request, since Playnet replaces `window.fetch` with its in-browser
- * answers while it runs. The sandbox gets the RPC's status and body back
- * as they came, a refusal included.
+ * Carries the sandbox's RPC requests out with the page's `fetch`. The
+ * sandbox gets the RPC's status and body back as they came, a refusal
+ * included.
  *
  * A base64 `sendTransaction` the RPC answered (2xx) is then handed to
  * `sendEncodedWith` with that answer, so whatever watches the page's sends

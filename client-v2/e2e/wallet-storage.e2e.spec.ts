@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { Keypair } from "@solana/web3.js";
 
 import {
+  editorTookFocus,
   expect,
   LONG,
   openTerminal,
@@ -445,8 +446,10 @@ test("wallet-storage: The tab closes before a save lands", async ({
   const holder = await context.newPage();
   await holder.goto("/");
   // The holder's app boots past the load event. On Firefox CI a click on the
-  // other tab waited out its 10 s behind that boot, so it ends first
-  await expect(holder.locator("#root-dir")).toBeVisible(LONG);
+  // other tab waited out its 10 s behind that boot, so it ends first. The
+  // editor taking the focus is the boot's last step; the tree is no sign of
+  // it, since undocked it waits in a dropdown and never shows on its own
+  await editorTookFocus(holder);
   await holder.evaluate(() => {
     void navigator.locks.request(
       "pg-wallet:wallet-state",

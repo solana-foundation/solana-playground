@@ -3,20 +3,22 @@ import type { Page } from "@playwright/test";
 import { Keypair, PublicKey, VersionedTransaction } from "@solana/web3.js";
 
 import {
-  deployHelloWorldWith,
   expect,
-  greetWithAnchor,
-  HELLO_ANCHOR_IDL,
   LONG,
   openTerminal,
   replaceFile,
   runInTerminal,
   seedLocalWalletFor,
-  seedPlaynetProject,
   seedWorkspace,
   terminalRows,
   test,
 } from "./fixtures";
+import {
+  deployHelloWorldWith,
+  greetWithAnchor,
+  HELLO_ANCHOR_IDL,
+  seedSandboxProject,
+} from "./sandbox-project";
 
 /**
  * The built-in wallet signs through its signer provider
@@ -102,7 +104,7 @@ test.describe("wallet-signing in the sandbox", () => {
     context,
     page,
   }) => {
-    const { writeClient, address } = await seedPlaynetProject(context, page);
+    const { writeClient, address } = await seedSandboxProject(context, page);
     await writeClient(
       [
         "const kp = pg.wallet.keypair;",
@@ -119,7 +121,7 @@ test.describe("wallet-signing in the sandbox", () => {
     context,
     page,
   }) => {
-    const { writeClient } = await seedPlaynetProject(context, page);
+    const { writeClient } = await seedSandboxProject(context, page);
     await writeClient(
       clientWith([
         "const legacy = () => {",
@@ -159,7 +161,7 @@ test.describe("wallet-signing in the sandbox", () => {
         return post.apply(this, args);
       };
     });
-    const { writeClient, keypair } = await seedPlaynetProject(context, page);
+    const { writeClient, keypair } = await seedSandboxProject(context, page);
     await writeClient(
       clientWith([
         "const legacy = new web3.Transaction().add(transfer);",
@@ -199,7 +201,7 @@ test.describe("wallet-signing in the sandbox", () => {
     context,
     page,
   }) => {
-    const { writeClient } = await seedPlaynetProject(context, page);
+    const { writeClient } = await seedSandboxProject(context, page);
     // The tutorial's page 3: a synchronous sign, then the raw bytes
     await writeClient(
       clientWith([
@@ -223,7 +225,7 @@ test.describe("wallet-signing in the sandbox", () => {
     context,
     page,
   }) => {
-    const { writeClient } = await seedPlaynetProject(context, page);
+    const { writeClient } = await seedSandboxProject(context, page);
     await writeClient(
       clientWith([
         "const sig = await web3.sendAndConfirmTransaction(pg.connection, new web3.Transaction().add(transfer), [pg.wallet.keypair]);",
@@ -235,13 +237,13 @@ test.describe("wallet-signing in the sandbox", () => {
   });
 
   // The spl-token-vault tutorial's `keypairIdentity(pg.wallet.keypair)` and
-  // a Metaplex signer input; Playnet has no token program, so the system
-  // program stands in for the tutorial's token calls
+  // a Metaplex signer input; the system program stands in for the
+  // tutorial's token calls, which need a mint made first
   test("wallet-signing: Metaplex with pg.wallet.keypair", async ({
     context,
     page,
   }) => {
-    const { writeClient } = await seedPlaynetProject(context, page);
+    const { writeClient } = await seedSandboxProject(context, page);
     await writeClient(
       [
         'import { keypairIdentity, Metaplex, sol } from "@metaplex-foundation/js";',
@@ -259,8 +261,8 @@ test.describe("wallet-signing in the sandbox", () => {
     await expect(terminalRows(page)).toContainText("identity: true");
   });
 
-  // Not on Playnet, whose `sendTransaction` reads legacy transactions only
-  // (`PgSerde.serializeTx`): an RPC stub takes the bytes as they leave
+  // An RPC stub takes the bytes as they leave the page, so the test checks
+  // the signature on what was sent, not on what a cluster made of it
   test("wallet-signing: A v0 transaction signed with pg.wallet.keypair", async ({
     context,
     page,
@@ -333,7 +335,7 @@ test.describe("wallet-signing in the sandbox", () => {
     context,
     page,
   }) => {
-    const { writeClient } = await seedPlaynetProject(context, page);
+    const { writeClient } = await seedSandboxProject(context, page);
     await writeClient(
       clientWith([
         "const newAccount = web3.Keypair.generate();",
@@ -358,7 +360,7 @@ test.describe("wallet-signing in the sandbox", () => {
   });
 
   test("wallet-signing: Reading the secret key", async ({ context, page }) => {
-    const { writeClient } = await seedPlaynetProject(context, page);
+    const { writeClient } = await seedSandboxProject(context, page);
     await writeClient(
       [
         "try {",
@@ -380,7 +382,7 @@ test.describe("wallet-signing in the sandbox", () => {
     page,
   }) => {
     test.slow();
-    const { writeTest } = await seedPlaynetProject(context, page);
+    const { writeTest } = await seedSandboxProject(context, page);
     // Written before the deploy, while the editor still has the focus
     await writeTest(greetWithAnchor("sendAndConfirm"));
     await deployHelloWorldWith(HELLO_ANCHOR_IDL)(page);

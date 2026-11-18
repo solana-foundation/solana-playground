@@ -74,11 +74,11 @@ const expiryOf = (
 /**
  * Makes `confirmTransaction` poll `getSignatureStatuses` over RPC.
  *
- * The sandbox carries no websocket to the page, and Playnet has none, so
- * confirmation reads the status over the RPC bridge until it reaches the
- * commitment, the transaction fails, or it expires as its strategy says
- * (`Expiry`): a durable-nonce transaction stays live, however long, until its
- * nonce advances without it.
+ * The sandbox carries no websocket to the page, so confirmation reads the
+ * status over the RPC bridge until it reaches the commitment, the
+ * transaction fails, or it expires as its strategy says (`Expiry`): a
+ * durable-nonce transaction stays live, however long, until its nonce
+ * advances without it.
  *
  * @param warn prints a line to the project's terminal
  * @returns a function of the sandbox's web3.js module that patches it

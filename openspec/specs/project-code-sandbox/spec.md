@@ -129,13 +129,13 @@ print its message and end the run.
 Every RPC request a sandboxed script makes through `pg.connection`, or a
 connection it builds with web3.js, SHALL be carried out by the page. The
 result SHALL be the same as the page's own request to that endpoint,
-Playnet included.
+Localnet included.
 
-#### Scenario: A script runs against Playnet
+#### Scenario: A script runs against Localnet
 
-- **WHEN** the endpoint is Playnet and a script gets its balance and sends a
-  transfer
-- **THEN** both succeed against the in-browser Playnet
+- **WHEN** the endpoint is Localnet and a script airdrops to the wallet, gets
+  its balance and sends a transfer
+- **THEN** all three succeed against the local cluster
 
 ### Requirement: The sandbox loads within a bounded time
 
