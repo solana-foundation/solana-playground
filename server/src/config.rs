@@ -4,7 +4,7 @@ use anyhow::Result;
 use dotenv::dotenv;
 use solpg_server::SandboxLimits;
 
-use crate::middlewares::ApiKey;
+use crate::middlewares::ApiKeys;
 
 /// Server configuration
 #[derive(Debug)]
@@ -19,8 +19,10 @@ pub struct Config {
     pub verbose: bool,
     /// Maximum amount of concurrent builds
     pub build_concurrency: usize,
-    /// Key the build, deploy and unstable routes require in `x-api-key`, if any
-    pub api_key: Option<ApiKey>,
+    /// Keys the build, deploy and unstable routes accept in `x-api-key`, if
+    /// any: `PG_API_KEYS`, comma-separated, one per client, and `PG_API_KEY`,
+    /// a single key, which deployments set before the list existed
+    pub api_keys: Option<ApiKeys>,
     /// Unstable build configuration
     pub unstable_build: BuildConfig,
     /// Unstable bundle configuration
@@ -47,7 +49,10 @@ impl Config {
             payload_limit: get_env("PAYLOAD_LIMIT", 1024usize * 1024),
             verbose: get_env("VERBOSE", false),
             build_concurrency: get_env("BUILD_CONCURRENCY", 16usize),
-            api_key: get_env_raw("API_KEY").and_then(ApiKey::new),
+            api_keys: ApiKeys::new(
+                get_env_raw("API_KEYS").as_deref(),
+                get_env_raw("API_KEY").as_deref(),
+            ),
             unstable_build: BuildConfig {
                 limits: Limits {
                     route: RouteLimits {

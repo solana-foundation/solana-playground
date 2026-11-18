@@ -34,7 +34,7 @@ or Vercel, and none is a secret. Have each ready before step 1; the table says w
 | `<DOPPLER_PROJECT>`, `<DOPPLER_CONFIG>` | The Doppler project and config that hold production's variables, for example `solana-playground` and `prd` | Your team; created in step 1 if new |
 | `<OPERATOR>` | The Google account of each person who runs migrations, lower case | Your team |
 | `<GITHUB_OWNER>` | The GitHub organization that will own the production OAuth app | Your team |
-| `<BUILD_SERVER_CONTACT>` | Whoever sets `PG_CLIENT_URLS` and `PG_API_KEY` on the build server (App Engine) | Your team |
+| `<BUILD_SERVER_CONTACT>` | Whoever sets `PG_CLIENT_URLS` and `PG_API_KEYS` on the build server (App Engine) | Your team |
 | `<BUILD_SERVER_URL>` | The build server's `https://` origin, the one whose `PG_CLIENT_URLS` lists production | `<BUILD_SERVER_CONTACT>` |
 | `<NOUS_ACCOUNT>` | The Nous Research account whose credits the assistant spends | Your team |
 | `<TOP_UP_OWNER>` | The person who adds Nous credits when the balance runs low. Nous has no auto top-up: an empty balance stops the assistant for everyone | Your team |
@@ -190,7 +190,7 @@ Optional. Without them the app uses the public Solana endpoints.
 | --- | --- | --- | --- |
 | `REACT_APP_SERVER_URL` | `/api/build-server`, exactly. **Required**: builds go through this deployment's own route, which needs a GitHub sign-in and records each build in `build_audit` | Unmasked | Step 6 |
 | `PG_BUILD_SERVER_URL` | `<BUILD_SERVER_URL>`, no trailing slash: where `/api/build-server` forwards builds. **Required**: unset, the route refuses every build | Unmasked | Step 6 |
-| `PG_BUILD_SERVER_API_KEY` | The build server's `PG_API_KEY`, sent as `x-api-key`. Unset, no key is sent and production reports an error once per instance | Masked | Step 6 |
+| `PG_BUILD_SERVER_API_KEY` | This deployment's entry of the build server's `PG_API_KEYS`, sent as `x-api-key`. Unset, no key is sent and production reports an error once per instance | Masked | Step 6 |
 | `REACT_APP_SERVER_UNSTABLE` | Never `true`: a Vercel build with it fails | | |
 | `REACT_APP_VERCEL_ENV`, `REACT_APP_VERCEL_GIT_COMMIT_SHA` | Never: `scripts/vercel-build.sh` sets both | | |
 | `USE_WASM_STUBS` | Never: a deployment with it fails its install (`scripts/vercel-install.sh`) | | |
@@ -203,7 +203,7 @@ Optional. Without them the app uses the public Solana endpoints.
 | `client-v2/.env` in your checkout (gitignored) | `VERCEL_DEPLOY_TEAM`, `VERCEL_DEPLOY_PROJECT_ID` | `<TEAM_SLUG>` and `<VERCEL_PROJECT_ID>`. Every Makefile target refuses a checkout linked to another project | Step 1 |
 | GitHub, `solana-foundation/solana-playground` → Settings → Secrets and variables → Actions → Repository secrets | `VERCEL_AUTOMATION_BYPASS_SECRET` | Vercel → the project → Settings → Deployment Protection → Protection Bypass for Automation. **Why:** after each push to `master`, the `smoke` job of `.github/workflows/client-v2.yml` waits for that commit's production deployment and calls `GET /api/sync` on the deployment's own URL, which Deployment Protection hides; the job sends this secret to get past it. The run fails unless production answers `{"enabled":true,"db":"ok"}`, so a production that cannot reach its database shows as a red run. Without the secret the job passes with a warning and checks nothing | Step 8 |
 | GitHub, the same page → Variables → Repository variables | `GCP_WORKLOAD_IDENTITY_PROVIDER` | The full resource name of the server's Workload Identity provider. Set, the server's deploys and releases sign in to GCP through OIDC; empty, through the `GCP_KEY` secret. The secrets `GCP_KEY`, `SERVICE_ACCOUNT` and `PROJECT_ID` already exist there | Step 10 |
-| The build server's environment | `PG_API_KEY` | The same value as `PG_BUILD_SERVER_API_KEY`. Set, the server answers `401` to `/build`, `/deploy` and `/unstable/*` without a matching `x-api-key`, so `/api/build-server` is the only way in. Unset, those routes stay open and the server logs a warning at start. Set `PG_BUILD_SERVER_API_KEY` on Vercel first: a key on the server alone refuses every build, while a key Vercel sends to a server without one is ignored | Step 6 |
+| The build server's environment | `PG_API_KEYS` | A comma-separated list of keys in a GCP secret, one per client of the server; `PG_BUILD_SERVER_API_KEY` is one entry. Set, the server answers `401` to `/build`, `/deploy` and `/unstable/*` unless `x-api-key` matches an entry, so only a client holding a key gets in. Removing an entry revokes that client alone. After a change, check each client's key with the `curl` of [D-9](../../docs/testing.md#d-9-the-server-builds-a-program-without-a-client): a listed key passes, a removed one gets `401`. `PG_API_KEY`, a single key, still counts as one more entry. Both unset, those routes stay open and the server logs a warning at start. Set `PG_BUILD_SERVER_API_KEY` on Vercel first: a key on the server alone refuses every build, while a key Vercel sends to a server without one is ignored | Step 6 |
 | The build server's environment | `PG_CLIENT_URLS` | Must include `https://<VERCEL_APP_DOMAIN>` and, from step 9, `https://<CUSTOM_DOMAIN>`, or the browser's build requests are refused by CORS | Before step 7; step 9 |
 
 ## Step 1: the Vercel project
@@ -385,7 +385,8 @@ first deployment in step 7. Give write access to `<DOPPLER_CONFIG>` only to the 
 **Run:** set each variable the tables mark "Step 6" in `<DOPPLER_CONFIG>`, with the visibility in its "In Doppler"
 column. `AUTH_BASE_URL` is `https://<VERCEL_APP_DOMAIN>` for now.
 
-Then ask `<BUILD_SERVER_CONTACT>` for the build server's `PG_API_KEY` (the value of `PG_BUILD_SERVER_API_KEY`) and to
+Then ask `<BUILD_SERVER_CONTACT>` for this deployment's entry of the build server's `PG_API_KEYS` (the value of
+`PG_BUILD_SERVER_API_KEY`) and to
 add `https://<VERCEL_APP_DOMAIN>` to `PG_CLIENT_URLS` on the build server.
 
 **Check:** `npx vercel@62.7.0 env ls production` lists the step 3 variables, `SYNC_ENABLED`, `AUTH_SECRET`,
