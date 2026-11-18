@@ -243,6 +243,8 @@ const secretsOf = (upstream) => {
         encodeURIComponent(decoded),
         // How `searchParams.set` writes it: a space as `+`
         new URLSearchParams({ v: decoded }).toString().slice(2),
+        // The token of a header value such as `Bearer <token>`
+        decoded.replace(/^[A-Za-z]+ +/, ""),
       ];
     })
     .filter((secret) => secret.length >= MIN_SECRET_LENGTH);
@@ -381,7 +383,7 @@ const exchange = async (limits, upstream, payload) => {
  * {@link exchange}, with the entry's credentials removed from any error it
  * raises. The error text is the upstream's or the platform's, and either can
  * quote the request it was given: its URL, its headers, its token. A JSON-RPC
- * error the upstream answers with is redacted the same way.
+ * error the upstream answers with has every string redacted the same way.
  *
  * @param {Limits} limits
  * @param {Upstream} upstream
@@ -395,33 +397,44 @@ export const callUpstream = async (limits, upstream, payload) => {
   } catch (e) {
     throw new Error(redact(String(/** @type {Error} */ (e)?.message ?? e)));
   }
-  return withRedactedError(answer, redact);
+  return withRedactedError(redact, answer);
 };
 
 /**
- * `answer` with its JSON-RPC error's message and data redacted. An upstream
- * can refuse a call with HTTP 200 and an `error` that quotes what it was
- * sent; a result passes untouched.
+ * `value` with every string in it redacted, at any depth.
+ *
+ * @param {(text: string) => string} redact
+ * @param {unknown} value
+ * @returns {unknown}
+ */
+const redactStrings = (redact, value) => {
+  if (typeof value === "string") return redact(value);
+  if (Array.isArray(value)) return value.map((v) => redactStrings(redact, v));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [k, redactStrings(redact, v)])
+    );
+  }
+  return value;
+};
+
+/**
+ * `answer` with every string of its JSON-RPC error redacted. An upstream can
+ * refuse a call with HTTP 200 and an `error` that quotes what it was sent; a
+ * result passes untouched.
  *
  * @template T
- * @param {T} answer
  * @param {(text: string) => string} redact
+ * @param {T} answer
  * @returns {T}
  */
-const withRedactedError = (answer, redact) => {
+const withRedactedError = (redact, answer) => {
   const envelope = /** @type {{ error?: unknown }} */ (answer);
-  const error = envelope?.error;
-  if (!error || typeof error !== "object") return answer;
-  const { message, data } =
-    /** @type {{ message?: unknown, data?: unknown }} */ (error);
-  /** @type {Record<string, unknown>} */
-  const cleaned = { ...error };
-  if (typeof message === "string") cleaned.message = redact(message);
-  if (typeof data === "string") cleaned.data = redact(data);
-  else if (data !== undefined) {
-    cleaned.data = JSON.parse(redact(JSON.stringify(data)));
-  }
-  return /** @type {T} */ ({ ...envelope, error: cleaned });
+  if (!envelope?.error || typeof envelope.error !== "object") return answer;
+  return /** @type {T} */ ({
+    ...envelope,
+    error: redactStrings(redact, envelope.error),
+  });
 };
 
 /**
@@ -602,7 +615,7 @@ async function handle(req, res, session) {
  *
  * @param {Session} session
  */
-export const createHandler =
+export const handleWith =
   (session) =>
   /**
    * @param {import("node:http").IncomingMessage} req
@@ -613,5 +626,5 @@ export const createHandler =
 
 export default withObservability(
   "mcp",
-  createHandler({ isAllowedOrigin, readSession })
+  handleWith({ isAllowedOrigin, readSession })
 );

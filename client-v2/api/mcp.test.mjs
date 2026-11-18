@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
 
-import handler, { callUpstream, createHandler } from "./mcp.mjs";
+import handler, { callUpstream, handleWith } from "./mcp.mjs";
 import skillsHandler from "./skills.mjs";
 
 const makeRes = () => ({
@@ -417,7 +417,8 @@ describe("callUpstream redaction", () => {
             error: {
               code: -32001,
               message: `refused ${init.headers.authorization}`,
-              data: { sent: init.headers["x-api-key"] },
+              data: { sent: [init.headers["x-api-key"]], count: 1234 },
+              hint: init.headers["x-vercel-protection-bypass"],
             },
           }),
           { headers: { "content-type": "application/json" } }
@@ -427,6 +428,7 @@ describe("callUpstream redaction", () => {
     const answer = await callUpstream(limits, upstream, {});
 
     assert.equal(answer.error.code, -32001);
+    assert.equal(answer.error.data.count, 1234);
     assert.match(answer.error.message, /^refused /);
     const text = JSON.stringify(answer);
     for (const secret of secrets) {
@@ -475,6 +477,30 @@ describe("callUpstream redaction", () => {
     assert.match(error.message, /did not answer within 50 ms/);
   });
 
+  it("removes the token of a header value with a scheme", async () => {
+    const schemed = {
+      id: "a",
+      url: "https://a.test/mcp",
+      headers: { authorization: "Basic dXNlcjpzZWNyZXQ0Mg" },
+    };
+    mock.method(
+      global,
+      "fetch",
+      async () =>
+        new Response("bad credentials dXNlcjpzZWNyZXQ0Mg", {
+          status: 401,
+          statusText: "Unauthorized",
+        })
+    );
+
+    const error = await callUpstream(limits, schemed, {}).then(
+      () => assert.fail("expected a rejection"),
+      (e) => e
+    );
+
+    assert.ok(!error.message.includes("dXNlcjpzZWNyZXQ0Mg"), error.message);
+  });
+
   it("removes the credentials from a network error naming the URL", async () => {
     mock.method(global, "fetch", async (url) => {
       throw new Error(`connect ECONNREFUSED ${url}`);
@@ -493,7 +519,7 @@ describe("callUpstream redaction", () => {
 
 describe("/api/mcp with a signed-in caller", () => {
   // The entry's credentials are sent only to a signed-in caller on this site
-  const signedIn = createHandler({
+  const signedIn = handleWith({
     isAllowedOrigin: () => true,
     readSession: async () => ({ status: "signed-in" }),
   });
