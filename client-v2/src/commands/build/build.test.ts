@@ -11,16 +11,27 @@ const utils = vi.hoisted(() => ({
     currentWorkspaceName: "a" as string | undefined,
     getCurrentSrcPath: () => "/p/src/",
     getRelativePath: (path: string) => path.slice("/p/".length),
+    getItemNameFromPath: (path: string) => path.split("/").pop() ?? "",
     PATHS: { ROOT_DIR_PATH: "/" },
   },
   PgCommon: { joinPaths: (...paths: string[]) => paths.join("") },
-  PgLanguage: { getFromPath: () => ({ name: "Rust" }) },
+  PgLanguage: {
+    getFromPath: (path: string) => ({
+      name: path.endsWith(".py") ? "Python" : "Rust",
+    }),
+  },
+  PgPackage: { import: vi.fn() },
   PgGlobal: { update: vi.fn() },
-  PgProgramInfo: { update: vi.fn(), getPkStr: () => "Pk11111111111111" },
+  PgProgramInfo: {
+    update: vi.fn(),
+    getPkStr: () => "Pk11111111111111",
+    uuid: "u-a" as string | undefined,
+  },
   PgServer: { build: vi.fn() },
   PgTerminal: {
     println: vi.fn(),
     info: (text: string) => text,
+    success: (text: string) => text,
     warning: (text: string) => text,
   },
   PgSettings: { build: { flags: {} } },
@@ -35,6 +46,12 @@ const { PgBuildOutput } = await import(
   "../../views/sidebar/assistant/bridge/build-output"
 );
 const { isStopped } = await import("../../utils/stopped");
+const { clearBuildRefused, isBuildRefused, markBuildRefused } = await import(
+  "./refused-build"
+);
+const { initTelemetry, memoryProvider, resetTelemetry } = await import(
+  "../../shared/lib/telemetry"
+);
 
 /** Runs the command's handler as the command manager would */
 const run = (signal = new AbortController().signal) =>
@@ -45,12 +62,24 @@ const run = (signal = new AbortController().signal) =>
 const PROGRAM = "use anchor_lang::prelude::*;";
 
 describe("commands/build/build", () => {
+  let tracked: ReturnType<typeof memoryProvider>;
+
   beforeEach(() => {
     vi.clearAllMocks();
     utils.PgExplorer.files = {};
     utils.PgExplorer.currentWorkspaceId = "id-a";
     utils.PgExplorer.currentWorkspaceName = "a";
+    utils.PgProgramInfo.uuid = "u-a";
+    resetTelemetry();
+    tracked = memoryProvider();
+    initTelemetry({ providers: [tracked] });
   });
+
+  /** The build events sent, as `[name, params]` */
+  const buildEvents = () =>
+    tracked.events
+      .filter((event) => event.name.startsWith("build_"))
+      .map((event) => [event.name, event.params]);
 
   it.each([
     ["empty", ""],
@@ -66,6 +95,7 @@ describe("commands/build/build", () => {
     expect(utils.PgExplorer.getFileContent).toHaveBeenCalledWith("src/lib.rs");
     expect(utils.PgServer.build).not.toHaveBeenCalled();
     expect(utils.PgGlobal.update).not.toHaveBeenCalled();
+    expect(buildEvents()).toEqual([]);
     // Deploy reads it, and must not go on with the old binary
     expect(utils.PgProgramInfo.update).toHaveBeenCalledWith({
       lastBuildFailed: true,
@@ -163,6 +193,10 @@ describe("commands/build/build", () => {
       expect(utils.PgGlobal.update).toHaveBeenLastCalledWith({
         buildLoading: false,
       });
+      // A stop is no outcome: the build reads as started, never failed
+      expect(buildEvents()).toEqual([
+        ["build_started", { framework: "anchor" }],
+      ]);
     });
 
     it("drops a reply that arrives after the stop", async () => {
@@ -177,6 +211,9 @@ describe("commands/build/build", () => {
       expect(isStopped(err)).toBe(true);
       expect(utils.PgProgramInfo.update).not.toHaveBeenCalled();
       expect(PgBuildOutput.set).not.toHaveBeenCalled();
+      expect(buildEvents()).toEqual([
+        ["build_started", { framework: "anchor" }],
+      ]);
     });
 
     it("still fails a request that fails without a stop", async () => {
@@ -192,12 +229,110 @@ describe("commands/build/build", () => {
         lastBuildFailed: true,
       });
     });
+    // A refusal for sign-in never reached the compiler: the saved verdict
+    // stays what it was, so a reload does not show a failed build
+    it("keeps the saved verdict when the build is refused for sign-in", async () => {
+      utils.PgServer.build.mockRejectedValue(
+        Object.assign(new Error("Sign in with GitHub to build."), {
+          reason: "signed-out",
+        })
+      );
+
+      const err = await run().catch((e: unknown) => e);
+
+      expect((err as Error).message).toBe("Sign in with GitHub to build.");
+      expect(utils.PgProgramInfo.update).not.toHaveBeenCalled();
+    });
+    // The kept verdict may be a pass for older code, so Deploy must know the
+    // current source never built
+    it("marks the project when sign-in refuses its build", async () => {
+      utils.PgServer.build.mockRejectedValue(
+        Object.assign(new Error("Sign in with GitHub to build."), {
+          reason: "signed-out",
+        })
+      );
+
+      await run().catch(() => undefined);
+
+      expect(isBuildRefused("id-a")).toBe(true);
+      expect(isBuildRefused("id-b")).toBe(false);
+    });
+
+    it("clears the mark once a build reaches the compiler", async () => {
+      markBuildRefused("id-a");
+      utils.PgServer.build.mockResolvedValue({
+        stderr: "error: could not compile `p`",
+        uuid: "u",
+        idl: null,
+      });
+
+      await run();
+
+      expect(isBuildRefused("id-a")).toBe(false);
+    });
+
+    // A refusal in one project says nothing about another: building the open
+    // project must not let Deploy reuse the other's binary
+    it("keeps another project's mark when this one builds", async () => {
+      markBuildRefused("id-b");
+      utils.PgServer.build.mockResolvedValue({
+        stderr: "",
+        uuid: "u",
+        idl: null,
+      });
+
+      await run();
+
+      expect(isBuildRefused("id-b")).toBe(true);
+      clearBuildRefused("id-b");
+    });
+
+    it("keeps another project's mark when this one fails to compile", async () => {
+      markBuildRefused("id-b");
+      utils.PgServer.build.mockRejectedValue(new Error("boom"));
+
+      await run().catch(() => undefined);
+
+      expect(isBuildRefused("id-b")).toBe(true);
+      clearBuildRefused("id-b");
+    });
   });
 
   describe("another project opened during the build", () => {
     beforeEach(() => {
       utils.PgExplorer.getFileContent.mockReturnValue(PROGRAM);
       utils.PgExplorer.files = { "/p/src/lib.rs": { content: PROGRAM } };
+    });
+
+    // Seahorse loads its compiler before the request goes out: a project
+    // opened meanwhile must not lend its identity to this build's audit row
+    it("sends the project the build started in", async () => {
+      utils.PgExplorer.getFileContent.mockReturnValue(undefined);
+      utils.PgExplorer.files = {
+        "/p/src/fizz.py": { content: "from seahorse.prelude import *" },
+      };
+      utils.PgPackage.import.mockImplementation(async () => {
+        utils.PgExplorer.currentWorkspaceId = "id-b";
+        utils.PgExplorer.currentWorkspaceName = "b";
+        utils.PgProgramInfo.uuid = "u-b";
+        return {
+          compileSeahorse: () => ["/src/lib.rs", "# [program] mod fizz {}"],
+        };
+      });
+      utils.PgServer.build.mockResolvedValue({
+        stderr: "",
+        uuid: "u",
+      });
+
+      await run();
+
+      expect(utils.PgServer.build).toHaveBeenCalledWith(
+        expect.objectContaining({
+          project: { id: "id-a", name: "a" },
+          uuid: "u-a",
+        }),
+        expect.anything()
+      );
     });
 
     it.each([
@@ -247,5 +382,149 @@ describe("commands/build/build", () => {
       );
       expect(PgBuildOutput.set).toHaveBeenCalledWith("", "renamed");
     });
+  });
+
+  describe("events", () => {
+    const NATIVE = "use solana_program::entrypoint;";
+
+    beforeEach(() => {
+      utils.PgExplorer.getFileContent.mockReturnValue(PROGRAM);
+      utils.PgExplorer.files = { "/p/src/lib.rs": { content: PROGRAM } };
+    });
+
+    it("counts a build the compiler passed, with its IDL", async () => {
+      utils.PgServer.build.mockResolvedValue({
+        stderr: "Finished release",
+        uuid: "u",
+        idl: { instructions: [] },
+      });
+
+      await run();
+
+      expect(buildEvents()).toEqual([
+        ["build_started", { framework: "anchor" }],
+        ["build_succeeded", { framework: "anchor", has_idl: true }],
+      ]);
+    });
+
+    it("counts a native build that returned no IDL", async () => {
+      utils.PgExplorer.files = { "/p/src/lib.rs": { content: NATIVE } };
+      utils.PgServer.build.mockResolvedValue({
+        stderr: "Finished release",
+        uuid: undefined,
+        idl: undefined,
+      });
+
+      await run();
+
+      expect(buildEvents()).toEqual([
+        ["build_started", { framework: "native" }],
+        ["build_succeeded", { framework: "native", has_idl: false }],
+      ]);
+    });
+
+    it("counts a compile error as a failed build", async () => {
+      utils.PgServer.build.mockResolvedValue({
+        stderr: "error[E0425]: x\nerror: could not compile `solpg`",
+        uuid: undefined,
+        idl: undefined,
+      });
+
+      await run();
+
+      expect(buildEvents()).toEqual([
+        ["build_started", { framework: "anchor" }],
+        ["build_failed", { framework: "anchor", reason: "compile" }],
+      ]);
+    });
+
+    it("sends one outcome when keeping the result throws after it", async () => {
+      utils.PgServer.build.mockResolvedValue({
+        stderr: "Finished release",
+        uuid: "u",
+        idl: undefined,
+      });
+      vi.mocked(PgBuildOutput.set).mockImplementationOnce(() => {
+        throw new Error("storage full");
+      });
+
+      await expect(run()).rejects.toThrow("storage full");
+
+      expect(buildEvents()).toEqual([
+        ["build_started", { framework: "anchor" }],
+        ["build_succeeded", { framework: "anchor", has_idl: false }],
+      ]);
+    });
+
+    it("counts Seahorse's own compile error as compile", async () => {
+      utils.PgExplorer.getFileContent.mockReturnValue(undefined);
+      utils.PgExplorer.files = {
+        "/p/src/fizz.py": { content: "from seahorse.prelude import *" },
+      };
+      utils.PgPackage.import.mockResolvedValue({ compileSeahorse: () => [] });
+
+      await expect(run()).rejects.toThrow("Seahorse compile failed");
+
+      expect(utils.PgServer.build).not.toHaveBeenCalled();
+      expect(buildEvents()).toEqual([
+        ["build_started", { framework: "seahorse" }],
+        ["build_failed", { framework: "seahorse", reason: "compile" }],
+      ]);
+    });
+
+    // By shape, as `buildFailureOf` reads a `PgServerError`
+    it.each([
+      ["network", { answered: false }],
+      ["server", { answered: true }],
+      ["server", {}],
+    ])("counts a refused request as %s", async (reason, shape) => {
+      utils.PgServer.build.mockRejectedValue(
+        Object.assign(new Error("Server request failed"), shape)
+      );
+
+      await run().catch(() => undefined);
+
+      expect(buildEvents()).toEqual([
+        ["build_started", { framework: "anchor" }],
+        ["build_failed", { framework: "anchor", reason }],
+      ]);
+    });
+
+    // The proxy answered 401: the build started, so it still ends in an outcome
+    it("counts a sign-in refusal as server", async () => {
+      utils.PgServer.build.mockRejectedValue(
+        Object.assign(new Error("Sign in with GitHub to build."), {
+          answered: true,
+          reason: "signed-out",
+        })
+      );
+
+      await run().catch(() => undefined);
+
+      expect(buildEvents()).toEqual([
+        ["build_started", { framework: "anchor" }],
+        ["build_failed", { framework: "anchor", reason: "server" }],
+      ]);
+      clearBuildRefused("id-a");
+    });
+  });
+});
+
+describe("commands/build/build frameworkOf", () => {
+  it.each([
+    ["seahorse", [["/src/fizz.py", "from seahorse.prelude import *"]]],
+    ["anchor", [["/src/lib.rs", "use anchor_lang::prelude::*;"]]],
+    ["native", [["/src/lib.rs", "use solana_program::entrypoint;"]]],
+    ["native", [["/src/lib.rs", "// not anchor_lang, a native program"]]],
+    [
+      "seahorse",
+      [
+        ["/src/fizz.py", "from seahorse.prelude import *"],
+        ["/src/lib.rs", "use anchor_lang::prelude::*;"],
+      ],
+    ],
+  ] as const)("reads %s", async (framework, files) => {
+    const { frameworkOf } = await import("./build");
+    expect(frameworkOf(files.map(([p, c]) => [p, c]))).toBe(framework);
   });
 });

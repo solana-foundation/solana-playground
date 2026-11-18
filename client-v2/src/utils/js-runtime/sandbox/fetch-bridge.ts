@@ -240,7 +240,7 @@ if (import.meta.vitest) {
     it("sends anything that is not JSON-RPC through the sandbox's own fetch", async () => {
       const { fetchWith, send, native } = bridged();
 
-      await fetchWith("http://example.com/a.json");
+      await fetchWith("https://example.test/a.json");
       await fetchWith(URL_OF_RPC, { method: "POST", body: "not json" });
       await fetchWith(URL_OF_RPC, {
         method: "POST",

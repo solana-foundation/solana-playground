@@ -85,8 +85,10 @@ backend that returns an IDL replaces this route; tasks 2.7 and 2.8 of [tasks.md]
 only when it is not `null`. The unstable route still returns IDLs, and those still replace the held one.
 Alternative: never overwrite. Rejected: the unstable route's IDL is fresher than an upload.
 
-**One version declaration, checked against the server.** `features/idl-build-guide/model/versions.ts` declares the
-Anchor and Solana versions the commands use. A test in the slice reads `server/programs/Cargo.lock` and
+**One version declaration, checked against the server.** `shared/config/build-server.ts` declares the
+Anchor and Solana versions the guide's commands and `anchor --version` use. It sits in `shared`, not in the guide's
+slice, because importing it through the slice's `index.ts` pulled the guide's UI into the terminal's chunk. A test
+beside it reads `server/programs/Cargo.lock` and
 `server/Dockerfile` and fails when either version differs. Alternative: read the versions at runtime from
 `/crates/versions.json`. Rejected: it carries crate versions only, not the Solana CLI version, and the guide would
 render without commands until the fetch resolves.

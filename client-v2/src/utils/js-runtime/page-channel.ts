@@ -142,7 +142,7 @@ if (import.meta.vitest) {
     it("answers an RPC request without its fields with an error under its id", async () => {
       const port = sandboxPortFor(refuse)(refuse);
       const reply = nextReply(port);
-      port.postMessage({ type: "rpc", id: 3, url: "http://a" });
+      port.postMessage({ type: "rpc", id: 3, url: "https://a.test" });
       expect(await reply).toEqual({
         type: "rpc",
         id: 3,
@@ -193,7 +193,7 @@ if (import.meta.vitest) {
       port.postMessage({
         type: "rpc",
         id: 2,
-        url: "http://a",
+        url: "https://a.test",
         method: "POST",
         headers: {},
         body: "{}",

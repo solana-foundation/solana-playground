@@ -62,6 +62,7 @@ export interface BaseProjectListProps {
   renaming: string | undefined;
   /** What is wrong with the name typed into the rename field, or `undefined` */
   renameError: string | undefined;
+  // eslint-disable-next-line max-params -- the prop contract ProjectList implements; currying it reaches past this file
   onAction: (entry: ProjectEntry, action: ProjectAction, via: Via) => void;
   /** The rename field changed; lets the owner clear a stale error */
   onRenameChange: (value: string) => void;

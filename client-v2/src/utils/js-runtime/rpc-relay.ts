@@ -153,15 +153,18 @@ if (import.meta.vitest) {
     let initLogger: typeof import("@/shared/lib/logger").initLogger;
     let resetLogger: typeof import("@/shared/lib/logger").resetLogger;
     let memoryProvider: typeof import("@/shared/lib/logger").memoryProvider;
+    let DEVNET: string;
     beforeAll(async () => {
       ({ initLogger, resetLogger, memoryProvider } = await import(
         "@/shared/lib/logger"
       ));
+      ({
+        TEST_ENDPOINT: { DEVNET },
+      } = await import("@/test-utils/endpoints.mjs"));
     });
     afterEach(() => resetLogger());
 
     const ORIGIN = "https://beta.solpg.io";
-    const DEVNET = "https://api.devnet.solana.com";
     const request = (url: string) => ({
       url,
       method: "POST",
@@ -177,7 +180,7 @@ if (import.meta.vitest) {
       headers: { "content-type": "application/json" },
       body,
     });
-    const sendRequest = sendRequestOf(sendBody);
+    const sendRequest = () => sendRequestOf(sendBody);
     const ANSWER = '{"jsonrpc":"2.0","id":2,"result":"5ig"}';
     const REFUSAL =
       '{"jsonrpc":"2.0","id":2,"error":{"code":-32002,"message":"Transaction simulation failed","data":{"logs":["Program log: no"]}}}';
@@ -205,11 +208,11 @@ if (import.meta.vitest) {
       const fetchSpy = answering('{"result":1}');
       const relay = relayRpcWith(() => fetchSpy)(unusedSend)(ORIGIN);
 
-      const reply = await relay(request("http://playnet"));
+      const reply = await relay(request(DEVNET));
 
       expect(reply).toEqual({ status: 200, body: '{"result":1}' });
       expect(fetchSpy).toHaveBeenCalledWith(
-        "http://playnet",
+        DEVNET,
         expect.objectContaining({ credentials: "omit", method: "POST" })
       );
     });
@@ -233,7 +236,7 @@ if (import.meta.vitest) {
       const sent: string[] = [];
       const relay = relayRpcWith(() => fetchSpy)(sendLikeWeb3(sent))(ORIGIN);
 
-      expect(await relay(sendRequest)).toEqual({ status: 200, body: ANSWER });
+      expect(await relay(sendRequest())).toEqual({ status: 200, body: ANSWER });
       expect(sent).toEqual(["AQID"]);
       expect(fetchSpy).toHaveBeenCalledOnce();
       expect(fetchSpy).toHaveBeenCalledWith(
@@ -250,7 +253,10 @@ if (import.meta.vitest) {
         ORIGIN
       );
 
-      expect(await relay(sendRequest)).toEqual({ status: 200, body: REFUSAL });
+      expect(await relay(sendRequest())).toEqual({
+        status: 200,
+        body: REFUSAL,
+      });
       expect(sent).toEqual(["AQID"]);
       expect(logged.entries).toEqual([]);
     });
@@ -261,7 +267,7 @@ if (import.meta.vitest) {
         sendLikeWeb3(sent)
       )(ORIGIN);
 
-      expect(await relay(sendRequest)).toEqual({ status: 429, body: "rate" });
+      expect(await relay(sendRequest())).toEqual({ status: 429, body: "rate" });
       expect(sent).toEqual([]);
     });
 
@@ -284,7 +290,7 @@ if (import.meta.vitest) {
         throw new TypeError("hook broke");
       })(ORIGIN);
 
-      expect(await relay(sendRequest)).toEqual({ status: 200, body: ANSWER });
+      expect(await relay(sendRequest())).toEqual({ status: 200, body: ANSWER });
       expect(logged.entries).toEqual([
         expect.objectContaining({ level: "error", report: true }),
       ]);
@@ -299,10 +305,10 @@ if (import.meta.vitest) {
         )(unusedSend)(ORIGIN);
 
       expect(
-        await failing(new TypeError("Failed to fetch"))(sendRequest)
+        await failing(new TypeError("Failed to fetch"))(sendRequest())
       ).toEqual({ error: "Failed to fetch" });
-      // eslint-disable-next-line @typescript-eslint/no-throw-literal -- Playnet's fetch may reject with a non-Error
-      expect(await failing("gone")(sendRequest)).toEqual({
+      // eslint-disable-next-line @typescript-eslint/only-throw-error -- a page fetch may reject with a non-Error
+      expect(await failing("gone")(sendRequest())).toEqual({
         error: "RPC request failed",
       });
     });
@@ -323,7 +329,7 @@ if (import.meta.vitest) {
       const fetchSpy = answering(ANSWER);
       const relay = relayRpcWith(() => fetchSpy)(sendEncodedOnPage)(ORIGIN);
 
-      expect(await relay(sendRequest)).toEqual({ status: 200, body: ANSWER });
+      expect(await relay(sendRequest())).toEqual({ status: 200, body: ANSWER });
       expect(seen).toEqual(["AQID"]);
       expect(fetchSpy).toHaveBeenCalledOnce();
     });

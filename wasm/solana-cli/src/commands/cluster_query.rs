@@ -1818,37 +1818,34 @@ pub async fn process_show_stakes(
     for (stake_pubkey, stake_account) in all_stake_accounts {
         if let Ok(stake_state) = stake_account.state() {
             match stake_state {
-                StakeStateV2::Initialized(_) => {
-                    if vote_account_pubkeys.is_none() {
-                        stake_accounts.push(CliKeyedStakeState {
-                            stake_pubkey: stake_pubkey.to_string(),
-                            stake_state: build_stake_state(
-                                stake_account.lamports,
-                                &stake_state,
-                                use_lamports_unit,
-                                &stake_history,
-                                &clock,
-                            ),
-                        });
-                    }
+                StakeStateV2::Initialized(_) if vote_account_pubkeys.is_none() => {
+                    stake_accounts.push(CliKeyedStakeState {
+                        stake_pubkey: stake_pubkey.to_string(),
+                        stake_state: build_stake_state(
+                            stake_account.lamports,
+                            &stake_state,
+                            use_lamports_unit,
+                            &stake_history,
+                            &clock,
+                        ),
+                    });
                 }
-                StakeStateV2::Stake(_, stake, _) => {
+                StakeStateV2::Stake(_, stake, _)
                     if vote_account_pubkeys.is_none()
                         || vote_account_pubkeys
                             .unwrap()
-                            .contains(&stake.delegation.voter_pubkey)
-                    {
-                        stake_accounts.push(CliKeyedStakeState {
-                            stake_pubkey: stake_pubkey.to_string(),
-                            stake_state: build_stake_state(
-                                stake_account.lamports,
-                                &stake_state,
-                                use_lamports_unit,
-                                &stake_history,
-                                &clock,
-                            ),
-                        });
-                    }
+                            .contains(&stake.delegation.voter_pubkey) =>
+                {
+                    stake_accounts.push(CliKeyedStakeState {
+                        stake_pubkey: stake_pubkey.to_string(),
+                        stake_state: build_stake_state(
+                            stake_account.lamports,
+                            &stake_state,
+                            use_lamports_unit,
+                            &stake_history,
+                            &clock,
+                        ),
+                    });
                 }
                 _ => {}
             }
@@ -1990,7 +1987,7 @@ pub async fn process_show_validators(
 
     let validators: Vec<_> = current_validators
         .into_iter()
-        .chain(delinquent_validators.into_iter())
+        .chain(delinquent_validators)
         .collect();
 
     let (average_skip_rate, average_stake_weighted_skip_rate) = {

@@ -417,6 +417,7 @@ describe("conversations", { skip: !DB && "DATABASE_URL not set" }, () => {
   // leave every live one whole: a predicate gone wrong would erase live
   // history for every account, and its `migrate:down` restores nothing
   it("clears tombstoned conversations only when the erase migration runs", async () => {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
     const sql = readFileSync(
       new URL(
         "../../../../db/migrations/20261028000000_erase_deleted_chat_history.sql",

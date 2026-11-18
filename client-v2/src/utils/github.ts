@@ -1,6 +1,12 @@
+import { isNetworkFailure } from "@/shared/lib/ai";
+
 import { PgExplorer, TupleFiles } from "./explorer";
 import { noProgramCode, PgFramework } from "./framework";
-import { GithubImportError, ImportCancelledError } from "./import-error";
+import {
+  GithubFileError,
+  GithubImportError,
+  ImportCancelledError,
+} from "./import-error";
 import { PgLanguage } from "./language";
 
 /** Single entry of a Git tree */
@@ -99,7 +105,7 @@ export class PgGithub {
    * @returns whether the URL is a GitHub URL
    */
   static isValidUrl(url: string) {
-    return /^(https:\/\/?)?(www\.)?github\.com\/.+?\/.+/.test(url);
+    return /^(?:https:\/\/|https:\/)?(?:www\.)?github\.com\/.+?\/.+/.test(url);
   }
 
   /**
@@ -113,7 +119,10 @@ export class PgGithub {
    * @returns the route path
    */
   static routePath(url: string) {
-    const path = url.replace(/^(https:\/\/?)?(www\.)?github\.com\//, "");
+    const path = url.replace(
+      /^(?:https:\/\/|https:\/)?(?:www\.)?github\.com\//,
+      ""
+    );
     return `${GITHUB_ROUTE}/${path.replace(/\/+$/, "")}`;
   }
 
@@ -126,6 +135,7 @@ export class PgGithub {
   static parseUrl(url: string) {
     // https://github.com/solana-labs/solana-program-library/tree/master/token/program
     const regex =
+      // eslint-disable-next-line security/detect-unsafe-regex -- linear: no group repeats and the trailing `[\w-/.]*` always matches
       /(https:\/\/)?(github\.com\/)([\w-]+)\/([\w-]+)(\/)?((tree|blob)\/([\w-.]+))?(\/)?([\w-/.]*)/;
     const res = regex.exec(url);
     if (!res) throw new Error("Invalid program url");
@@ -359,16 +369,18 @@ export class PgGithub {
       path
     );
     if (!response.ok) {
-      throw this._getError(response, path);
+      const { message, reason } = this._getError(response, path);
+      throw new GithubFileError(message, reason);
     }
 
     return await response.text();
   }
 
   /**
-   * Fetch a GitHub URL; a request that gets no answer (`fetch` rejects with a
-   * `TypeError`) becomes a `GithubImportError` with reason `network`, so a
-   * programming error's `TypeError` is never read as one.
+   * Fetch a GitHub URL; a request that gets no answer (`isNetworkFailure`)
+   * becomes a `GithubImportError` with reason `network`. Any other rejection,
+   * such as the `TypeError` of a URL we built wrong, stays as it is, so it is
+   * never read as the user's network.
    *
    * @param url what to fetch
    * @param subject repository or file the request is about
@@ -378,7 +390,7 @@ export class PgGithub {
     try {
       return await fetch(url);
     } catch (e) {
-      if (e instanceof TypeError) {
+      if (isNetworkFailure(e)) {
         throw new GithubImportError(
           `GitHub did not answer the request for "${subject}". Check the ` +
             "connection and try again.",

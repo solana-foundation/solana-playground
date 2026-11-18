@@ -65,7 +65,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 // The real barrels pull in the whole playground; the stage reads only these
-vi.mock("../../../utils", () => ({
+vi.mock("../../../utils", async () => ({
   PgCommand: { deploy: { execute: mocks.execute } },
   PgConnection: { cluster: "devnet", onDidChangeCluster: "cluster" },
   PgExplorer: {
@@ -82,7 +82,10 @@ vi.mock("../../../utils", () => ({
   },
   PgProgramInfo: { update: mocks.update },
   PgSettings: {
-    connection: { endpoint: "https://api.devnet.solana.com" },
+    connection: {
+      endpoint: (await import("@/entities/cluster/model/endpoint")).Endpoint
+        .DEVNET,
+    },
     wallet: {
       get automaticAirdrop() {
         return mocks.automaticAirdrop;
@@ -104,7 +107,7 @@ vi.mock("@/commands/deploy/check-not-mainnet", async () => {
   return {
     checkNotMainnet: async () => {
       mocks.duringNetworkRead?.();
-      if (mocks.endpointCluster === "mainnet-beta") {
+      if (mocks.endpointCluster === "mainnet") {
         throw new MainnetDeployRefusedError();
       }
       if (mocks.endpointCluster === "unread") {
@@ -908,7 +911,7 @@ describe("Deploy stage", () => {
   // HOO-2728: the stage shows the CLI guide on mainnet, but the network can
   // move there before the press is read; the refusal comes before the wallet
   it("refuses a mainnet deploy before creating a wallet, and counts no failure", async () => {
-    mocks.endpointCluster = "mainnet-beta";
+    mocks.endpointCluster = "mainnet";
     render(<Deploy onChangeNetwork={() => {}} />);
 
     await pressDeploy();

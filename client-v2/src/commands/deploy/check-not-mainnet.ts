@@ -30,7 +30,7 @@ const withinFor =
 const withinClusterRead = withinFor(CLUSTER_READ_MS);
 
 /**
- * Refuse a send from the Playground wallet to mainnet-beta: a deploy, an
+ * Refuse a send from the Playground wallet to mainnet: a deploy, an
  * `anchor idl` write. `refusal` supplies the error thrown on mainnet and the
  * line for an unread network. The cluster is read from `endpoint`, not
  * `PgConnection.cluster`, which is derived asynchronously and can still name
@@ -40,7 +40,7 @@ const withinClusterRead = withinFor(CLUSTER_READ_MS);
  * refuses the method is refused: it could be mainnet.
  *
  * @returns the cluster read, `null` for a network of its own
- * @throws {TerminalLineError} `refusal.blocked()` on mainnet-beta
+ * @throws {TerminalLineError} `refusal.blocked()` on mainnet
  *   (`MainnetDeployRefusedError` for a deploy)
  * @throws {TerminalLineError} when the network is unread
  */
@@ -62,7 +62,7 @@ export const refuseMainnetWith =
     return cluster;
   };
 
-/** A deploy's refusal on mainnet-beta, as {@link refuseMainnetWith} */
+/** A deploy's refusal on mainnet, as {@link refuseMainnetWith} */
 export const refuseMainnet = refuseMainnetWith(DEPLOY_REFUSAL);
 
 /**

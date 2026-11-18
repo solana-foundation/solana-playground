@@ -2,6 +2,8 @@
 
 #![cfg_attr(all(feature = "bench", test), feature(test))]
 #![warn(missing_docs, unused_results)]
+// CloneToAny: rustc reports this lint at the crate level; Rust 1.80 drops it as a false positive.
+#![allow(where_clauses_object_safety)]
 
 #[cfg(all(feature = "bench", test))]
 extern crate test;
@@ -117,7 +119,7 @@ pub mod raw;
 ///
 /// Values containing non-static references are not permitted.
 #[derive(Debug)]
-pub struct Map<A: ?Sized + UncheckedAnyExt = Any> {
+pub struct Map<A: ?Sized + UncheckedAnyExt = dyn Any> {
     raw: RawMap<A>,
 }
 
@@ -136,7 +138,7 @@ impl<A: ?Sized + UncheckedAnyExt> Clone for Map<A> where Box<A>: Clone {
 /// Why is this a separate type alias rather than a default value for `Map<A>`? `Map::new()`
 /// doesn’t seem to be happy to infer that it should go with the default value.
 /// It’s a bit sad, really. Ah well, I guess this approach will do.
-pub type AnyMap = Map<Any>;
+pub type AnyMap = Map<dyn Any>;
 
 impl_common_methods! {
     field: Map.raw;

@@ -239,7 +239,7 @@ export const getIdlType: <T extends IdlType>(
 
             const parsedKeyValue = value
               .slice(1, -1)
-              .match(/(\S+)(\s*)?:\s+(.+[\]|}])/);
+              .match(/(\S+)(\s*):\s+(.+[\]|}])/);
             if (!parsedKeyValue) throw new Error("Unable to parse input");
 
             const variantKey = PgCommon.toCamelCase(parsedKeyValue[1]);

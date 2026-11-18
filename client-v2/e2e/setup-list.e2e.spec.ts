@@ -1,5 +1,6 @@
 import type { BrowserContext, Page } from "@playwright/test";
 
+import { Endpoint } from "../src/entities/cluster/model/endpoint";
 import {
   expect,
   json,
@@ -10,7 +11,12 @@ import {
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
-import { DESK, openPhoneMenu, PHONE } from "./viewports";
+import { DESK, DOCK_DESK, openPhoneMenu, PHONE } from "./viewports";
+
+// These tests drive the project tree as its docked column, which needs a code
+// area of 1100 px or more; the default window is too narrow and shows the
+// dropdown instead
+test.use({ viewport: DOCK_DESK });
 
 /**
  * The navigation's Get set up checklist. Every test stubs `/api/ai/status` with
@@ -41,7 +47,7 @@ const stubNoDefaultBackend = async (context: BrowserContext) => {
  */
 const answeringDevnet = (context: BrowserContext) => {
   let slot = 1_000;
-  return context.route("https://api.devnet.solana.com/**", (route) => {
+  return context.route(`${Endpoint.DEVNET}/**`, (route) => {
     const body = route.request().postDataJSON() as {
       id?: unknown;
       method?: string;

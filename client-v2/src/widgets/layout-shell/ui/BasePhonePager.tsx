@@ -557,6 +557,8 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
             <SheetContent
               side="left"
               aria-describedby={undefined}
+              // The shell's ⌘E opens and closes it from inside too (LayoutShell)
+              data-files-sheet=""
               className="w-full p-0 data-[side=left]:w-full data-[side=left]:sm:max-w-full"
               style={props.sheetFont}
             >

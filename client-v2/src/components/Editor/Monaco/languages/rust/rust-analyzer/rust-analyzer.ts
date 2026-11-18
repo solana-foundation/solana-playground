@@ -265,6 +265,7 @@ const update = async (model: monaco.editor.IModel) => {
       const status = cachedNames.get(crate);
       if (status === "full" || status === "missing") return null;
 
+      // eslint-disable-next-line security/detect-non-literal-regexp -- a crate name from CRATES, `\w` characters only
       if (new RegExp(`${crate}::`, "gm").test(model.getValue())) {
         return loadDependency(crate);
       } else if (status !== "empty") {

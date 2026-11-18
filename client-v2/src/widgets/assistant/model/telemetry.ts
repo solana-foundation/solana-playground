@@ -54,9 +54,9 @@ export type AssistantEvents = {
   };
   /** The user pressed Try again in the composer's off row, which asks `GET /api/ai/status` again. */
   assistant_default_probe_retried: NoParams;
-  /** The user answered an approval card, once per card; `kind` says whether it proposed a patch or a command, `decision` what the user chose. */
+  /** The user answered an approval card, once per card; `kind` says whether it proposed a patch, a command (build or deploy), or a call to a tool of an MCP server the user added (`tool`), `decision` what the user chose. */
   assistant_approval_answered: {
-    kind: "patch" | "command";
+    kind: "patch" | "command" | "tool";
     decision: "allow" | "deny";
   };
   /** The user picked one of the empty thread's suggestions, which sends it (or, with nothing connected, opens Connect a model). */
@@ -73,6 +73,10 @@ export type AssistantEvents = {
   assistant_file_chip_removed: NoParams;
   /** The user added a file to the assistant's context; `via` says from where (only the composer's + › Add a file so far). */
   assistant_context_file_added: { via: "menu" };
+  /** An approved patch was written to its file by the `write_file` tool. Never the path or the content. */
+  assistant_patch_written: NoParams;
+  /** Writing an approved patch threw: a project limit refused it (`limit`) or anything else did (`other`). Never the path, the content or the error's text. */
+  assistant_patch_write_failed: { reason: "limit" | "other" };
   /** An applied patch was taken back and its file written back; `via` says from where (only the card's Undo patch so far). */
   assistant_patch_undone: { via: "card" };
 };

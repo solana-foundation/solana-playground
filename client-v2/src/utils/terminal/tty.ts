@@ -206,6 +206,7 @@ export class PgTty {
       .replace(/\n/g, "\r\n")
       // Without this, the characterafter the emoji starts inside the emoji
       .replace(
+        // eslint-disable-next-line security/detect-unsafe-regex -- linear: U+200D separates the repetitions and no class here matches it
         /\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier})*(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier})*)*/gu,
         (match) => match + " "
       );
@@ -444,6 +445,7 @@ export class PgTty {
         )
 
         // Match for warning
+        // eslint-disable-next-line security/detect-unsafe-regex -- quadratic in a long run of digits; a stall stays in this tab's terminal
         .replace(/(\d+\s)?warning(s|:)?/gim, (match) =>
           hl(match, PgTerminal.warning)
         )

@@ -8,7 +8,7 @@ export {
 } from "./model/export";
 export type { Exported } from "./model/export";
 export { trackImport, trackImportFailure } from "./model/import";
-export { importReasonOf } from "./model/reason";
+export { importReasonOf, isExpectedImportFailure } from "./model/reason";
 export { trackView } from "./model/view";
 export { projectFilesTelemetry } from "./model/telemetry";
 export type {

@@ -7,6 +7,7 @@ import {
   PgCommand,
   PgCommon,
   PgConnection,
+  PgExplorer,
   PgGlobal,
   PgProgramInfo,
   PgServer,
@@ -26,6 +27,7 @@ import {
 } from "../airdrop/closed-faucet";
 import { isAirdropSignInGated } from "../airdrop/sign-in-gate";
 import { withAirdropVia } from "../airdrop/via";
+import { isBuildRefused } from "../build/refused-build";
 import { checkWallet } from "../checks";
 import { createCmd } from "../create";
 import { additionalProgramLen } from "./additional-len";
@@ -166,6 +168,19 @@ async function checkProgram() {
       noColor: true,
     });
     await PgCommand.build.execute();
+  } else if (
+    isBuildRefused(PgExplorer.currentWorkspaceId) &&
+    !PgProgramInfo.importedProgram?.bytes.length
+  ) {
+    // The saved verdict may be a pass for the code before an edit; deploying
+    // now would upload that binary. A second refusal throws and stops here
+    PgTerminal.println(
+      PgTerminal.warning(
+        "Warning: Your last build was refused for sign-in. Building the current sources first."
+      ),
+      { noColor: true }
+    );
+    await PgCommand.build.execute();
   }
 
   // The server keeps the previous program binary after a failed compilation, so
@@ -233,11 +248,13 @@ You can fix this in 3 different ways:
   }
 
   const authority = PgProgramInfo.onChain.authority;
-  if (authority && !authority.equals(PgWallet.current!.publicKey)) {
+  if (!authority) return;
+  const address = PgWallet.current!.publicKey;
+  if (!authority.equals(address)) {
     throw new Error(`You don't have the authority to upgrade this program.
 Program ID: ${PgProgramInfo.pk}
 Program authority: ${authority}
-Your address: ${PgWallet.current!.publicKey}`);
+Your address: ${address}`);
   }
 }
 

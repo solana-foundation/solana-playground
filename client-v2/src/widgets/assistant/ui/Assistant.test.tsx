@@ -153,7 +153,8 @@ const openSources = async (user: ReturnType<typeof userEvent.setup>) => {
 };
 
 describe("Assistant", () => {
-  it("shows the thread over the composer, under Assistant with no model", () => {
+  it("shows the thread over the composer, under Assistant with no project and no model", () => {
+    explorer.name = undefined;
     setup();
     expect(screen.getByRole("heading", { name: "Assistant" })).toBeTruthy();
     expect(screen.getByText("thread")).toBeTruthy();
@@ -259,7 +260,22 @@ describe("Assistant", () => {
     expect(PgAssistant.initMcp).toHaveBeenCalledTimes(2);
   });
 
-  it("names the hosted model in the head, not the project", () => {
+  it("names the open project in the head, not the model", () => {
+    deployment.backend = { state: "present", model: "z-ai/glm-5.3-flash:US" };
+    setup();
+    expect(screen.getByRole("heading", { name: "hello-anchor" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: /GLM/ })).toBeNull();
+  });
+
+  it("names the project again after a rename", () => {
+    setup();
+    explorer.name = "renamed";
+    act(() => explorer.listeners.forEach((cb) => cb()));
+    expect(screen.getByRole("heading", { name: "renamed" })).toBeTruthy();
+  });
+
+  it("names the hosted model with no project open", () => {
+    explorer.name = undefined;
     deployment.backend = { state: "present", model: "z-ai/glm-5.3-flash:US" };
     setup();
     expect(
@@ -267,10 +283,10 @@ describe("Assistant", () => {
         name: "Assistant · GLM 5.3 Flash · hosted",
       })
     ).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: /hello-anchor/ })).toBeNull();
   });
 
-  it("names a keyed model with whose key it runs on", () => {
+  it("names a keyed model with whose key it runs on, with no project open", () => {
+    explorer.name = undefined;
     PgAssistant.connect({
       id: "openrouter",
       apiKey: "sk-or-fake",
@@ -287,7 +303,8 @@ describe("Assistant", () => {
     ).toBeTruthy();
   });
 
-  it("follows the model connected after it opens", () => {
+  it("follows the model connected after it opens, with no project open", () => {
+    explorer.name = undefined;
     setup();
     act(() =>
       PgAssistant.connect({
@@ -337,7 +354,7 @@ describe("Assistant", () => {
   it("puts focus on Back when Sources and tools is picked from the keyboard", async () => {
     const { user } = setup();
     await user.click(screen.getByRole("button", { name: "More" }));
-    await user.keyboard("s");
+    await user.keyboard("{ArrowDown}{Enter}");
     const back = screen.getByRole("button", { name: "Back" });
     await waitFor(() => expect(document.activeElement).toBe(back));
   });
@@ -345,7 +362,7 @@ describe("Assistant", () => {
   it("leaves focus in Connect a model when it is picked", async () => {
     const { user } = setup();
     await user.click(screen.getByRole("button", { name: "More" }));
-    await user.keyboard("k");
+    await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
     expect(turn.openConnect).toHaveBeenCalledWith("menu");
     const field = screen.getByRole("textbox", { name: "Dialog field" });
     await waitFor(() => expect(document.activeElement).toBe(field));
@@ -355,7 +372,7 @@ describe("Assistant", () => {
     const { user } = setup();
     await openSources(user);
     await user.click(screen.getByRole("button", { name: "More" }));
-    await user.keyboard("k");
+    await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
     expect(turn.openConnect).toHaveBeenCalledWith("menu");
     expect(screen.getByText("sources")).toBeTruthy();
   });
@@ -365,7 +382,7 @@ describe("Assistant", () => {
     const { user } = setup();
     const more = screen.getByRole("button", { name: "More" });
     await user.click(more);
-    await user.keyboard("k");
+    await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
     await waitFor(() => expect(document.activeElement).toBe(more));
   });
 

@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { Linter, RuleTester } from "eslint";
+import tseslint from "typescript-eslint";
 
 import { untypedEslintAt } from "./lib/untyped-eslint.mjs";
 
@@ -32,8 +33,11 @@ RuleTester.describe = describe;
 RuleTester.it = it;
 
 const tester = new RuleTester({
-  parser: require.resolve("@typescript-eslint/parser"),
-  parserOptions: { ecmaVersion: 2022, sourceType: "module" },
+  languageOptions: {
+    parser: tseslint.parser,
+    ecmaVersion: 2022,
+    sourceType: "module",
+  },
 });
 
 // Files sit in real slices: whether `app/Effects` is a folder is read from disk
@@ -232,12 +236,17 @@ describe("layers/alias-across-modules options", () => {
   for (const wrong of ["src", path.join(src, "missing")]) {
     it(`throws for src "${wrong}"`, () => {
       const linter = new Linter();
-      linter.defineRule("alias-across-modules", rules["alias-across-modules"]);
       assert.throws(
         () =>
           linter.verify(
             "x;",
-            { rules: { "alias-across-modules": ["error", { src: wrong }] } },
+            {
+              files: ["**/*.ts"],
+              plugins: { layers: { rules } },
+              rules: {
+                "layers/alias-across-modules": ["error", { src: wrong }],
+              },
+            },
             { filename: path.join(src, "shared/probe.ts") }
           ),
         /must be an absolute path to an existing directory/

@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
+import type { ImportFromUrlProps } from "@/features/new-project";
 import {
   initLogger,
   memoryProvider as memoryLogs,
@@ -81,7 +82,28 @@ vi.mock("@/features/new-project", () => ({
       </button>
     );
   },
+  // Stands in for Import from GitHub, which has tests of its own: it waits on
+  // `held`, says when it runs, and keeps what New project gave it
+  ImportFromUrl: (props: ImportFromUrlProps) => {
+    linkCard.props = props;
+    return (
+      <button
+        type="button"
+        data-testid="import"
+        disabled={props.held}
+        onClick={() => props.onRunning?.(true)}
+      >
+        Import
+      </button>
+    );
+  },
 }));
+// What New project gave Import from GitHub, kept past unmount
+const linkCard = vi.hoisted(() => ({
+  props: undefined as ImportFromUrlProps | undefined,
+}));
+const mockImportLink = vi.hoisted(() => vi.fn());
+vi.mock("../model/link-import", () => ({ importLink: mockImportLink }));
 
 import { catalogPage } from "../model/catalog-page";
 import type { CatalogPage } from "../model/telemetry";
@@ -333,6 +355,7 @@ it("holds the other list's Opens and Start while one Open runs", async () => {
   expect(drift).toHaveProperty("disabled", true);
   fireEvent.click(screen.getByRole("button", { name: "drift" }));
   expect(screen.getByTestId("scratch")).toHaveProperty("disabled", true);
+  expect(screen.getByTestId("import")).toHaveProperty("disabled", true);
   expect(utils.PgGithub.import).not.toHaveBeenCalled();
 
   await act(async () => open.release());
@@ -347,6 +370,7 @@ it("holds every card while Start makes a project", async () => {
   expect(
     screen.getByRole("button", { name: "Open Hello Anchor" })
   ).toHaveProperty("disabled", true);
+  expect(screen.getByTestId("import")).toHaveProperty("disabled", true);
   // The program count lands after the listing's fetch, past the last assertion
   await waitFor(() => expect(choice(/Programs/).textContent).toBe("Programs1"));
 });
@@ -458,4 +482,49 @@ it("toasts a Start that fails after the page was left, and only then", async () 
   unmount();
   scratch.onFailed?.("Workspace already exists");
   expect(utils.PgView.setToast).toHaveBeenCalledTimes(1);
+});
+
+it("hands Import from GitHub the link import", () => {
+  render(<NewProject />);
+  expect(linkCard.props?.importLink).toBe(mockImportLink);
+});
+
+it("holds Start and every card while an import runs", async () => {
+  render(<NewProject />);
+
+  fireEvent.click(screen.getByTestId("import"));
+
+  expect(screen.getByTestId("scratch")).toHaveProperty("disabled", true);
+  const open = screen.getByRole("button", { name: "Open Hello Anchor" });
+  expect(open).toHaveProperty("disabled", true);
+  fireEvent.click(open);
+  expect(utils.PgTutorial.open).not.toHaveBeenCalled();
+
+  act(() => linkCard.props?.onRunning?.(false));
+  expect(screen.getByTestId("scratch")).toHaveProperty("disabled", false);
+  await waitFor(() => expect(choice(/Programs/).textContent).toBe("Programs1"));
+});
+
+it("closes the page once the import opens the project", () => {
+  render(<NewProject />);
+  expect(close).not.toHaveBeenCalled();
+
+  act(() => linkCard.props?.onImported?.());
+
+  expect(close).toHaveBeenCalledTimes(1);
+});
+
+it("toasts an import that fails after the page was left, and only then", async () => {
+  const { unmount } = render(<NewProject />);
+  await waitFor(() => expect(choice(/Programs/).textContent).toBe("Programs1"));
+
+  act(() => linkCard.props?.onFailed?.("GitHub's hourly request limit"));
+  expect(utils.PgView.setToast).not.toHaveBeenCalled();
+
+  unmount();
+  linkCard.props?.onFailed?.("GitHub's hourly request limit");
+  expect(utils.PgView.setToast).toHaveBeenCalledTimes(1);
+  expect(utils.PgView.setToast.mock.calls[0][1]).toEqual({
+    options: { name: "new-project-import-failed" },
+  });
 });

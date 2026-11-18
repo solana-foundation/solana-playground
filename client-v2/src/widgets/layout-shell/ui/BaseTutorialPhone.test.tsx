@@ -220,6 +220,7 @@ describe("a swipe", () => {
   // from it never reach this component, so the swipe listens on the DOM
   const stageWith = (html: string) => {
     const stageNode = document.createElement("div");
+    // eslint-disable-next-line no-unsanitized/property -- the test's own markup literals, never user input
     stageNode.innerHTML = html;
     return stageNode;
   };

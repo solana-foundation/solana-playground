@@ -259,6 +259,7 @@ test("wallet-storage: The key origin is blocked", async ({ page }) => {
   const keypair = Keypair.generate();
   const address = keypair.publicKey.toBase58();
   const accounts = [{ kp: Array.from(keypair.secretKey), name: "Wallet 1" }];
+  // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- a route glob over the loopback key origin; the rule's loopback exception does not read a port wildcard
   await page.route("http://127.0.0.1:*/**", (route) => route.abort());
   await seedLocalWalletFor(page)({ state: "pg", accounts, currentIndex: 0 });
 
@@ -283,6 +284,7 @@ test("wallet-storage: The key origin is blocked", async ({ page }) => {
   ).toEqual(accounts);
 
   // Try again asks the key page again, and with it back the key moves
+  // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- a route glob over the loopback key origin; the rule's loopback exception does not read a port wildcard
   await page.unroute("http://127.0.0.1:*/**");
   await unavailable.click();
   await expect(walletStep(page)).toContainText(address.slice(0, 4), LONG);

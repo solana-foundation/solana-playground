@@ -256,6 +256,20 @@ describe("PgDeployHistory deploy result", () => {
     expect(record.upgraded).toBeUndefined();
   });
 
+  it("reads a record stored on mainnet-beta as mainnet", () => {
+    const old = {
+      id: "A-1",
+      workspace: "w",
+      cluster: "mainnet-beta",
+      programId: "A",
+      signature: NONE,
+      at: 1,
+    };
+    localStorage.setItem("flow.deploys", JSON.stringify([old]));
+
+    expect(PgDeployHistory.list("w")[0].cluster).toBe("mainnet");
+  });
+
   it("drops a record whose cost is not a number", () => {
     const bad = {
       id: "A-1",

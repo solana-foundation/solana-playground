@@ -4,15 +4,21 @@ import { Keypair } from "@solana/web3.js";
 import fs from "fs";
 import path from "path";
 
+// By path: Playwright's CommonJS compile cannot load the cluster entry, whose modules hold `import.meta` blocks
+import { Endpoint } from "../src/entities/cluster/model/endpoint";
 import { isUuid } from "../src/shared/lib/ids";
 import { requireFor } from "../src/test-utils/require-for";
 
 /** For a step that waits on the explorer, sync or a reload */
 export const LONG = { timeout: 60_000 };
 
+/** `url`, with or without a trailing slash, matched whole */
+const wholeUrl = (url: string) =>
+  new RegExp(`^${url.replaceAll(".", "\\.")}/?$`);
+
 /** Devnet's JSON-RPC and websocket endpoints, as a route matches them whole */
-export const DEVNET_RPC = /^https:\/\/api\.devnet\.solana\.com\/?$/;
-export const DEVNET_WS = /^wss:\/\/api\.devnet\.solana\.com\/?$/;
+export const DEVNET_RPC = wholeUrl(Endpoint.DEVNET);
+export const DEVNET_WS = wholeUrl(Endpoint.DEVNET.replace(/^https:/, "wss:"));
 
 /** Home, which a start with no project shows in place of the work */
 export const home = (page: Page) =>
@@ -48,6 +54,13 @@ export const startProject = async (page: Page, name: string, timeout = {}) => {
 
 /** The editor head's Files toggle (client-v2-editor-head) */
 export const filesToggle = (page: Page) => page.locator("#editor-head-files");
+
+/**
+ * The project tree's dropdown under the editor head: the tree undocked, or
+ * docked on a code area too narrow (< 1100 px) to give it a column
+ */
+export const filesDropdown = (page: Page) =>
+  page.getByRole("dialog", { name: "Files" });
 
 /**
  * The editor holding the focus it takes when it mounts and opens the current
@@ -111,9 +124,10 @@ export const seedWorkspace = async (page: Page, name = "e2e-project") => {
 
   // `PgExplorer.createWorkspace` hands the work over, then the explorer
   // re-initializes -- wait for the work, not just Home going away: its
-  // editor head, and the tree when the layout has it open. A spec that
-  // clears the tree-open seed (playwright.config's `storageState`) gets a
-  // closed tree, which `openFiles` opens.
+  // editor head, and the tree when it shows. The seeded layout docks it
+  // (playwright.config's `storageState`), which shows as a column only in a
+  // spec at `DOCK_DESK`; at the default width, or undocked, the tree waits
+  // in its dropdown, which `openFiles` opens.
   const toggle = filesToggle(page);
   await expect(toggle).toBeVisible();
   if ((await toggle.getAttribute("aria-pressed")) === "true") {
@@ -128,7 +142,10 @@ export const seedWorkspace = async (page: Page, name = "e2e-project") => {
 export const consoleTrigger = (page: Page) =>
   page.locator('[data-slot="console-drawer-trigger"]');
 
-/** Opens the file tree from the editor head, if it is not open already */
+/**
+ * Shows the file tree from the editor head, if it does not show already: a
+ * docked tree that has its column shows; otherwise "Files" opens the dropdown
+ */
 export const openFiles = async (page: Page) => {
   const toggle = filesToggle(page);
   await expect(toggle).toBeVisible(LONG);

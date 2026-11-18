@@ -8,7 +8,7 @@ const startButton = (page: Page) =>
 
 /**
  * The empty conversation's title names whose conversation it is; the head
- * names the model (assistant-model-name)
+ * names the open project, or the model with none open (assistant-model-name)
  */
 const askAbout = (page: Page, name: string) =>
   page.getByRole("heading", { name: `Ask about ${name}`, exact: true });

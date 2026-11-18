@@ -1,9 +1,16 @@
 import { NetworkRefusedError } from "@/commands/deploy/network-refused";
 import { solOn, UNKNOWN_NETWORK } from "@/constants";
 import { bindToolFor } from "@/entities/agent-tools";
+import { maskUrlsIn } from "@/entities/cluster";
 import { formatSol } from "@/features/deploy";
 import type { ToolDefinition, ToolInput } from "@/shared/lib/ai";
 import { createLogger } from "@/shared/lib/logger";
+// The tracker's own module, not the widget's barrel: the
+// barrel loads the widget's UI and the utils barrel into this model module,
+// and every suite that imports these tools (tools, tools-registry, the
+// composer's) then fails to load. Back to `@/widgets/assistant` once the
+// tracker has an entry of its own or this module moves into a slice
+import { assistantTelemetry } from "@/widgets/assistant/model/telemetry";
 
 import { type PlaygroundBridge, realBridge } from "../bridge/playground-bridge";
 import { PgPatchUndo } from "../patch-undo";
@@ -162,9 +169,18 @@ const projectTools = (bridge: PlaygroundBridge): ToolDefinition[] => [
       // TODO(HOO-2603): log an error that is not an `ExplorerLimitError`
       // with `report: true`; a storage failure reaches no logger here
       const message = e instanceof Error ? e.message : String(e);
+      // By name: `ExplorerLimitError` lives in the utils barrel, which this
+      // module does not load
+      assistantTelemetry.track("assistant_patch_write_failed", {
+        reason:
+          e instanceof Error && e.name === "ExplorerLimitError"
+            ? "limit"
+            : "other",
+      });
       PgAssistant.setApprovalFailure(approvalId, `not written: ${message}`);
       return `Could not write ${path}: ${message}`;
     }
+    assistantTelemetry.track("assistant_patch_written", {});
     PgAssistant.setApprovalOutcome(approvalId, wroteOutcome(path));
     PgPatchUndo.wrote(approvalId);
     return `Wrote ${path}.`;
@@ -192,7 +208,7 @@ const projectTools = (bridge: PlaygroundBridge): ToolDefinition[] => [
     } catch (e) {
       // TODO(HOO-2603): log the error with `report: true`; a build that
       // could not run reaches no logger here
-      const message = e instanceof Error ? e.message : String(e);
+      const message = maskUrlsIn(e instanceof Error ? e.message : String(e));
       PgAssistant.setApprovalFailure(
         approvalId,
         `build could not run: ${message}`
@@ -202,7 +218,7 @@ const projectTools = (bridge: PlaygroundBridge): ToolDefinition[] => [
   }),
 
   bindToolFor("deploy")(async () => {
-    const { cluster } = bridge.getProjectContext();
+    const hasConnectionChanged = bridge.watchConnection();
     const quote = await bridge.quoteDeploy();
     const cost =
       quote.cost === null
@@ -215,7 +231,9 @@ const projectTools = (bridge: PlaygroundBridge): ToolDefinition[] => [
     const { id: approvalId, allowed } = await PgAssistant.requestApproval({
       type: "command",
       name: "deploy",
-      effect: `Sends a transaction to ${cluster} and spends SOL from the connected wallet.`,
+      effect: `Sends a transaction to ${
+        quote.network ?? UNKNOWN_NETWORK
+      } and spends SOL from the connected wallet.`,
       question: `Deploy ${programName(bridge)} to ${
         quote.network ?? UNKNOWN_NETWORK
       }?${cost}`,
@@ -223,7 +241,7 @@ const projectTools = (bridge: PlaygroundBridge): ToolDefinition[] => [
     if (!allowed) return "The user declined to deploy.";
     // The card named the network it was asked on; a switch while it waited
     // would spend SOL somewhere the user never approved
-    if (bridge.getProjectContext().cluster !== cluster) {
+    if (hasConnectionChanged()) {
       PgAssistant.setApprovalFailure(
         approvalId,
         "not deployed: network changed"
@@ -248,7 +266,7 @@ const projectTools = (bridge: PlaygroundBridge): ToolDefinition[] => [
     } catch (e) {
       // TODO(HOO-2603): log the error with `report: true`; a failed deploy
       // reaches no logger here
-      const message = e instanceof Error ? e.message : String(e);
+      const message = maskUrlsIn(e instanceof Error ? e.message : String(e));
       if (e instanceof NetworkRefusedError) {
         PgAssistant.setApprovalOutcome(approvalId, "deploy did not start");
         return `The deploy did not start, and nothing was sent: ${message}`;

@@ -43,6 +43,7 @@ export const awaitPortFrom =
       };
       self.addEventListener("message", handleMessage);
       // `"*"`: the message carries nothing, and the answer is checked above
+      // eslint-disable-next-line @microsoft/sdl/no-postmessage-star-origin -- an opaque origin cannot name the parent's; the message carries nothing
       parent.postMessage(HANDSHAKE, "*");
     });
 

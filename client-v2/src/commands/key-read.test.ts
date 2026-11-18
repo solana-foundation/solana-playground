@@ -28,14 +28,13 @@ import { anchor } from "./anchor";
 import { checkPgWallet } from "./checks";
 import { solana } from "./solana";
 import { splToken } from "./spl-token";
-import { sugar } from "./sugar";
 
 /** Run a command's pre-checks before the wallet question on `input` */
 const refusalOf = async (
   cmd: { preChecks?: unknown },
   input: string
 ): Promise<unknown> => {
-  const checks = [cmd.preChecks].flat() as Array<
+  const checks = [cmd.preChecks ?? []].flat() as Array<
     (tokens: readonly string[]) => unknown
   >;
   const tokens = input.split(" ");
@@ -86,9 +85,8 @@ describe("commands that need the wallet's key, under the key origin", () => {
     "anchor idl init",
     "anchor idl upgrade 11111111111111111111111111111111",
     "anchor idl fetch",
-    "sugar launch",
   ])("`%s` goes on", async (input) => {
-    const cmd = { solana, "spl-token": splToken, anchor, sugar }[
+    const cmd = { solana, "spl-token": splToken, anchor }[
       input.split(" ")[0] as "solana"
     ];
 

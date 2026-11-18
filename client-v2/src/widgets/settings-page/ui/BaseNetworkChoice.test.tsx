@@ -75,7 +75,7 @@ describe("BaseNetworkChoice", () => {
       expect(checked()).toEqual(["Public too"]);
       rerender(
         <BaseNetworkChoice
-          endpoint={Endpoint.MAINNET_BETA}
+          endpoint={Endpoint.MAINNET}
           custom={custom}
           chosen={chipKey("Public too", Endpoint.DEVNET)}
           onPick={() => {}}
@@ -169,9 +169,7 @@ describe("BaseNetworkChoice", () => {
   });
 
   it("offers Mainnet, described as not available for deploys", () => {
-    render(
-      <BaseNetworkChoice endpoint={Endpoint.MAINNET_BETA} onPick={() => {}} />
-    );
+    render(<BaseNetworkChoice endpoint={Endpoint.MAINNET} onPick={() => {}} />);
     expect(
       screen
         .getByRole("radio", { name: "Mainnet" })
@@ -202,8 +200,8 @@ describe("BaseNetworkChoice", () => {
     await userEvent.click(screen.getByRole("radio", { name: "Mainnet" }));
     expect(onPick).toHaveBeenCalledTimes(1);
     expect(onPick).toHaveBeenCalledWith(
-      Endpoint.MAINNET_BETA,
-      chipKey("Mainnet", Endpoint.MAINNET_BETA)
+      Endpoint.MAINNET,
+      chipKey("Mainnet", Endpoint.MAINNET)
     );
   });
   it("puts a chip for each saved RPC after the offered networks, under its name", () => {

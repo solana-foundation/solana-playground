@@ -208,6 +208,48 @@ test.describe("client-v2-buttons", () => {
     expect(await page.locator("[data-sonner-toast]").count()).toBe(0);
   });
 
+  test("build-server-access: Signed out", async ({ seededPage: page }) => {
+    test.setTimeout(120_000);
+    // What /api/build-server answers a caller with no GitHub session (HOO-2422)
+    await page.route("**/build", (route) =>
+      route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "Sign in with GitHub to build.",
+          reason: "signed-out",
+        }),
+      })
+    );
+
+    const drawer = consoleTrigger(page);
+    if ((await drawer.getAttribute("aria-expanded")) !== "true") {
+      await drawer.click();
+    }
+    await page.locator("#flow-stage-tab-build").click();
+    await page.getByRole("button", { name: "Build", exact: true }).click();
+
+    await expect(
+      page.getByRole("heading", { name: "Sign in with GitHub to build" })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Sign in with GitHub" }).first()
+    ).toBeVisible();
+    await expect(page.locator(".xterm-rows").first()).toContainText(
+      "Sign in with GitHub to build."
+    );
+    // Not a failed build: no process error, no red result, one action
+    await expect(page.locator(".xterm-rows").first()).not.toContainText(
+      "Process error"
+    );
+    await expect(
+      page.getByText("Sign in to build", { exact: true })
+    ).toBeVisible();
+    await expect(page.getByText("Build failed")).toHaveCount(0);
+    await page.waitForTimeout(TOAST_RENDER_MS);
+    expect(await page.locator("[data-sonner-toast]").count()).toBe(0);
+  });
+
   test("client-v2-buttons: Build cannot be started twice", async ({
     seededPage: page,
   }) => {

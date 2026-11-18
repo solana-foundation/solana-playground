@@ -92,7 +92,7 @@ export interface BaseWalletChipProps {
 const fmt = (sol: number) => `${Number(sol.toFixed(4))} SOL`;
 
 const clusterName = (cluster: string) =>
-  cluster === "mainnet-beta"
+  cluster === "mainnet"
     ? "Mainnet"
     : cluster.charAt(0).toUpperCase() + cluster.slice(1);
 
@@ -174,7 +174,7 @@ const BaseWalletChip = ({
               {owner ? owner.name : "Playground wallet"}
             </span>
             {cluster && (
-              <Tag variant={cluster === "mainnet-beta" ? "warning" : "neutral"}>
+              <Tag variant={cluster === "mainnet" ? "warning" : "neutral"}>
                 {clusterName(cluster)}
               </Tag>
             )}

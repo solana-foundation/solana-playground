@@ -239,15 +239,14 @@ export const lineText = (line: AccountLine) => {
  * or answers with a slot that does not move (`PgConnection.isClusterDown`,
  * read again while it stays stalled). The slot check cannot say the first on
  * its own: it is `null` when the cluster does not answer. An input that is
- * unread (`undefined`) or cannot be asked yet (`null` from `isConnected`, a
- * Playnet that has not started) says nothing; for a moment after a cluster
- * switch, either may still describe the previous cluster.
+ * unread (`undefined`) says nothing; for a moment after a cluster switch,
+ * either may still describe the previous cluster.
  */
 export const clusterIsDown = ({
   isConnected,
   slotStalled,
 }: {
-  isConnected: boolean | null | undefined;
+  isConnected: boolean | undefined;
   slotStalled: boolean | null | undefined;
 }) => isConnected === false || slotStalled === true;
 
@@ -559,8 +558,6 @@ if (import.meta.vitest) {
       [true, null, false],
       [true, false, false],
       [undefined, undefined, false],
-      // Playnet before it has started: not asked yet
-      [null, null, false],
     ] as const)(
       "clusterIsDown({ isConnected: %s, slotStalled: %s }) is %s",
       (isConnected, slotStalled, expected) => {

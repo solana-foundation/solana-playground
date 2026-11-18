@@ -22,8 +22,10 @@ type Kind = "string" | "number" | "boolean";
 type Usage = { event: string; type: string };
 
 const filesUnder = (dir: string): string[] =>
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
   existsSync(dir)
-    ? readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+    ? // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
+      readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
         entry.isDirectory()
           ? filesUnder(join(dir, entry.name))
           : [join(dir, entry.name)]
@@ -41,6 +43,7 @@ const trackerFiles = (): string[] =>
       /\.tsx?$/.test(file) &&
       !/\.test\./.test(file) &&
       !relative(SRC, file).startsWith(join("shared", "lib", "telemetry")) &&
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
       /createTracker</.test(readFileSync(file, "utf8"))
   );
 

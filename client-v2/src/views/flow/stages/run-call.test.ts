@@ -15,7 +15,9 @@ const h = vi.hoisted(() => ({
 vi.mock("../../../utils", () => ({
   PgCommand: { solana: { execute: vi.fn(() => Promise.resolve()) } },
   PgCommon: {
-    transition: (p: Promise<unknown>) => p,
+    // The real wrapper, without its wait: it rewrites a non-Error rejection
+    transition: async (p: Promise<unknown>) =>
+      (await import("../../../utils/common")).PgCommon.transition(p, 0),
     sleep: () => Promise.resolve(),
   },
   PgConnection: {
@@ -40,6 +42,12 @@ vi.mock("../../../utils", () => ({
 vi.mock("../../../utils/program-interaction", () => ({
   PgProgramInteraction: { test: h.test, getAnchorProgram: () => ({}) },
 }));
+
+import {
+  initTelemetry,
+  memoryProvider,
+  resetTelemetry,
+} from "@/shared/lib/telemetry";
 
 import { PgCallHistory } from "../state/call-history";
 import { runCall, useCallInFlight } from "./run-call";
@@ -292,5 +300,89 @@ describe("runCall", () => {
 
     expect(PgCallHistory.list("P", "devnet")).toHaveLength(1);
     expect(PgCallHistory.list("P", "testnet")).toHaveLength(0);
+  });
+});
+
+describe("runCall events", () => {
+  let tracked: ReturnType<typeof memoryProvider>;
+
+  beforeEach(() => {
+    resetTelemetry();
+    tracked = memoryProvider();
+    initTelemetry({ providers: [tracked] });
+    h.getTransaction.mockResolvedValue({ meta: { logMessages: [] } });
+  });
+
+  const sent = () => tracked.events.map((event) => [event.name, event.params]);
+
+  it("counts a call that lands as sent and succeeded", async () => {
+    h.test.mockResolvedValue("sig");
+    h.confirm.mockResolvedValue(undefined);
+
+    await runCall(IX);
+
+    expect(sent()).toEqual([
+      ["interact_sent", { cluster: "devnet" }],
+      ["interact_succeeded", { cluster: "devnet" }],
+    ]);
+  });
+
+  it.each([
+    ["the program rejects", () => h.confirm.mockResolvedValue({ err: {} })],
+    [
+      "whose confirmation fails",
+      () => h.confirm.mockRejectedValue(new Error("timeout")),
+    ],
+  ])("counts a sent call %s as failed at confirm", async (_, arrange) => {
+    h.test.mockResolvedValue("sig");
+    arrange();
+
+    await runCall(IX);
+
+    expect(sent()).toEqual([
+      ["interact_sent", { cluster: "devnet" }],
+      ["interact_failed", { cluster: "devnet", phase: "confirm" }],
+    ]);
+  });
+
+  it("counts a wallet the user said no to as cancelled, not failed", async () => {
+    h.test.mockRejectedValue(new Error("User rejected the request."));
+
+    await runCall(IX);
+
+    expect(sent()).toEqual([["interact_cancelled", { cluster: "devnet" }]]);
+  });
+
+  it("counts a wallet's plain-object 4001 as cancelled, not failed", async () => {
+    // eslint-disable-next-line prefer-promise-reject-errors -- some wallets reject with a plain object
+    h.test.mockReturnValue(Promise.reject({ code: 4001, message: "Nope" }));
+
+    await runCall(IX);
+
+    expect(sent()).toEqual([["interact_cancelled", { cluster: "devnet" }]]);
+  });
+
+  it("counts a call that never went out as failed at send", async () => {
+    h.test.mockRejectedValue(new Error("Failed to fetch"));
+
+    await runCall(IX);
+
+    expect(sent()).toEqual([
+      ["interact_failed", { cluster: "devnet", phase: "send" }],
+    ]);
+  });
+
+  it("names a custom endpoint's cluster custom, never null", async () => {
+    // eslint-disable-next-line unicorn/no-null -- `PgConnection.cluster` is null on an endpoint that names no cluster
+    h.cluster = null;
+    h.test.mockResolvedValue("sig");
+    h.confirm.mockResolvedValue(undefined);
+
+    await runCall(IX);
+
+    expect(sent()).toEqual([
+      ["interact_sent", { cluster: "custom" }],
+      ["interact_succeeded", { cluster: "custom" }],
+    ]);
   });
 });

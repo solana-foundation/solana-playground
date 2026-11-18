@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { initLogger, memoryProvider, resetLogger } from "@/shared/lib/logger";
+import { GithubImportError } from "@/utils/import-error";
 
 // The `utils` barrel cannot load under jsdom; `Primary` needs only these.
 // The boundary is the real one: what it keeps between views is under test.
@@ -54,6 +55,46 @@ it("drops a failed route's error when the next route brings its view", async () 
 
   expect(await screen.findByText("Hello Solana")).toBeTruthy();
   expect(screen.queryByText("Seahorse example is gone")).toBeNull();
+});
+
+it.each([
+  new GithubImportError("No program code found", "no-source"),
+  new GithubImportError("GitHub did not answer", "network"),
+])(
+  "warns, without reporting, of a view whose link failed: %s",
+  async (error) => {
+    const logs = memoryProvider();
+    initLogger({ providers: [logs] });
+    render(<Primary />);
+
+    void PgView.setMainPrimary(async () => {
+      throw error;
+    });
+
+    expect(await screen.findByText(error.message)).toBeTruthy();
+    // `PgView` outlives a test, so an earlier row's view, put back on this
+    // mount, may log its own failure beside this one
+    expect(logs.entries).toContainEqual(
+      expect.objectContaining({
+        level: "warn",
+        context: { reason: error.reason, error: String(error) },
+      })
+    );
+    expect(logs.entries.some((e) => e.report)).toBe(false);
+  }
+);
+
+it("reports a view whose route broke", async () => {
+  const logs = memoryProvider();
+  initLogger({ providers: [logs] });
+  render(<Primary />);
+
+  void PgView.setMainPrimary(async () => {
+    throw new Error("Seahorse example is gone");
+  });
+
+  expect(await screen.findByText("Seahorse example is gone")).toBeTruthy();
+  expect(logs.entries.some((e) => e.report)).toBe(true);
 });
 
 it("keeps a newer view over an older one that fails after it", async () => {

@@ -47,6 +47,7 @@ export const connectWith =
         const channel = new MessageChannel();
         // The frame's origin is opaque, so `"*"` is the only target that
         // reaches it; the port is what keeps the rest of the talk private
+        // eslint-disable-next-line @microsoft/sdl/no-postmessage-star-origin -- the frame's origin is opaque, so "*" is the only target that reaches it
         frame.postMessage(HANDSHAKE, "*", [channel.port2]);
         resolve(channel.port1);
       };

@@ -2,9 +2,9 @@
 
 ## Purpose
 
-Turns a Solana program's Rust source into the two outputs a deploy needs, the
-program binary and the IDL, and keeps both with the project until the next
-build replaces them.
+Turns a Solana program's Rust source into the program binary a deploy needs,
+keeps the IDL when the build server returns one, and stores both with the
+project until a later build replaces them.
 
 ```mermaid
 flowchart TD
@@ -13,26 +13,37 @@ flowchart TD
   kp -- yes --> declare["Write its public key into declare_id!"]
   declare --> server["Send the source to the build server"]
   server --> ok{"Compiled?"}
-  ok -- yes --> keep["Keep the binary reference and the IDL<br/>with the project (build_succeeded)"]
+  ok -- yes --> keep["Keep the binary reference, and the IDL<br/>when the server returns one (build_succeeded)"]
   ok -- no --> prev["Keep the previous binary and IDL,<br/>warn before deploying them (build_failed)"]
   keep --> dl["Download IDL (build_idl_downloaded)"]
 ```
 
 ## ADDED Requirements
 
-### Requirement: A build produces the program binary and the IDL
+### Requirement: A build produces the program binary and keeps the IDL the build server returns
 
 A build of an Anchor, Native or Seahorse project SHALL send the project's
 source to the build server and, on success, SHALL keep a reference to the
-program binary for the next deploy. For an Anchor or Seahorse project it SHALL
-also keep the IDL the server generated from the same source. A Native project
-produces no IDL.
+program binary for the next deploy. When the build server returns an IDL with
+the binary, the build SHALL keep that IDL with the project, in place of the
+one the project held. When the build server returns none, the build SHALL
+change nothing about the project's IDL: the project keeps the IDL it held,
+the one the user uploaded to the project or the one an earlier build kept, if
+any. The build of a Native project returns no IDL.
 
-#### Scenario: An Anchor project builds
+#### Scenario: The build server returns an IDL
 
-- **WHEN** the user builds an Anchor project that compiles
+- **WHEN** the user builds an Anchor project that compiles, and the build
+  server returns an IDL
 - **THEN** the project holds a program binary ready to deploy
-- **AND** the project holds the IDL generated from the same source
+- **AND** the project holds the IDL the build server returned
+
+#### Scenario: The build server returns no IDL
+
+- **WHEN** the user uploads an IDL to the project, then builds an Anchor
+  project that compiles, and the build server returns no IDL
+- **THEN** the project holds a program binary ready to deploy
+- **AND** the project still holds the uploaded IDL
 
 #### Scenario: A Native project builds
 
@@ -89,8 +100,9 @@ uploaded one); without one there is no Download IDL.
 ### Requirement: Build telemetry
 
 The build SHALL emit `build_started { framework }` when a build is sent,
-`build_succeeded { framework, has_idl }` when the server returns a binary, and
-`build_failed { framework, reason }` when it does not. `framework` is
+`build_succeeded { framework, has_idl }` when the compiler reports no error,
+and `build_failed { framework, reason }` when it does not; the `build` command
+sends all three (`funnel-events`, "Build events"), once per build. `framework` is
 `anchor`, `native` or `seahorse`; `has_idl` is a boolean; `reason` is
 `compile`, `server` or `network`.
 
@@ -104,7 +116,8 @@ The build SHALL emit `build_started { framework }` when a build is sent,
 
 Every control on the Build screen that performs an action SHALL emit its own
 event when used, separate from the outcome events: Build, and Build again on
-Build succeeded, emit `build_started`, Download IDL `build_idl_downloaded` and
+Build succeeded, run the `build` command, whose `build_started` is their
+event (the controls send no second one), Download IDL `build_idl_downloaded` and
 Fix with assistant `build_fix_requested`, the last two with no parameters.
 Continue to Deploy only switches the stage. A control without its event fails
 review.

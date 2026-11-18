@@ -13,7 +13,6 @@ export * from "./js-runtime";
 export * from "./keybind";
 export * from "./language";
 export * from "./package";
-export * from "./playnet/";
 export * from "./program-info";
 export * from "./router";
 export * from "./server";

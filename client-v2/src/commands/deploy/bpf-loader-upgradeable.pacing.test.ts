@@ -72,7 +72,6 @@ vi.mock("../../utils", () => ({
     getSendTxPerSecond: (connection: unknown) =>
       connection === chain.current ? chain.sendTxPerSecond : undefined,
   },
-  PgPlaynet: { isUrlPlaynet: () => false },
   PgTx: {
     send: async (
       ix: { offset: number; bytes: Buffer },

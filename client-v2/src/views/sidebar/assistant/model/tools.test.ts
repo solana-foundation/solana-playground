@@ -1,4 +1,9 @@
 import { NetworkRefusedError } from "@/commands/deploy/network-refused";
+import {
+  initTelemetry,
+  memoryProvider,
+  resetTelemetry,
+} from "@/shared/lib/telemetry";
 import { requireFor } from "@/test-utils/require-for";
 
 import type { PlaygroundBridge } from "../bridge/playground-bridge";
@@ -161,6 +166,72 @@ describe("write_file", () => {
   });
 });
 
+describe("write_file events", () => {
+  let tracked: ReturnType<typeof memoryProvider>;
+
+  beforeEach(() => {
+    resetTelemetry();
+    tracked = memoryProvider();
+    initTelemetry({ providers: [tracked] });
+  });
+
+  /** The patch write events sent, as `[name, params]` */
+  const patchEvents = () =>
+    tracked.events
+      .filter((event) => event.name.startsWith("assistant_patch_"))
+      .map((event) => [event.name, event.params]);
+
+  /** Runs one write, answering its card with `isAllowed` */
+  const answerWith = (isAllowed: boolean) => async (b: PlaygroundBridge) => {
+    const pending = writeFile(b).run({ path: "src/lib.rs", content: "new" });
+    await Promise.resolve();
+    PgAssistant.resolveApproval(latestCard(), isAllowed);
+    await pending;
+  };
+  const approve = answerWith(true);
+  const decline = answerWith(false);
+
+  it("counts an approved patch once it is written", async () => {
+    await approve(bridge("old"));
+
+    expect(patchEvents()).toEqual([["assistant_patch_written", {}]]);
+  });
+
+  it.each([
+    [
+      "limit",
+      Object.assign(new Error("A file can be at most 128 KB."), {
+        name: "ExplorerLimitError",
+      }),
+    ],
+    ["other", new Error("disk")],
+  ])("counts a write that throws as failed, %s", async (reason, error) => {
+    const b = bridge("old");
+    vi.mocked(b.applyPatch).mockRejectedValue(error);
+
+    await approve(b);
+
+    expect(patchEvents()).toEqual([
+      ["assistant_patch_write_failed", { reason }],
+    ]);
+  });
+
+  it("counts nothing for a patch that would change nothing", async () => {
+    await writeFile(bridge("same")).run({
+      path: "src/lib.rs",
+      content: "same",
+    });
+
+    expect(patchEvents()).toEqual([]);
+  });
+
+  it("counts nothing for a denied patch", async () => {
+    await decline(bridge("old"));
+
+    expect(patchEvents()).toEqual([]);
+  });
+});
+
 describe("write_file outside the context", () => {
   it("does not tell the model a guess matches a file it may not read", async () => {
     const pending = writeFile(bridgeIn([])("secret")).run({
@@ -260,6 +331,7 @@ describe("build and deploy", () => {
     ({
       build: over.build ?? vi.fn(async () => {}),
       deploy: over.deploy ?? vi.fn(async () => null),
+      watchConnection: () => () => false,
       quoteDeploy: vi.fn(async () => ({
         network: "devnet",
         cost: null,
@@ -326,6 +398,21 @@ describe("build and deploy", () => {
       outcome: "deploy failed: insufficient funds",
     });
   });
+
+  it("masks the key of an RPC URL a failed deploy's error quotes", async () => {
+    const { result, card } = await allowed(
+      commandBridge({
+        deploy: vi.fn(async () => {
+          throw new Error(
+            "failed to get recent blockhash: 401 from https://devnet.helius-rpc.com/?api-key=k3y-0f-the-rpc"
+          );
+        }),
+      }),
+      "deploy"
+    );
+    expect(JSON.stringify({ result, card })).not.toContain("k3y-0f-the-rpc");
+    expect(result).toContain("https://devnet.helius-rpc.com/?api-key=••••");
+  });
 });
 
 describe("build and deploy approvals", () => {
@@ -363,10 +450,11 @@ describe("build and deploy approvals", () => {
     ({
       getProjectContext: () => ({
         workspaceName: "hello_anchor",
-        cluster: "https://api.devnet.solana.com",
+        cluster: "devnet",
         // eslint-disable-next-line unicorn/no-null -- `ProjectContext.buildError` is `string | null`
         buildError: null,
       }),
+      watchConnection: () => () => false,
       quoteDeploy: async () => quote,
       build: vi.fn(async () => {}),
       // eslint-disable-next-line unicorn/no-null -- `deploy()` answers `null` without a program id
@@ -418,15 +506,16 @@ describe("build and deploy approvals", () => {
   });
 
   it("deploys nothing when the network changed while the approval waited", async () => {
-    let cluster = "https://api.devnet.solana.com";
+    let hasConnectionChanged = false;
     const deploy = vi.fn(async () => {});
     const b = {
       getProjectContext: () => ({
         workspaceName: "hello_anchor",
-        cluster,
+        cluster: "devnet",
         // eslint-disable-next-line unicorn/no-null -- `ProjectContext.buildError` is `string | null`
         buildError: null,
       }),
+      watchConnection: () => () => hasConnectionChanged,
       quoteDeploy: async () => PRICED,
       deploy,
     } as unknown as PlaygroundBridge;
@@ -434,7 +523,7 @@ describe("build and deploy approvals", () => {
     if (!found) throw new Error("createTools has no tool named deploy");
     const run = found.run({});
     await vi.waitFor(() => expect(PgAssistant.items).toHaveLength(1));
-    cluster = "https://api.mainnet-beta.solana.com";
+    hasConnectionChanged = true;
     PgAssistant.resolveApproval(PgAssistant.items[0].id, true);
 
     expect(await run).toContain("nothing was deployed");
@@ -561,6 +650,7 @@ describe("deploy", () => {
     const tool = requireFor("the deploy tool")(
       createTools({
         getProjectContext: () => ({ cluster: "devnet" }),
+        watchConnection: () => () => false,
         quoteDeploy: async () => ({
           network: "devnet",
           cost: 1_420_000_000,

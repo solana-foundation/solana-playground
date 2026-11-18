@@ -1,3 +1,5 @@
+import { currentMonikerOf } from "@/entities/cluster";
+
 import type { Disposable } from "../../../utils";
 import {
   PgCommand,
@@ -110,7 +112,9 @@ export class PgDeployHistory {
     try {
       const parsed: unknown = JSON.parse(localStorage.getItem(KEY) ?? "[]");
       if (!Array.isArray(parsed)) return [];
-      return parsed.filter(isDeployRecord);
+      return parsed
+        .filter(isDeployRecord)
+        .map((r) => ({ ...r, cluster: currentMonikerOf(r.cluster) }));
     } catch {
       return [];
     }

@@ -4,11 +4,13 @@ import remarkGfm from "remark-gfm";
 
 import type { McpServerEntry, McpTool } from "@/features/mcp";
 import { callTool } from "@/features/mcp";
+import { ImageAddress } from "@/shared/lib/image-address";
 import { cn } from "@/shared/lib/utils";
 import { NativeSelect, NativeSelectOption } from "@/shared/ui/native-select";
 
 import { PgConnection } from "../../../../utils";
 import { PgAssistant } from "../store";
+import { emphasiseLabels } from "./caps-label";
 
 interface ServerConsoleProps {
   server: McpServerEntry;
@@ -27,13 +29,6 @@ const ACTION =
 
 /** Descriptions past this many characters start collapsed */
 const LONG_DESCRIPTION = 220;
-
-/** A line that opens with an all-caps label, `IDENTIFIER:` or `ACCOUNT TYPES RETURNED (by entity.kind):` */
-const CAPS_LABEL = /^([A-Z][A-Z0-9 _-]*[A-Z0-9](?: \([^)\n]*\))?:)/gm;
-
-/** Tool descriptions are Markdown by convention; servers that write `LABEL:` headings get them in bold */
-const emphasiseLabels = (description: string) =>
-  description.replace(CAPS_LABEL, "**$1**");
 
 /** The Markdown a tool description renders to, spaced for the card's small type */
 const DESCRIPTION_MARKDOWN =
@@ -215,7 +210,12 @@ const ServerConsole = ({ server, providerName, scope }: ServerConsoleProps) => {
                     "max-h-[4.75em] overflow-hidden [mask-image:linear-gradient(to_bottom,black_60%,transparent)]"
                 )}
               >
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  // A description is the MCP server's text: an image in it,
+                  // from any host, shows as text and is never fetched
+                  components={{ img: ImageAddress }}
+                >
                   {emphasiseLabels(description)}
                 </ReactMarkdown>
               </div>

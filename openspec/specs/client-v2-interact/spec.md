@@ -13,8 +13,8 @@ before on the same network.
 When the Interact stage has a program to call, its head SHALL show the program
 id shortened in the middle (first four and last four characters joined by
 "…") with a copy button labelled "Copy program id" that copies the full id,
-and the network name as a label, capitalised ("Devnet", "Mainnet" for
-mainnet-beta). Inside a sentence (the fee callout) the network is lower case.
+and the network name as a label, capitalised ("Devnet", "Mainnet"). Inside a
+sentence (the fee callout) the network is lower case.
 
 #### Scenario: A deployed program (manual)
 
@@ -76,8 +76,8 @@ When the app sends a transaction, the toast SHALL read "Transaction sent" and
 show the signature shortened in the middle (`9hJqVk…WxCvBz`), linked to the
 transaction on the explorer picked in Settings. It SHALL fire for every
 transaction the app sends, not only from Interact, except one a tutorial card
-already links, one sent on playnet, and any while the "Show transaction
-notifications" setting is off.
+already links, and any while the "Show transaction notifications" setting is
+off.
 
 #### Scenario: The toast names the signature (manual)
 

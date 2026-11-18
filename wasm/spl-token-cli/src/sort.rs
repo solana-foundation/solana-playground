@@ -87,7 +87,7 @@ pub(crate) fn sort_and_parse_token_accounts(
         }
     }
     for (_, array) in mint_accounts.iter_mut() {
-        array.sort_by(|a, b| b.is_associated.cmp(&a.is_associated));
+        array.sort_by_key(|account| std::cmp::Reverse(account.is_associated));
     }
     (
         mint_accounts,

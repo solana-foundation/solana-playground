@@ -10,6 +10,12 @@ export const PHONE = { width: 390, height: 844 };
 export const TABLET = { width: 834, height: 1112 };
 export const DESK = { width: 1280, height: 800 };
 export const WIDE_DESK = { width: 1440, height: 900 };
+/**
+ * The narrowest common window whose code area, beside the open navigation
+ * and assistant, is wide enough (1100 px) to dock the project tree; a spec
+ * that drives the docked tree's column sets it with `test.use`
+ */
+export const DOCK_DESK = { width: 1920, height: 1080 };
 
 /** A page of the phone's pager, by its section's label */
 type PhonePage = "Navigation" | "Work" | "Preview";

@@ -384,7 +384,7 @@ describe("BaseAssistantComposer", () => {
       const { user, onSources } = setup();
       await user.click(screen.getByRole("button", { name: "Add context" }));
       const items = screen.getAllByRole("menuitem").map((i) => i.textContent);
-      expect(items).toEqual(["Add a file", "Sources and toolsS"]);
+      expect(items).toEqual(["Add a file", "Sources and tools"]);
       await user.click(
         screen.getByRole("menuitem", { name: /Sources and tools/ })
       );

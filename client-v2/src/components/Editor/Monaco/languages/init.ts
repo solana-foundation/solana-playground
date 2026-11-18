@@ -154,12 +154,14 @@ const parseConfiguration = (
           continue;
         }
 
+        // eslint-disable-next-line security/detect-non-literal-regexp -- a pattern of a bundled language configuration
         obj[key] = new RegExp(value);
       }
 
       if (typeof value === "object" && value !== null) {
         // Check for "pattern" property
         const pattern = value.pattern;
+        // eslint-disable-next-line security/detect-non-literal-regexp -- a pattern of a bundled language configuration
         if (pattern) obj[key] = new RegExp(pattern);
         else recursivelyParseRegex(obj[key]);
       }
@@ -200,5 +202,6 @@ const parseConfiguration = (
  * @returns converted `RegExp`
  */
 const convertToRegex = (field: string | RegExp) => {
+  // eslint-disable-next-line security/detect-non-literal-regexp -- a pattern of a bundled language configuration
   return typeof field === "string" ? new RegExp(field) : field;
 };

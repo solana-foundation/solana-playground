@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import {
+  importReasonOf,
+  isExpectedImportFailure,
+} from "@/features/project-files";
 import { createLogger } from "@/shared/lib/logger";
 
 import ErrorBoundary, {
@@ -40,7 +44,16 @@ const Primary = () => {
         // Shown in place of the view, but never thrown, so React and the
         // boundary do not see it: say it here. A view put back on a remount
         // (`PgView.announceMainPrimaryUnmount`) runs its route's loader again.
-        log.error(e, { report: true });
+        // A failure with an import reason other than `other`
+        // (`isExpectedImportFailure`) is the link's or the network's doing,
+        // and the GitHub route's `trackView` counts it: logged, not reported.
+        if (isExpectedImportFailure(e)) {
+          log.warn("view could not load", {
+            context: { reason: importReasonOf(e), error: String(e) },
+          });
+        } else {
+          log.error(e, { report: true });
+        }
         if (call === latest.current) {
           setEl({ error: e as Error, refresh: setContent });
         }

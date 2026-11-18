@@ -244,6 +244,20 @@ export const sourcesEnv = () => ({
 });
 
 /**
+ * Where `/api/build-server` forwards builds, and the key it proves itself
+ * with. The URL has no default: the build server's host lives in deployment
+ * configuration only, as `REACT_APP_SERVER_URL` does for the client, and the
+ * route refuses to build without it. The key is the build server's
+ * `PG_API_KEY`; unset, no header is sent, which a server without the check
+ * accepts.
+ */
+export const buildServerEnv = () => ({
+  URL: read("PG_BUILD_SERVER_URL")?.replace(/\/+$/, "") || undefined,
+  // A trailing newline pasted into a secret would never match the server's
+  API_KEY: read("PG_BUILD_SERVER_API_KEY")?.trim() || undefined,
+});
+
+/**
  * Postgres for sync, and its opt-in kill switch. `DB_PROVIDER` picks how the
  * pool is built (`model/providers/` in the persistence feature); each provider
  * reads only its own variables.

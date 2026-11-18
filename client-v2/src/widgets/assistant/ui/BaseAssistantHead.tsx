@@ -12,7 +12,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
 import { MenuItemText } from "@/shared/ui/menu-extras";
@@ -24,7 +23,7 @@ import type { AiOffReason } from "../model/ai-off";
 import type { HeadLabel } from "../model/head-label";
 import { headText } from "../model/head-label";
 import { OverflowTooltip } from "./OverflowTooltip";
-import { KEY_HINT, usePickedMenu } from "./use-picked-menu";
+import { usePickedMenu } from "./use-picked-menu";
 
 /** The head's icon buttons are thumb sized on a phone */
 const THUMB = "max-md:size-11";
@@ -99,9 +98,6 @@ export interface BaseAssistantHeadProps {
  * answer, then Widen, Hide and More. Only
  * the model's name is cut when the column is narrow; the words around it
  * stay, and the cut name shows whole on hover (`OverflowTooltip`).
- *
- * More's items take S and K while it is open (`usePickedMenu`); the shortcuts
- * are shown with `DropdownMenuShortcut`, which only draws them.
  */
 export function BaseAssistantHead({
   label,
@@ -118,7 +114,7 @@ export function BaseAssistantHead({
   deleteKey,
   onDeleteKey,
 }: BaseAssistantHeadProps) {
-  const more = usePickedMenu(focusPicked, { s: onSources, k: onConnect });
+  const more = usePickedMenu(focusPicked);
   const { pick } = more;
 
   const widenLabel = wide ? "Narrow the assistant" : "Widen the assistant";
@@ -209,16 +205,13 @@ export function BaseAssistantHead({
         <DropdownMenuContent
           align="end"
           className="w-auto min-w-48"
-          onKeyDown={more.onKeyDown}
           onCloseAutoFocus={more.onCloseAutoFocus}
         >
           <DropdownMenuItem onSelect={() => pick(onSources)}>
             <MenuItemText>Sources and tools</MenuItemText>
-            <DropdownMenuShortcut className={KEY_HINT}>S</DropdownMenuShortcut>
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => pick(onConnect)}>
             <MenuItemText>{connectLabel}</MenuItemText>
-            <DropdownMenuShortcut className={KEY_HINT}>K</DropdownMenuShortcut>
           </DropdownMenuItem>
           {deleteKey === "ready" && (
             <DropdownMenuItem onSelect={() => pick(onDeleteKey)}>

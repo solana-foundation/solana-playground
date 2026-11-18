@@ -221,6 +221,7 @@ describe("PgGithub.getFiles", () => {
     ).rejects.toMatchObject({
       message: expect.stringMatching(/was not found on GitHub/),
       reason: "not-found",
+      name: "GithubImportError",
     });
   });
 
@@ -259,6 +260,15 @@ describe("PgGithub.getFiles", () => {
       message: expect.stringMatching(/did not answer/),
       reason: "network",
     });
+  });
+
+  it("keeps a TypeError that is not a dropped connection as it is", async () => {
+    const bug = new TypeError("Failed to execute 'fetch': Invalid URL");
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(bug);
+
+    await expect(
+      PgGithub.getFiles("https://github.com/solana-labs/example")
+    ).rejects.toBe(bug);
   });
 
   it.each([
@@ -368,7 +378,11 @@ describe("PgGithub.getFiles", () => {
 
     await expect(
       PgGithub.getFiles("https://github.com/solana-labs/example")
-    ).rejects.toThrow(/"src\/lib\.rs" was not found on GitHub/);
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(/"src\/lib\.rs" was not found on GitHub/),
+      reason: "not-found",
+      name: "GithubFileError",
+    });
   });
 });
 

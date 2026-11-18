@@ -252,13 +252,13 @@ if (import.meta.vitest) {
         true
       );
       expect(
-        isFromSandbox({ type: "rpc", id: 1, url: "http://a", body: "{}" })
+        isFromSandbox({ type: "rpc", id: 1, url: "https://a.test", body: "{}" })
       ).toBe(false);
       expect(
         isFromSandbox({
           type: "rpc",
           id: 1,
-          url: "http://a",
+          url: "https://a.test",
           method: "POST",
           headers: {},
           body: "{}",

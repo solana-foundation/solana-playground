@@ -40,6 +40,17 @@ site, and the project's rules send agents to them.
   None of these events has reached `master` or production, so no recorded
   data changes meaning. `deploy_sol_needed_shown` and `deploy_backup_*` do
   not change.
+- The funnel table gains a Failure events column, and the check reads
+  trackers anywhere under `src/`, legacy roots included (HOO-2598).
+- New slices `features/program-build` (prefix `build`) and
+  `features/program-interact` (prefix `interact`), with the names
+  `wbdi-flow` gives them. Events added: `build_started {framework}`,
+  `build_succeeded {framework, has_idl}`, `build_failed {framework, reason}`
+  from the `build` command; `interact_sent {cluster}`,
+  `interact_succeeded {cluster}`, `interact_failed {cluster, phase}` from
+  `runCall`.
+- `widgets/assistant` adds `assistant_patch_written` and
+  `assistant_patch_write_failed {reason}`, sent from the `write_file` tool.
 - `features/project-export` stops sending `export_downloaded` and
   `export_failed`, which have reached `master`: `project_exported` and
   `project_export_failed` replace them with the same `profile` and `files`,
@@ -61,6 +72,13 @@ site, and the project's rules send agents to them.
 - `client-v2-project-files`: the events sent when a project is imported,
   viewed from a GitHub link, or exported.
 - `client-v2-run`: the events sent when tests or a client script run.
+
+### Modified Capabilities (HOO-2598)
+
+- `client-v2-build`: "Build events".
+- `client-v2-interact`: "Instruction call events".
+- `client-v2-assistant-usage`: "An approved patch is reported once it is
+  written".
 
 ### Modified Capabilities
 
@@ -103,11 +121,15 @@ site, and the project's rules send agents to them.
   browser history events"), switched on in GA4 admin (HOO-2409), with no
   code.
 - Out of scope:
-  - Build, IDL, and Interact events: `wbdi-flow` owns them. Its "Deploy
-    telemetry" requirement is aligned with these names in a follow-up (ticket
-    to file); this change does not edit `wbdi-flow`.
+  - IDL events and the Build and Interact screens' control events:
+    `wbdi-flow` owns them. Its "Deploy telemetry" requirement is aligned with these names in a follow-up (ticket
+    to file). This change edits `wbdi-flow` in two places only: its
+    "Interact telemetry" gains `interact_succeeded`, and its Build
+    telemetry and task 1.1 point at this change's "Build events" and task
+    5.1, which now send them.
   - Tutorial events (`tutorial-flow-v2` on `scope/tutorial-flow-2`) and
-    assistant turn events (`assistant-usage-events`, #62).
+    assistant turn events (`assistant-usage-events`, #62). Both are on
+    `master` now, and the funnel table lists them.
   - Sharing, which is also left out of the funnel table. client-v2 has no
     server share route or Share dialog (`drop-server-share` removed both),
     and gist sharing is measured by its own spec, `gist-sharing`.

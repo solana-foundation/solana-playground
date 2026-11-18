@@ -15,6 +15,6 @@ permissions:
 
 jobs:
   client-v2:
-    uses: ./.github/workflows/reusable-client-v2.yml
+    uses: ./.github/workflows/reusable-client-v2.yml # zizmor: ignore[self-repository] act rejects the $/ form, and both resolve to this commit
     with:
       use-wasm-stubs: true

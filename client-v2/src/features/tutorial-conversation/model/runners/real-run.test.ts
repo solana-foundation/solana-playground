@@ -15,7 +15,7 @@ const interaction = vi.hoisted(() => ({
 const finished = vi.hoisted(() => ({
   cb: undefined as undefined | ((r: unknown) => void),
 }));
-vi.mock("../../../../utils", () => ({
+vi.mock("../../../../utils", async () => ({
   PgCommand: {
     run: {
       execute: vi.fn(),
@@ -27,7 +27,10 @@ vi.mock("../../../../utils", () => ({
   },
   PgConnection: {
     cluster: "devnet",
-    current: { rpcEndpoint: "https://api.devnet.solana.com" },
+    current: {
+      rpcEndpoint: (await import("@/test-utils/endpoints.mjs")).TEST_ENDPOINT
+        .DEVNET,
+    },
   },
   PgExplorer: { currentWorkspaceName: undefined },
   PgProgramInfo: { callableIdl: () => idl, pk: undefined },

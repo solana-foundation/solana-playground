@@ -532,10 +532,13 @@ test.describe("project-code-sandbox", () => {
         kind: "message",
         bytes: new Uint8Array([1, 2, 3]),
       };
+      // eslint-disable-next-line @microsoft/sdl/no-postmessage-star-origin -- the test forges what a hostile window would send
       window.postMessage(forged, "*");
+      // eslint-disable-next-line @microsoft/sdl/no-postmessage-star-origin -- the test forges what a hostile window would send
       window.postMessage({ type: "ready" }, "*");
       const other = document.createElement("iframe");
       document.body.appendChild(other);
+      // eslint-disable-next-line @microsoft/sdl/no-postmessage-star-origin -- the test forges what a hostile window would send
       other.contentWindow?.parent.postMessage(forged, "*");
     }, address);
 

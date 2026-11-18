@@ -6,6 +6,7 @@ import {
   memoryProvider,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
+import { TEST_ENDPOINT } from "@/test-utils/endpoints.mjs";
 
 import { PgConnection, PgTx } from "../../utils";
 import { TerminalLineError } from "../../utils/terminal/line-error";
@@ -20,7 +21,7 @@ const WALLET = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin";
 /** The cluster's native RPC, which airdrops go through */
 const connection = {
   commitment: "confirmed",
-  rpcEndpoint: "https://api.devnet.solana.com",
+  rpcEndpoint: TEST_ENDPOINT.DEVNET,
   getBalance: vi.fn(),
   requestAirdrop: vi.fn(),
 };

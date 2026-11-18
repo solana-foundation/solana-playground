@@ -8,6 +8,7 @@ import {
 import { PgFs } from "../../../utils/explorer/fs";
 import { PgChatStorage } from "./chat-storage";
 import { report } from "./diagnostics";
+import { readFencedIds } from "./fence-records";
 import { withSyncLock } from "./sync-lock";
 
 /**
@@ -256,6 +257,26 @@ export class PgThreadIndex {
     PgThreadIndex._migrated = null;
   }
 
+  /**
+   * The map as storage holds it now, read past the cache, or `undefined`
+   * when the file cannot be read; the cache then stays empty.
+   *
+   * For a decision a lost map must not make. `all` reads a failed read as
+   * an empty map, which is right for opening a thread and wrong for the
+   * fence: it would record every thread with no workspace and clear the
+   * real map.
+   */
+  static async reloadOrFail(): Promise<Index | undefined> {
+    PgThreadIndex.reload();
+    // Before the adoption pass, which reads a failure as an empty map and
+    // would adopt every thread file as a workspace of its own over it
+    if (!(await PgThreadIndex._readOrFail())) return undefined;
+    await PgThreadIndex._migrateOnce();
+    const index = await PgThreadIndex._readOrFail();
+    if (index) PgThreadIndex._cache = index;
+    return index;
+  }
+
   /** Forget everything. Sign-out clears the whole directory with it. */
   static async clear() {
     PgThreadIndex.reload();
@@ -304,8 +325,24 @@ export class PgThreadIndex {
   }
 
   private static async _read(): Promise<Index> {
+    return (await PgThreadIndex._readOrFail()) ?? {};
+  }
+
+  /**
+   * The map on disk: `{}` for a missing file or bytes that are not a map,
+   * `undefined` when the file is there but cannot be read.
+   */
+  private static async _readOrFail(): Promise<Index | undefined> {
+    let raw: string;
     try {
-      const parsed = JSON.parse(await PgFs.readToString(INDEX_PATH));
+      raw = await PgFs.readToString(INDEX_PATH);
+    } catch (e) {
+      if (isMissing(e)) return {};
+      report("read index", e);
+      return undefined;
+    }
+    try {
+      const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
         return {};
       }
@@ -321,7 +358,7 @@ export class PgThreadIndex {
       }
       return Object.fromEntries(kept) as Index;
     } catch (e) {
-      if (!isMissing(e)) report("read index", e);
+      report("read index", e);
       return {};
     }
   }
@@ -463,10 +500,19 @@ export class PgThreadIndex {
     const known = new Set(Object.values(index));
     // Not in the index, so each of these files is named after its workspace
     // whatever the name looks like
-    return names
+    const unindexed = names
       .filter((name) => name.endsWith(SUFFIX))
       .map((name) => ({ name, id: nameToId(name) }))
-      .filter(({ id }) => id !== "index" && !known.has(id))
+      .filter(({ id }) => id !== "index" && !known.has(id));
+    if (!unindexed.length) return [];
+    // Except a thread a fence names, which a lagging tab wrote back: adopted
+    // under a fresh id, no fence would know it, and the next sign-in would
+    // upload another account's messages. `PgThreadFence.settle` moves it
+    // back. Records that cannot be read adopt nothing; the files wait.
+    const fenced = await readFencedIds();
+    if (!fenced) return [];
+    return unindexed
+      .filter(({ id }) => !fenced.has(id))
       .map(({ name, id }) => ({ name, id, threadId: uuid() }));
   }
 }

@@ -917,6 +917,7 @@ const Monaco = () => {
     const disposables = monaco.languages.getLanguages().map((language) => {
       return monaco.languages.onLanguage(language.id, async () => {
         try {
+          // eslint-disable-next-line no-unsanitized/method -- webpack resolves the id against the folders of ./languages at build time
           const { init } = await import(`./languages/${language.id}/init`);
           await init();
         } catch (e: any) {

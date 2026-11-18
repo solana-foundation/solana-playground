@@ -163,8 +163,10 @@ cluster or supplied locally.
 ### Requirement: Interact telemetry
 
 Interact SHALL emit `interact_simulated { cluster, ok }` after a simulation,
-`interact_sent { cluster }` when a transaction is sent, and
-`interact_failed { cluster, phase }` when a call fails. `cluster` is as in
+`interact_sent { cluster }` when a transaction is sent,
+`interact_succeeded { cluster }` when it confirms without an error (sent
+since `funnel-events` 5.2), and `interact_failed { cluster, phase }` when a
+call fails. `cluster` is as in
 deploy, `ok` is a boolean, and `phase` is `validation`, `simulation`, `send`
 or `confirm`. No event carries a program id, address or signature.
 
