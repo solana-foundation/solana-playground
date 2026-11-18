@@ -2,6 +2,7 @@ import type { MockInstance } from "vitest";
 
 import { PgSession } from "../../features/auth";
 import { PgChatSync } from "../../features/persistence/model/chat-sync";
+import { PgThreadFence } from "../../features/persistence/model/thread-fence";
 import { PgThreadIndex } from "../../features/persistence/model/thread-index";
 import { PgExplorer } from "../../utils/explorer/explorer";
 import type { Disposable } from "../../utils/types";
@@ -40,6 +41,8 @@ describe("the chat-thread effect", () => {
     vi.spyOn(PgChatSync, "fetchThread").mockResolvedValue(null);
     vi.spyOn(PgChatSync, "adoptAccountThread").mockResolvedValue(null);
     vi.spyOn(PgAssistant, "loadThread").mockResolvedValue(undefined);
+    // Signed-in tests open once the account's settle succeeds
+    vi.spyOn(PgThreadFence, "settle").mockResolvedValue(true);
     vi.spyOn(PgAssistant, "threadId", "get").mockReturnValue("p1");
     vi.spyOn(PgExplorer, "currentWorkspaceId", "get").mockReturnValue(
       "p1" as never
@@ -242,6 +245,91 @@ describe("the chat-thread effect", () => {
     expect(PgSession.expiredUser).toBeDefined();
     expect(close).not.toHaveBeenCalled();
     expect(load).not.toHaveBeenCalled();
+  });
+
+  describe("for a signed-in account this tab has not settled", () => {
+    let switched: () => void;
+
+    beforeEach(async () => {
+      await PgSession.refreshWith({
+        id: "u1",
+        name: undefined,
+        image: undefined,
+        login: undefined,
+      });
+      switched = () => {};
+      vi.spyOn(PgExplorer, "onDidSwitchWorkspace").mockImplementation((cb) => {
+        switched = cb as () => void;
+        return { dispose: () => {} };
+      });
+    });
+
+    it("opens no thread until the account's settle has finished", async () => {
+      // A thread opened before then is read from, or minted into, a folder
+      // still recorded as the previous account's
+      let finish: (settled: boolean) => void = () => {};
+      vi.spyOn(PgThreadFence, "settle").mockReturnValue(
+        new Promise((resolve) => (finish = resolve))
+      );
+
+      effect = chatThread();
+      await settle();
+      expect(PgAssistant.loadThread).not.toHaveBeenCalled();
+
+      finish(true);
+      await settle();
+      expect(PgAssistant.loadThread).toHaveBeenCalled();
+    });
+
+    it("opens no thread while the fence still fails", async () => {
+      // A thread minted now would be written into the other account's folder
+      // and fenced as that account's on the next settle
+      vi.spyOn(PgThreadFence, "settle").mockResolvedValue(false);
+
+      effect = chatThread();
+      await settle();
+
+      expect(PgAssistant.loadThread).not.toHaveBeenCalled();
+    });
+
+    it("opens the thread once the fence succeeds on a retry", async () => {
+      const retry = vi.spyOn(PgThreadFence, "settle").mockResolvedValue(false);
+      effect = chatThread();
+      await settle();
+
+      retry.mockResolvedValue(true);
+      switched();
+      await settle();
+
+      expect(retry).toHaveBeenLastCalledWith("u1");
+      expect(PgAssistant.loadThread).toHaveBeenCalled();
+    });
+
+    it("opens no thread when the settle throws, and tries again on the next switch", async () => {
+      const retry = vi
+        .spyOn(PgThreadFence, "settle")
+        .mockRejectedValue(new Error("lock"));
+      effect = chatThread();
+      await settle();
+      expect(PgAssistant.loadThread).not.toHaveBeenCalled();
+
+      retry.mockResolvedValue(true);
+      switched();
+      await settle();
+
+      expect(PgAssistant.loadThread).toHaveBeenCalled();
+    });
+
+    it("opens straight away once this tab has settled the account", async () => {
+      vi.spyOn(PgThreadFence, "isSettledFor").mockReturnValue(true);
+      const retry = vi.spyOn(PgThreadFence, "settle");
+
+      effect = chatThread();
+      await settle();
+
+      expect(retry).not.toHaveBeenCalled();
+      expect(PgAssistant.loadThread).toHaveBeenCalled();
+    });
   });
 
   it("stops listening once disposed", async () => {

@@ -8,6 +8,7 @@ import {
   releaseLocalProjects,
 } from "../../features/persistence/model/project-restore";
 import { PgProjectSync } from "../../features/persistence/model/project-sync";
+import { PgThreadFence } from "../../features/persistence/model/thread-fence";
 import { PgThreadIndex } from "../../features/persistence/model/thread-index";
 // Deep import rather than the `utils` barrel: the barrel reaches `settings.ts`,
 // which reads `GLOBAL_SETTINGS`, a global only webpack defines, so the unit
@@ -78,6 +79,9 @@ export const session = (): Disposable => {
    */
   const adopt = async ({ openLatest }: { openLatest: boolean }) => {
     let result;
+    // Whether the panel left another account's thread, and whether the
+    // device's threads are now this account's to adopt and upload
+    let fence = { left: false, settled: false };
     try {
       // Inside the `try`, all of it. Pushes are held from the moment this
       // effect is created, and this is the only thing that releases them --
@@ -85,10 +89,24 @@ export const session = (): Disposable => {
       // explorer or handing the chat threads over, leaves every project on
       // this device unable to save for the rest of the session, silently.
       await explorerReady();
-      // Before the dump: it would upload a thread minted while signed out as
-      // a conversation of its own, and the account's would never be found
-      await PgChatSync.adoptAccountThreads();
-      await PgChatSync.pushAll();
+      try {
+        fence = await leaveAnotherAccountsThreads();
+      } catch (e) {
+        report("fence chats", e);
+      }
+      // Unsettled, the threads here may be another account's, so none is
+      // adopted or uploaded. The chat effect settles again on the next
+      // project switch, and opens no thread until that works.
+      // TODO(HOO-1849): a settle that succeeds on such a retry does
+      // not run this adoption and dump; they wait for the next sign-in, and
+      // nothing tells the user chats are not syncing meanwhile
+      if (fence.settled) {
+        // Before the dump: it would upload a thread minted while signed out
+        // as a conversation of its own, and the account's would never be
+        // found
+        await PgChatSync.adoptAccountThreads();
+        await PgChatSync.pushAll();
+      }
       result = await reconcile();
     } finally {
       // Whatever happened, pushes stop waiting here. A reconcile that failed
@@ -120,11 +138,21 @@ export const session = (): Disposable => {
     try {
       const workspaceId = PgExplorer.currentWorkspaceId;
       const open = PgAssistant.threadId;
-      const wanted = workspaceId && (await PgThreadIndex.get(workspaceId));
+      // A thread fenced from under the panel leaves the workspace with none:
+      // a fresh one opens, and `openThread` adopts the account's own.
+      // Unsettled, the panel stays closed, and the chat effect opens no
+      // thread until a settle for this account succeeds
+      // (`PgThreadFence.isSettledFor`)
+      const reopen = fence.left && fence.settled;
+      const wanted =
+        workspaceId &&
+        (reopen
+          ? await PgThreadIndex.ensure(workspaceId)
+          : await PgThreadIndex.get(workspaceId));
       if (
         workspaceId &&
         wanted &&
-        open &&
+        (open || reopen) &&
         PgExplorer.currentWorkspaceId === workspaceId
       ) {
         await openThread(workspaceId, wanted);
@@ -155,6 +183,44 @@ export const session = (): Disposable => {
     if (target && PgExplorer.allWorkspaceNames?.includes(target)) {
       await PgExplorer.switchWorkspace(target);
     }
+  };
+
+  /**
+   * Keep the threads of an account whose session ended out of the arriving
+   * account's sign-in (HOO-2757).
+   *
+   * An ended session runs no teardown, on purpose, so its threads and its
+   * running turn are still here when someone else signs in, and the dump that
+   * follows would upload them into that account. `PgThreadFence.settle` moves
+   * them aside for their own account's next sign-in, and puts back the
+   * arriving account's, if it was the one fenced.
+   *
+   * The turn stops and the thread closes first, so nothing writes into a
+   * thread while it moves: its request is aborted, an approval it waits on is
+   * denied, and `closeThread` persists nothing afterwards. Also in a tab that
+   * finds the move already made by another tab and its thread among the
+   * fenced. Not `PgAssistant.clear`: with a thread open the panel holds
+   * nothing unsaved, and with none open what it holds is the arriving user's
+   * typing.
+   *
+   * @returns `left`, whether the panel left another account's thread and
+   * needs a thread opened, and `settled`, whether the device's threads are
+   * this account's now. Unsettled, the panel stays closed rather than reopen
+   * a thread the fence could not move.
+   */
+  const leaveAnotherAccountsThreads = async () => {
+    const userId = PgSession.get()?.id;
+    if (!userId) return { left: false, settled: false };
+    const open = PgAssistant.threadId;
+    const leaving =
+      (await PgThreadFence.isOwnedByAnother(userId)) ||
+      (!!open && (await PgThreadFence.isFenced(open)));
+    if (leaving) {
+      PgAssistant.stopTurn();
+      PgAssistant.closeThread();
+      await PgAssistant.whenPersisted();
+    }
+    return { left: leaving, settled: await PgThreadFence.settle(userId) };
   };
 
   /**
@@ -195,6 +261,11 @@ export const session = (): Disposable => {
     // reason to skip the other.
     let handed: HandOver | null = null;
     try {
+      // A sign-in whose owner write failed left these threads unowned; a
+      // sign-out that keeps any of them must leave them named, or the next
+      // account's sign-in takes them as its own
+      const userId = PgSession.get()?.id;
+      if (userId) await PgThreadFence.claimUnowned(userId);
       handed = await PgChatSync.pushAll();
     } catch (e) {
       report("hand over conversations", e);
