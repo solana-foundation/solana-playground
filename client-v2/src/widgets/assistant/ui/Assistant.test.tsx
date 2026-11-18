@@ -153,7 +153,8 @@ const openSources = async (user: ReturnType<typeof userEvent.setup>) => {
 };
 
 describe("Assistant", () => {
-  it("shows the thread over the composer, under Assistant with no model", () => {
+  it("shows the thread over the composer, under Assistant with no project and no model", () => {
+    explorer.name = undefined;
     setup();
     expect(screen.getByRole("heading", { name: "Assistant" })).toBeTruthy();
     expect(screen.getByText("thread")).toBeTruthy();
@@ -259,7 +260,22 @@ describe("Assistant", () => {
     expect(PgAssistant.initMcp).toHaveBeenCalledTimes(2);
   });
 
-  it("names the hosted model in the head, not the project", () => {
+  it("names the open project in the head, not the model", () => {
+    deployment.backend = { state: "present", model: "z-ai/glm-5.3-flash:US" };
+    setup();
+    expect(screen.getByRole("heading", { name: "hello-anchor" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: /GLM/ })).toBeNull();
+  });
+
+  it("names the project again after a rename", () => {
+    setup();
+    explorer.name = "renamed";
+    act(() => explorer.listeners.forEach((cb) => cb()));
+    expect(screen.getByRole("heading", { name: "renamed" })).toBeTruthy();
+  });
+
+  it("names the hosted model with no project open", () => {
+    explorer.name = undefined;
     deployment.backend = { state: "present", model: "z-ai/glm-5.3-flash:US" };
     setup();
     expect(
@@ -267,10 +283,10 @@ describe("Assistant", () => {
         name: "Assistant · GLM 5.3 Flash · hosted",
       })
     ).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: /hello-anchor/ })).toBeNull();
   });
 
-  it("names a keyed model with whose key it runs on", () => {
+  it("names a keyed model with whose key it runs on, with no project open", () => {
+    explorer.name = undefined;
     PgAssistant.connect({
       id: "openrouter",
       apiKey: "sk-or-fake",
@@ -287,7 +303,8 @@ describe("Assistant", () => {
     ).toBeTruthy();
   });
 
-  it("follows the model connected after it opens", () => {
+  it("follows the model connected after it opens, with no project open", () => {
+    explorer.name = undefined;
     setup();
     act(() =>
       PgAssistant.connect({

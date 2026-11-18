@@ -5,6 +5,7 @@ import {
   json,
   LONG,
   newProjectPage,
+  openFiles,
   openGallery,
   test,
 } from "./fixtures";
@@ -64,6 +65,8 @@ test("new-project-import: A TypeScript-only repository", async ({
   // New project closes on the imported project, laid out with no program
   await expect(newProjectPage(page)).toHaveCount(0, LONG);
   const project = `/github-${OWNER}/${REPO}/`;
+  // At the default window the tree sits in the dropdown "Files" opens
+  await openFiles(page);
   await expect(
     page.locator(`[data-path="${project}client/index.ts"]`)
   ).toHaveCount(1, LONG);
