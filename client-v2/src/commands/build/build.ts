@@ -169,6 +169,7 @@ export const frameworkOf = (files: TupleFiles): BuildFramework => {
  */
 const reasonOf = (err: unknown): BuildFailedReason => {
   if (err instanceof SeahorseCompileError) return "compile";
+  if (isBusyRefusalError(err)) return "busy";
   return (err as { answered?: unknown } | null)?.answered === false
     ? "network"
     : "server";
