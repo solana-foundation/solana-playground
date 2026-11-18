@@ -109,6 +109,54 @@ jobs:
       - name: Check clippy warnings
         run: cargo clippy --all-targets -- -D warnings
 
+  test_server:
+    name: Test server
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: format_server
+
+    defaults:
+      run:
+        working-directory: server
+
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Run tests
+        run: cargo test --locked
+
+  # Builds the image App Engine deploys, so a download whose pinned checksum
+  # no longer matches fails here before it fails a deploy. The second step
+  # proves the check bites: a wrong checksum must stop the build.
+  image_server:
+    name: Image server
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Build image
+        run: docker build --tag solpg-server server
+
+      - name: Refuse a download whose checksum differs
+        run: |
+          if out=$(docker build --progress=plain --target rust \
+            --build-arg RUSTUP_SHA256=0000000000000000000000000000000000000000000000000000000000000000 \
+            server 2>&1); then
+            echo "::error::the image built with a wrong rustup-init checksum"
+            exit 1
+          fi
+          if ! grep -q "rustup-init: FAILED" <<<"$out"; then
+            echo "$out"
+            echo "::error::the build failed, but not on the checksum"
+            exit 1
+          fi
+
   clippy_wasm:
     name: Clippy WASM
     runs-on: ubuntu-latest
