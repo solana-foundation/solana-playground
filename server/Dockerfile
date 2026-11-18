@@ -16,11 +16,14 @@ RUN useradd -m -u 1001 -s /bin/bash ${USER}
 USER ${USER}
 ENV HOME="/home/${USER}"
 
-# Every tool this image downloads is pinned to a version and checked against
-# a SHA-256 before it runs; a mismatch fails the build. To bump one, change its
-# version and take the new checksum from the publisher (rustup publishes
-# rustup-init.sha256 next to the binary; GitHub lists each release asset's
-# sha256 digest). The image is x86_64 only: Agave publishes no other Linux build.
+# The three tools this image fetches by URL (rustup-init, the Agave release,
+# the platform tools) are pinned to a version and checked against a SHA-256
+# before use; a mismatch fails the build. To bump one, change its version and
+# take the new checksum from the publisher (rustup publishes rustup-init.sha256
+# next to the binary; GitHub lists each release asset's sha256 digest). Not
+# covered here: the apt packages and the toolchains rustup installs, which
+# their own tools verify against their indexes. The image is x86_64 only:
+# Agave publishes no other Linux build.
 ARG RUSTUP_VERSION="1.29.3"
 ARG RUSTUP_SHA256="b1c8cb14e30889e7e2999e6b69e62d9e9b9ffc0f4df8180564d306d9680e6c55"
 
@@ -69,7 +72,9 @@ ARG USER=solpg
 ARG SOLANA_VERSION="3.1.10"
 ARG SOLANA_SHA256="a7205ff29bcf0f7199740225ecae2b85a28ea9668892d5ec21bd9749882984a1"
 # The platform tools cargo-build-sbf would otherwise download unchecked on its
-# first run; the version is the default of that Solana version's cargo-build-sbf.
+# first run. The version must be the default of that Solana version's
+# cargo-build-sbf: bump the two together. The final stage fails the build if
+# cargo-build-sbf fetched any other version.
 ARG PLATFORM_TOOLS_VERSION="v1.52"
 ARG PLATFORM_TOOLS_SHA256="8b3861e93daf085ec12b65c4fac374d9bec4587a3de16871da6b08ab0c1d907e"
 
@@ -91,6 +96,7 @@ RUN curl --proto '=https' --tlsv1.2 -sSfLo /tmp/platform-tools.tar.bz2 \
     && mkdir -p "${HOME}/.cache/solana/${PLATFORM_TOOLS_VERSION}/platform-tools" \
     && tar -xjf /tmp/platform-tools.tar.bz2 -C "${HOME}/.cache/solana/${PLATFORM_TOOLS_VERSION}/platform-tools" \
     && rm /tmp/platform-tools.tar.bz2
+ENV PLATFORM_TOOLS_VERSION="${PLATFORM_TOOLS_VERSION}"
 
 ################################# START SERVER #################################
 FROM tools
@@ -105,6 +111,8 @@ COPY --chown=${USER}:${USER} programs programs
 # Cloud Build's legacy builder strips the owner write bit from context files; the server rewrites programs/<id>/Cargo.toml at runtime
 RUN chmod -R u+w programs
 RUN cargo-build-sbf --manifest-path programs/Cargo.toml -- --locked
+RUN test "$(ls "${HOME}/.cache/solana")" = "${PLATFORM_TOOLS_VERSION}" \
+    || { echo "cargo-build-sbf fetched platform tools other than the pinned ${PLATFORM_TOOLS_VERSION}" >&2; exit 1; }
 
 # Start server
 COPY --from=build /build/target/release/solpg-server .

@@ -145,17 +145,21 @@ jobs:
 
       - name: Refuse a download whose checksum differs
         run: |
-          if out=$(docker build --progress=plain --target rust \
-            --build-arg RUSTUP_SHA256=0000000000000000000000000000000000000000000000000000000000000000 \
-            server 2>&1); then
-            echo "::error::the image built with a wrong rustup-init checksum"
-            exit 1
-          fi
-          if ! grep -q "rustup-init: FAILED" <<<"$out"; then
-            echo "$out"
-            echo "::error::the build failed, but not on the checksum"
-            exit 1
-          fi
+          zero=0000000000000000000000000000000000000000000000000000000000000000
+          for check in rust:RUSTUP_SHA256:rustup-init tools:SOLANA_SHA256:solana-release.tar.bz2 \
+            tools:PLATFORM_TOOLS_SHA256:platform-tools.tar.bz2; do
+            IFS=: read -r target arg file <<<"$check"
+            if out=$(docker build --progress=plain --target "$target" \
+              --build-arg "$arg=$zero" server 2>&1); then
+              echo "::error::the image built with a wrong $arg"
+              exit 1
+            fi
+            if ! grep -q "/tmp/$file: FAILED" <<<"$out"; then
+              echo "$out"
+              echo "::error::the build with a wrong $arg failed, but not on the checksum"
+              exit 1
+            fi
+          done
 
   clippy_wasm:
     name: Clippy WASM
