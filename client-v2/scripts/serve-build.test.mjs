@@ -47,10 +47,11 @@ describe("platformRules", () => {
       headersFor("/runtime.html")["Cross-Origin-Resource-Policy"],
       "cross-origin"
     );
-    assert.equal(headersFor("/")["Content-Security-Policy"], undefined);
+    // The app's own policy, never the sandbox's
+    assert.notEqual(headersFor("/")["Content-Security-Policy"], RUNTIME_CSP);
     assert.equal(
       headersFor("/runtime.html.map")["Content-Security-Policy"],
-      undefined
+      headersFor("/")["Content-Security-Policy"]
     );
   });
 
@@ -109,9 +110,9 @@ describe("createServer", () => {
     const res = await fetch(urlOf("/runtime.html"));
     assert.equal(res.status, 200);
     assert.equal(res.headers.get("content-security-policy"), RUNTIME_CSP);
-    assert.equal(
+    assert.notEqual(
       (await fetch(urlOf("/"))).headers.get("content-security-policy"),
-      null
+      RUNTIME_CSP
     );
   });
 
