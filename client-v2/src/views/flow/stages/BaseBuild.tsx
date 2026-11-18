@@ -348,6 +348,15 @@ const Unreached = (p: BaseBuildProps & { failure: BuildFailure | null }) => {
     return <EmptySource {...p} file={p.failure.file} />;
   }
   if (p.failure?.kind === "signed-out") return <SignedOut {...p} />;
+  if (p.failure?.kind === "busy") {
+    return (
+      <Busy
+        {...p}
+        message={p.failure.message}
+        retryAfterSeconds={p.failure.retryAfterSeconds}
+      />
+    );
+  }
   const noAnswer = p.failure?.kind === "no-answer";
   return (
     // No duration: a build that never ran took no time worth naming. The
@@ -421,6 +430,25 @@ const SignedOut = (p: BaseBuildProps) => (
         Sign in with GitHub
       </BrandButton>
     }
+    progress={p}
+  />
+);
+
+/**
+ * HOO-2907: the build service is busy, because this user already has a build
+ * running or is past the hourly limit, or because the build server's queue is
+ * full. It asked to be tried again in `retryAfterSeconds`. Not a red error:
+ * the code was never built, so nothing is wrong with it. The server's own
+ * words say which limit it was, and the one action is to try again.
+ */
+const Busy = (
+  p: BaseBuildProps & { message: string; retryAfterSeconds: number }
+) => (
+  <Surface
+    title={`Builds are busy, retry in ${p.retryAfterSeconds} s`}
+    description={`${p.message} Your code is unchanged.`}
+    announce="status"
+    actions={<BrandBuildButton p={p} label="Try again" />}
     progress={p}
   />
 );

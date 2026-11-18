@@ -12,6 +12,12 @@
  * `isAllowedOrigin` check as `/api/agent`; signed out is a `401` the Build
  * stage turns into a sign-in prompt, and unconfigured sign-in fails closed.
  *
+ * **A user has a bounded number of builds** (HOO-2907): one running and a
+ * capped number an hour, counted from their `build_audit` rows
+ * (`features/build-server/server/limits.mjs`). Past either, `429` with
+ * `Retry-After`, no audit row and nothing sent to the build server. The Build
+ * stage shows it as busy, not as a failed build.
+ *
  * **Every build is on record.** A `build_audit` row is written before a
  * `POST /build` (or its unstable twin) reaches the build server, and
  * completed when it answers: `499` when the caller left first, `502` when the
@@ -56,6 +62,7 @@ import {
   SIGNED_OUT_REASON,
 } from "../src/features/auth/server.mjs";
 import {
+  checkBuildLimitWith,
   finishAuditWith,
   projectOf,
   resolveRoute,
@@ -73,6 +80,14 @@ const MAX_BODY_BYTES = 1024 * 1024;
 
 /** What the audit records for a build whose caller left before the answer */
 const CALLER_LEFT = 499;
+
+/** `reason` of a `429` for a limit, which the client tells from other refusals */
+const BUSY_REASON = "build-limit";
+
+const BUSY_MESSAGE = {
+  running: "You already have a build running. Try again when it ends.",
+  hourly: "You have reached the hourly limit of builds. Try again later.",
+};
 
 const sendJson = (res, status, body) => {
   res.statusCode = status;
@@ -275,6 +290,27 @@ export const handleWith = (deps) => {
         error: "Sign in with GitHub to build.",
         reason: SIGNED_OUT_REASON,
       });
+    }
+
+    // A user past a limit costs nothing more: no body read, no audit row,
+    // nothing sent to the build server (HOO-2907)
+    if (route.kind === "build") {
+      let verdict;
+      try {
+        verdict = await checkBuildLimitWith(deps.query)(session.user.id);
+      } catch (e) {
+        log.error(e, { report: true, context: { op: "checkBuildLimit" } });
+        return sendJson(res, 503, {
+          error: "Builds cannot be checked right now. Try again shortly.",
+        });
+      }
+      if (!verdict.ok) {
+        res.setHeader("retry-after", String(verdict.retryAfterSeconds));
+        return sendJson(res, 429, {
+          error: BUSY_MESSAGE[verdict.limit],
+          reason: BUSY_REASON,
+        });
+      }
     }
 
     /** @type {string | undefined} */

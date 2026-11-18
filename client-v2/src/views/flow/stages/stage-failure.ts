@@ -1,7 +1,7 @@
 import { markFailureShown } from "@/shared/lib/report-button-failure";
 import { isSignInRefusalError } from "@/utils/sign-in-refusal";
 
-import { isSignInRefusal } from "../state/sign-in-refusal";
+import { isBuildRefusal } from "../state/sign-in-refusal";
 import { PgFlow } from "../state/stage";
 
 /**
@@ -36,11 +36,12 @@ export const markIfToldByStage = (
   error: unknown
 ) => {
   if (PgFlow.state[stage] === "failed") markFailureShown(error);
-  // A refusal for sign-in leaves Build as it was, and its surface says so.
-  // A deploy refused the same way puts its prompt on Build too; any other
-  // deploy failure under that prompt is still the deploy's own to tell.
+  // A refusal for sign-in or a busy service leaves Build as it was, and its
+  // surface says so. A deploy refused the same way puts its prompt on Build
+  // too; any other deploy failure under that prompt is still the deploy's
+  // own to tell.
   if (
-    isSignInRefusal(PgFlow.state.buildFailure) &&
+    isBuildRefusal(PgFlow.state.buildFailure) &&
     (stage === "build" || isSignInRefusalError(error))
   ) {
     markFailureShown(error);

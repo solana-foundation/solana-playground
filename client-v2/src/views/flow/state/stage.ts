@@ -11,15 +11,16 @@ import {
   PgGlobal,
   PgProgramInfo,
 } from "../../../utils";
+import { getBusyRetryAfter } from "../../../utils/busy-refusal";
 import { isSignInRefusalError } from "../../../utils/sign-in-refusal";
 import { isStopped } from "../../../utils/stopped";
 import {
   PgBuildOutput,
   stripKnownNoise,
 } from "../../sidebar/assistant/bridge/build-output";
-import { isSignInRefusal } from "./sign-in-refusal";
+import { isBuildRefusal, isSignInRefusal } from "./sign-in-refusal";
 
-export { isSignInRefusal };
+export { isBuildRefusal, isSignInRefusal };
 
 const log = createLogger("flow:stage");
 
@@ -79,11 +80,15 @@ export interface FlowState {
  * build server never replied (Spec 08's BUILD-04), `empty-source` when the
  * program file was empty and nothing was sent (Spec 09), `signed-out` when
  * `/api/build-server` asked for a GitHub sign-in (HOO-2422), `other` for anything
- * else (ANY-00). `message` is the command's own error, for the details.
+ * else (ANY-00). `busy` is a refusal because the service is busy (HOO-2907):
+ * the user is past a build limit, or the build server's queue is full, and
+ * `retryAfterSeconds` is the wait the server asked for. `message` is the
+ * command's own error, for the details.
  */
 export type BuildFailure =
   | { kind: "no-answer" | "other"; message: string }
   | { kind: "signed-out"; message: string }
+  | { kind: "busy"; message: string; retryAfterSeconds: number }
   | { kind: "empty-source"; message: string; file: string };
 
 export type FlowEvent =
@@ -223,6 +228,10 @@ const buildFailureOf = (err: unknown): BuildFailure => {
   if (emptyFile)
     return { kind: "empty-source", message: text, file: emptyFile };
   if (isSignInRefusalError(err)) return { kind: "signed-out", message: text };
+  const retryAfterSeconds = getBusyRetryAfter(err);
+  if (retryAfterSeconds !== undefined) {
+    return { kind: "busy", message: text, retryAfterSeconds };
+  }
   return { kind: answered === false ? "no-answer" : "other", message: text };
 };
 
@@ -337,8 +346,9 @@ export class PgFlow {
               ? state.buildStartedBefore
               : state.buildStartedAt,
           stopped: null,
-          // A refusal for sign-in is answered by this run, whatever it brings
-          buildFailure: isSignInRefusal(state.buildFailure)
+          // A refusal for sign-in or a busy service is answered by this run,
+          // whatever it brings
+          buildFailure: isBuildRefusal(state.buildFailure)
             ? INITIAL_FLOW_STATE.buildFailure
             : state.buildFailure,
         };
@@ -351,9 +361,10 @@ export class PgFlow {
           stopped: "build",
         };
       case "build-finish":
-        // A refusal for sign-in is not a failed build: the stage goes back to
-        // where it was, as after a stop, and keeps the reason for the surface
-        if (isSignInRefusal(ev.failure)) {
+        // A refusal for sign-in or a busy service is not a failed build: the
+        // stage goes back to where it was, as after a stop, and keeps the
+        // reason for the surface
+        if (isBuildRefusal(ev.failure)) {
           return {
             ...state,
             stage: "build",

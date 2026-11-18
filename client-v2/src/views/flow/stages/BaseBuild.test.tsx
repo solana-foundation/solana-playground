@@ -857,6 +857,32 @@ describe("BaseBuild", () => {
     expect(brandButtons(container)).toHaveLength(1);
   });
 
+  // HOO-2907: a user past a build limit is told to wait, not that the build failed
+  it("says builds are busy and for how long, with Try again as the one action", async () => {
+    const p = props({
+      kind: "unreached",
+      failure: {
+        kind: "busy",
+        message: "You already have a build running.",
+        retryAfterSeconds: 15,
+      },
+    });
+    const { container } = render(<BaseBuild {...p} />);
+
+    expect(
+      screen.getByRole("heading", { name: "Builds are busy, retry in 15 s" })
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "You already have a build running. Your code is unchanged."
+      )
+    ).toBeTruthy();
+    expect(screen.queryByText("Could not build")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await vi.waitFor(() => expect(p.onBuild).toHaveBeenCalled());
+    expect(brandButtons(container)).toHaveLength(1);
+  });
+
   // HOO-2422: the Foundation's server builds only for a signed-in user
   it("asks a signed-out user to sign in, with that one action", async () => {
     const p = props({

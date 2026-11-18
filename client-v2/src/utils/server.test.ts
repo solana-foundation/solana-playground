@@ -201,6 +201,64 @@ describe("a refusal", () => {
     expect(error.isPlain).toBe(false);
   });
 
+  it("carries Retry-After of a 429, as a plain refusal", async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 429,
+      headers: new Headers({ "retry-after": "42" }),
+      text: async () =>
+        JSON.stringify({
+          error: "You already have a build running.",
+          reason: "build-limit",
+        }),
+    });
+
+    const error = await PgServer.build({ files: [] }).catch((e) => e);
+
+    expect(error).toMatchObject({
+      status: 429,
+      retryAfterSeconds: 42,
+      message: "You already have a build running.",
+      isPlain: true,
+    });
+  });
+
+  it("carries Retry-After of a 503 too, for a full build queue", async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 503,
+      headers: new Headers({ "retry-after": "5" }),
+      text: async () => "queue full",
+    });
+
+    const error = await PgServer.build({ files: [] }).catch((e) => e);
+
+    expect(error.retryAfterSeconds).toBe(5);
+  });
+
+  it("reads no wait from a 429 without Retry-After, a date, or another status", async () => {
+    const answer = (status: number, retryAfter?: string) =>
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status,
+        headers: new Headers(retryAfter ? { "retry-after": retryAfter } : {}),
+        text: async () => "x",
+      });
+
+    answer(429);
+    expect(
+      (await PgServer.build({ files: [] }).catch((e) => e)).retryAfterSeconds
+    ).toBeUndefined();
+    answer(429, "Wed, 21 Oct 2026 07:28:00 GMT");
+    expect(
+      (await PgServer.build({ files: [] }).catch((e) => e)).retryAfterSeconds
+    ).toBeUndefined();
+    answer(500, "30");
+    expect(
+      (await PgServer.build({ files: [] }).catch((e) => e)).retryAfterSeconds
+    ).toBeUndefined();
+  });
+
   it("keeps a plain-text error as it was, with no reason", async () => {
     refuse(500, "Invalid UUID");
 

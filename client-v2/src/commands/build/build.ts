@@ -18,6 +18,7 @@ import {
   PgWeb3,
   TupleFiles,
 } from "../../utils";
+import { isBusyRefusalError } from "../../utils/busy-refusal";
 import { isSignInRefusalError } from "../../utils/sign-in-refusal";
 import { STOPPED, throwIfStopped } from "../../utils/stopped";
 import { isMacroSymptomText } from "../../views/flow/stages/build-report";
@@ -74,10 +75,11 @@ export const build = createCmd({
           framework,
           reason: reasonOf(e),
         });
-        // A refusal for sign-in never reached the compiler, so the saved
-        // verdict stays: a reload would otherwise show a failed build. It may
-        // be a pass for older code, so Deploy is told this source never built
-        if (isSignInRefusalError(e)) {
+        // A refusal for sign-in, or for a busy service (HOO-2907), never
+        // reached the compiler, so the saved verdict stays: a reload would
+        // otherwise show a failed build. It may be a pass for older code, so
+        // Deploy is told this source never built
+        if (isSignInRefusalError(e) || isBusyRefusalError(e)) {
           if (isStillOpen()) markBuildRefused(workspace);
           throw e;
         }

@@ -5,7 +5,11 @@ import { createLogger } from "@/shared/lib/logger";
 import { BUILD_SERVER_ROUTE } from "../settings/server/default-endpoint";
 import { PgCommon } from "./common";
 import type { TupleFiles } from "./explorer";
-import { PgServerError, UNREADABLE_BODY } from "./server-error";
+import {
+  parseRetryAfter,
+  PgServerError,
+  UNREADABLE_BODY,
+} from "./server-error";
 import { PgSettings } from "./settings";
 
 export { PgServerError };
@@ -133,12 +137,23 @@ export class PgServer {
         status: response.status,
         body,
         refusal: refusalOf(body),
+        retryAfterSeconds: retryAfterOf(response),
       });
     }
 
     return response;
   }
 }
+
+/**
+ * How long a `429` or `503` asks to wait. Another status's `Retry-After` is
+ * not a busy server's, so it is left unread. `headers` is optional because
+ * the tests' responses are plain objects.
+ */
+const retryAfterOf = (response: Response) =>
+  response.status === 429 || response.status === 503
+    ? parseRetryAfter(response.headers?.get("retry-after") ?? null)
+    : undefined;
 
 /**
  * A refusal `/api/build-server` explains: JSON with the words to show and,

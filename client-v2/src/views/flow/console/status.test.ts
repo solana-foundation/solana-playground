@@ -65,6 +65,21 @@ describe("describeConsoleStatus", () => {
     ).toEqual({ text: "Sign in to build", tone: "idle" });
   });
 
+  it("says builds are busy and for how long, in the normal colour", () => {
+    expect(
+      describeConsoleStatus(
+        state({
+          build: "done",
+          buildFailure: {
+            kind: "busy",
+            message: "You already have a build running.",
+            retryAfterSeconds: 15,
+          },
+        })
+      )
+    ).toEqual({ text: "Build busy · retry in 15 s", tone: "idle" });
+  });
+
   it("is blank before the first build", () => {
     expect(describeConsoleStatus(state({}))).toEqual({
       text: "",
