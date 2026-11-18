@@ -67,12 +67,37 @@ RUN case "${SOLANA_VERSION}" in \
     && rm /tmp/solana-release.tar.bz2
 ENV PATH="${HOME}/.local/share/solana/install/active_release/bin:${PATH}"
 
+# The platform tools and Criterion that version's SDK would download unchecked
+# on its first build, placed where it looks first
+# (~/.cache/solana/<version>/<name>), each checked against a pinned SHA-256.
+# The versions are the ones that Solana version's SDK names. GitHub publishes
+# a digest for platform tools v1.52; the others have none, so theirs were taken
+# from the download.
+RUN case "${SOLANA_VERSION}" in \
+      1.17.25) tools="v1.37" tools_sum="8d5153589dbe19635affe937663cf4555a7e69a62d91ab4a1df064aaa8d5f066" ;; \
+      3.1.10) tools="v1.52" tools_sum="8b3861e93daf085ec12b65c4fac374d9bec4587a3de16871da6b08ab0c1d907e" ;; \
+      *) echo "no pinned platform tools for Solana ${SOLANA_VERSION}" >&2; exit 1 ;; \
+    esac \
+    && criterion="v2.3.3" criterion_sum="ee7f92d7268563848aa3ae90bbf5df86604b8d0fb0e4942b0ecfbf6201596550" \
+    && curl --proto '=https' --tlsv1.2 -sSfLo /tmp/platform-tools.tar.bz2 \
+      "https://github.com/anza-xyz/platform-tools/releases/download/${tools}/platform-tools-linux-x86_64.tar.bz2" \
+    && echo "${tools_sum}  /tmp/platform-tools.tar.bz2" | sha256sum -c - \
+    && mkdir -p "${HOME}/.cache/solana/${tools}/platform-tools" \
+    && tar -xjf /tmp/platform-tools.tar.bz2 -C "${HOME}/.cache/solana/${tools}/platform-tools" \
+    && rm /tmp/platform-tools.tar.bz2 \
+    && curl --proto '=https' --tlsv1.2 -sSfLo /tmp/criterion.tar.bz2 \
+      "https://github.com/Snaipe/Criterion/releases/download/${criterion}/criterion-${criterion}-linux-x86_64.tar.bz2" \
+    && echo "${criterion_sum}  /tmp/criterion.tar.bz2" | sha256sum -c - \
+    && mkdir -p "${HOME}/.cache/solana/${criterion}/criterion" \
+    && tar --strip-components 1 -xjf /tmp/criterion.tar.bz2 -C "${HOME}/.cache/solana/${criterion}/criterion" \
+    && rm /tmp/criterion.tar.bz2
+
 FROM solana AS final
 
-# Not checked yet, unlike server/Dockerfile: the Anchor CLI `avm install`
-# builds, and the platform tools and Criterion the Solana SDK fetches on the
-# initial build below. This image is built only under the `unstable` feature.
-# Run the installation command
+# Run the installation command. `avm` is pinned to a revision (src/templates);
+# `avm install` builds Anchor < 0.31 from its git tag with --locked, and checks
+# a downloaded Anchor >= 0.31 binary's build provenance attestation before
+# installing it.
 ARG INSTALLATION_COMMAND
 RUN sh -c "${INSTALLATION_COMMAND}"
 

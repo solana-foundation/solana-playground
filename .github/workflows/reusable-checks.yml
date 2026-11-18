@@ -144,8 +144,8 @@ jobs:
         run: docker build --tag solpg-server server
 
       # The per-template images the server builds under its `unstable`
-      # feature: the stage that installs rustup and Solana, for each Solana
-      # version a template pins.
+      # feature: the stage that installs rustup, Solana, the platform tools and
+      # Criterion, for each Solana version a template pins.
       - name: Build the template images' tool stage
         run: |
           for version in 1.17.25 3.1.10; do
