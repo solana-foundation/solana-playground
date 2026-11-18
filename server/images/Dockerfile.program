@@ -69,6 +69,9 @@ ENV PATH="${HOME}/.local/share/solana/install/active_release/bin:${PATH}"
 
 FROM solana AS final
 
+# Not checked yet, unlike server/Dockerfile: the Anchor CLI `avm install`
+# builds, and the platform tools and Criterion the Solana SDK fetches on the
+# initial build below. This image is built only under the `unstable` feature.
 # Run the installation command
 ARG INSTALLATION_COMMAND
 RUN sh -c "${INSTALLATION_COMMAND}"
