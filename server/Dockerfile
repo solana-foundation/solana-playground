@@ -16,11 +16,13 @@ RUN useradd -m -u 1001 -s /bin/bash ${USER}
 USER ${USER}
 ENV HOME="/home/${USER}"
 
-# The three tools this image fetches by URL (rustup-init, the Agave release,
-# the platform tools) are pinned to a version and checked against a SHA-256
-# before use; a mismatch fails the build. To bump one, change its version and
-# take the new checksum from the publisher (rustup publishes rustup-init.sha256
-# next to the binary; GitHub lists each release asset's sha256 digest). Not
+# The tools this image fetches by URL (rustup-init, the Agave release, and the
+# platform tools and Criterion the Solana SDK needs) are pinned to a version
+# and checked against a SHA-256 before use; a mismatch fails the build. To bump
+# one, change its version and take the new checksum from the publisher (rustup
+# publishes rustup-init.sha256 next to the binary; GitHub lists most release
+# assets' sha256 digest; Criterion's, which has none, was taken from the
+# download). Not
 # covered here: the apt packages and the toolchains rustup installs, which
 # their own tools verify against their indexes. The image is x86_64 only:
 # Agave publishes no other Linux build.
@@ -71,12 +73,15 @@ FROM rust AS tools
 ARG USER=solpg
 ARG SOLANA_VERSION="3.1.10"
 ARG SOLANA_SHA256="a7205ff29bcf0f7199740225ecae2b85a28ea9668892d5ec21bd9749882984a1"
-# The platform tools cargo-build-sbf would otherwise download unchecked on its
-# first run. The version must be the default of that Solana version's
-# cargo-build-sbf: bump the two together. The final stage fails the build if
-# cargo-build-sbf fetched any other version.
+# The SDK's first build would otherwise download these two unchecked. It takes
+# each from ~/.cache/solana/<version>/<name> when present, so they are placed
+# there. The versions must be the ones that Solana version's SDK names
+# (platform-tools-sdk/sbf/scripts/install.sh): bump them together. The final
+# stage fails the build if the SDK fetched anything else.
 ARG PLATFORM_TOOLS_VERSION="v1.52"
 ARG PLATFORM_TOOLS_SHA256="8b3861e93daf085ec12b65c4fac374d9bec4587a3de16871da6b08ab0c1d907e"
+ARG CRITERION_VERSION="v2.3.3"
+ARG CRITERION_SHA256="ee7f92d7268563848aa3ae90bbf5df86604b8d0fb0e4942b0ecfbf6201596550"
 
 # Install Solana, in the layout of Agave's installer
 RUN curl --proto '=https' --tlsv1.2 -sSfLo /tmp/solana-release.tar.bz2 \
@@ -89,14 +94,20 @@ RUN curl --proto '=https' --tlsv1.2 -sSfLo /tmp/solana-release.tar.bz2 \
     && rm /tmp/solana-release.tar.bz2
 ENV PATH="${HOME}/.local/share/solana/install/active_release/bin:${PATH}"
 
-# Install the platform tools where cargo-build-sbf looks before downloading
+# Install the platform tools and Criterion where the SDK looks before downloading
 RUN curl --proto '=https' --tlsv1.2 -sSfLo /tmp/platform-tools.tar.bz2 \
       "https://github.com/anza-xyz/platform-tools/releases/download/${PLATFORM_TOOLS_VERSION}/platform-tools-linux-x86_64.tar.bz2" \
     && echo "${PLATFORM_TOOLS_SHA256}  /tmp/platform-tools.tar.bz2" | sha256sum -c - \
     && mkdir -p "${HOME}/.cache/solana/${PLATFORM_TOOLS_VERSION}/platform-tools" \
     && tar -xjf /tmp/platform-tools.tar.bz2 -C "${HOME}/.cache/solana/${PLATFORM_TOOLS_VERSION}/platform-tools" \
     && rm /tmp/platform-tools.tar.bz2
-ENV PLATFORM_TOOLS_VERSION="${PLATFORM_TOOLS_VERSION}"
+RUN curl --proto '=https' --tlsv1.2 -sSfLo /tmp/criterion.tar.bz2 \
+      "https://github.com/Snaipe/Criterion/releases/download/${CRITERION_VERSION}/criterion-${CRITERION_VERSION}-linux-x86_64.tar.bz2" \
+    && echo "${CRITERION_SHA256}  /tmp/criterion.tar.bz2" | sha256sum -c - \
+    && mkdir -p "${HOME}/.cache/solana/${CRITERION_VERSION}/criterion" \
+    && tar --strip-components 1 -xjf /tmp/criterion.tar.bz2 -C "${HOME}/.cache/solana/${CRITERION_VERSION}/criterion" \
+    && rm /tmp/criterion.tar.bz2
+ENV PLATFORM_TOOLS_VERSION="${PLATFORM_TOOLS_VERSION}" CRITERION_VERSION="${CRITERION_VERSION}"
 
 ################################# START SERVER #################################
 FROM tools
@@ -111,8 +122,8 @@ COPY --chown=${USER}:${USER} programs programs
 # Cloud Build's legacy builder strips the owner write bit from context files; the server rewrites programs/<id>/Cargo.toml at runtime
 RUN chmod -R u+w programs
 RUN cargo-build-sbf --manifest-path programs/Cargo.toml -- --locked
-RUN test "$(ls "${HOME}/.cache/solana")" = "${PLATFORM_TOOLS_VERSION}" \
-    || { echo "cargo-build-sbf fetched platform tools other than the pinned ${PLATFORM_TOOLS_VERSION}" >&2; exit 1; }
+RUN test "$(ls "${HOME}/.cache/solana")" = "$(printf '%s\n' "${PLATFORM_TOOLS_VERSION}" "${CRITERION_VERSION}" | sort)" \
+    || { echo "the Solana SDK fetched tools other than the pinned ones:" >&2; ls "${HOME}/.cache/solana" >&2; exit 1; }
 
 # Start server
 COPY --from=build /build/target/release/solpg-server .

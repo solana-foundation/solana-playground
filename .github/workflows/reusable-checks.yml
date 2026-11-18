@@ -129,7 +129,7 @@ jobs:
 
   # Builds the image App Engine deploys, so a download whose pinned checksum
   # no longer matches fails here before it fails a deploy. The second step
-  # proves the check bites: a wrong checksum must stop the build.
+  # proves the check bites: each wrong checksum must stop the build.
   image_server:
     name: Image server
     runs-on: ubuntu-latest
@@ -147,7 +147,7 @@ jobs:
         run: |
           zero=0000000000000000000000000000000000000000000000000000000000000000
           for check in rust:RUSTUP_SHA256:rustup-init tools:SOLANA_SHA256:solana-release.tar.bz2 \
-            tools:PLATFORM_TOOLS_SHA256:platform-tools.tar.bz2; do
+            tools:PLATFORM_TOOLS_SHA256:platform-tools.tar.bz2 tools:CRITERION_SHA256:criterion.tar.bz2; do
             IFS=: read -r target arg file <<<"$check"
             if out=$(docker build --progress=plain --target "$target" \
               --build-arg "$arg=$zero" server 2>&1); then
