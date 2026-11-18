@@ -57,6 +57,7 @@ const props = (
   onAsk: vi.fn(),
   onOpenFile: vi.fn(),
   onShowLog: vi.fn(),
+  onSignIn: vi.fn(),
   onStop: vi.fn(),
   idlActions: null,
   idlGuide: <button aria-label={GUIDE}>{GUIDE}</button>,
@@ -853,6 +854,35 @@ describe("BaseBuild", () => {
     expect(p.onOpenFile).toHaveBeenCalledWith("src/lib.rs");
     fireEvent.click(screen.getByRole("button", { name: "Build" }));
     expect(p.onBuild).toHaveBeenCalled();
+    expect(brandButtons(container)).toHaveLength(1);
+  });
+
+  // HOO-2422: the Foundation's server builds only for a signed-in user
+  it("asks a signed-out user to sign in, with that one action", async () => {
+    const p = props({
+      kind: "unreached",
+      failure: {
+        kind: "signed-out",
+        message: "Sign in with GitHub to build.",
+      },
+    });
+    const { container } = render(<BaseBuild {...p} />);
+
+    expect(
+      screen.getByRole("heading", { name: "Sign in with GitHub to build" })
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Builds run on Playground's build server, which needs a GitHub sign-in. Your code stays in this browser."
+      )
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show details" })).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Sign in with GitHub" })
+    );
+    await vi.waitFor(() => expect(p.onSignIn).toHaveBeenCalled());
+    // One action: signing in builds again by itself
+    expect(screen.queryByRole("button", { name: "Build" })).toBeNull();
     expect(brandButtons(container)).toHaveLength(1);
   });
 });
