@@ -143,6 +143,16 @@ jobs:
       - name: Build image
         run: docker build --tag solpg-server server
 
+      # The per-template images the server builds under its `unstable`
+      # feature: the stage that installs rustup and Solana, for each Solana
+      # version a template pins.
+      - name: Build the template images' tool stage
+        run: |
+          for version in 1.17.25 3.1.10; do
+            docker build --file server/images/Dockerfile.program --target solana \
+              --build-arg "SOLANA_VERSION=$version" server
+          done
+
       - name: Refuse a download whose checksum differs
         run: |
           zero=0000000000000000000000000000000000000000000000000000000000000000
