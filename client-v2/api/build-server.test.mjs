@@ -398,6 +398,32 @@ describe("/api/build-server", () => {
     assert.equal(res.headers["retry-after"], undefined);
   });
 
+  it("drops a Retry-After that comes with a 500, and still logs the 500", async () => {
+    const d = depsWith({
+      fetch: mock.fn(
+        async () =>
+          new Response("boom", {
+            status: 500,
+            headers: { "retry-after": "30" },
+          })
+      ),
+    });
+    const res = makeRes();
+    const warn = mock.method(console, "warn", () => {});
+    try {
+      await handleWith(d)(postBuild(BUILD), res);
+
+      const logged = warn.mock.calls.filter((c) =>
+        JSON.stringify(c.arguments).includes("answered with an error")
+      );
+      assert.equal(logged.length, 1);
+    } finally {
+      warn.mock.restore();
+    }
+    assert.equal(res.statusCode, 500);
+    assert.equal(res.headers["retry-after"], undefined);
+  });
+
   it("answers 502 when the server cannot be reached, and records it", async () => {
     const d = depsWith({
       fetch: mock.fn(async () => {

@@ -172,9 +172,11 @@ const relayHead = (res, upstream) => {
   res.statusCode = upstream.status;
   const type = upstream.headers.get("content-type");
   if (type) res.setHeader("content-type", type);
-  // A busy build server says when to come back; the Build stage shows it
+  // A busy build server says when to come back, and the Build stage shows
+  // it; the client reads Retry-After only from a 429 or 503 (busy-refusal.ts)
   const retryAfter = upstream.headers.get("retry-after");
-  if (retryAfter) res.setHeader("retry-after", retryAfter);
+  const isBusy = upstream.status === 429 || upstream.status === 503;
+  if (isBusy && retryAfter) res.setHeader("retry-after", retryAfter);
   res.setHeader("cache-control", "no-store");
 };
 
@@ -430,7 +432,9 @@ export const handleWith = (deps) => {
     }
     // A 503 with Retry-After is the build server's queue saying it is full:
     // the user is told to retry, nothing is broken
-    if (upstream.status >= 500 && !upstream.headers.has("retry-after")) {
+    const isQueueFull =
+      upstream.status === 503 && upstream.headers.has("retry-after");
+    if (upstream.status >= 500 && !isQueueFull) {
       log.warn("build server answered with an error", {
         context: { path, status: upstream.status },
       });

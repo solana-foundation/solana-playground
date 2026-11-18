@@ -4,7 +4,10 @@
  * `429` when the user is past a build limit (HOO-2907) and `503` when the
  * build server's queue is full (HOO-2908), each with `Retry-After`; the
  * header is what makes it a busy refusal, so a `503` without one (sign-in
- * unavailable, no build server configured) stays an ordinary failure. Read
+ * unavailable, no build server configured) stays an ordinary failure. The
+ * two statuses are one answer on purpose: for the person, both mean "wait
+ * this long, then build again", and the server's words (`message`) say which
+ * limit it was. Split them only when the two must act differently. Read
  * off any error by shape, like `isSignInRefusalError`, so a test double or a
  * rethrown copy still reads as one.
  *

@@ -154,6 +154,8 @@ describe("the count on a real build_audit table", () => {
     async () => {
       const pg = (await import("pg")).default;
       const pool = new pg.Pool({ connectionString: DB, max: 1 });
+      // An idle client's dropped connection must not crash the test process;
+      // the query that needed it fails the test on its own
       pool.on("error", () => {});
       const userId = "test-user-build-limits";
       const other = "test-user-build-limits-other";
@@ -195,6 +197,8 @@ describe("the count on a real build_audit table", () => {
         assert.equal(verdict.ok, false);
         assert.equal(verdict.limit, "running");
       } finally {
+        // A failed cleanup must not hide the assertion that failed above;
+        // the rows it leaves are removed by `clean()` at the next run's start
         await clean().catch(() => {});
         await pool.end();
       }

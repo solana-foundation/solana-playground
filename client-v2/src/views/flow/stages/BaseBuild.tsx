@@ -467,18 +467,18 @@ const Busy = (
  */
 const useCountdown = (message: string, seconds: number) => {
   const [left, setLeft] = useState(seconds);
+  const isCounting = left > 0;
+  // A new answer starts the count again
   useEffect(() => {
     setLeft(seconds);
-    const id = setInterval(
-      () =>
-        setLeft((n) => {
-          if (n <= 1) clearInterval(id);
-          return Math.max(0, n - 1);
-        }),
-      1000
-    );
-    return () => clearInterval(id);
   }, [message, seconds]);
+  // Ticks while there is time left; the updater stays pure, as React may
+  // call it twice
+  useEffect(() => {
+    if (!isCounting) return;
+    const id = setInterval(() => setLeft((n) => Math.max(0, n - 1)), 1000);
+    return () => clearInterval(id);
+  }, [isCounting]);
   return left;
 };
 
