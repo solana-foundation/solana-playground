@@ -111,6 +111,9 @@ ARG TEMPLATE
 COPY --chown=${USER}:${USER} templates/${TEMPLATE}/ .
 
 # Build the default program to cache
+# Unlike server/Dockerfile, nothing checks after this build that the SDK took
+# only the pre-placed tools: CI builds this image only up to the `solana` stage,
+# so such a check would never run there.
 ARG INITIAL_BUILD_COMMAND
 RUN sh -c "${INITIAL_BUILD_COMMAND}"
 

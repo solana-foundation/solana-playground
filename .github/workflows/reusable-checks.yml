@@ -128,8 +128,9 @@ jobs:
         run: cargo test --locked
 
   # Builds the image App Engine deploys, so a download whose pinned checksum
-  # no longer matches fails here before it fails a deploy. The second step
-  # proves the check bites: each wrong checksum must stop the build.
+  # no longer matches fails here before it fails a deploy. The last step
+  # proves the check bites: each of server/Dockerfile's checksums, set wrong,
+  # must stop the build.
   image_server:
     name: Image server
     runs-on: ubuntu-latest
