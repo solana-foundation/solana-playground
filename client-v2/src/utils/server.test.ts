@@ -244,23 +244,23 @@ describe("a refusal", () => {
   });
 
   it("reads no wait from a 429 without Retry-After, a date, or another status", async () => {
-    const answer = (status: number, retryAfter?: string) =>
+    const answer = (status: number, headers: Record<string, string>) =>
       mockFetch.mockResolvedValue({
         ok: false,
         status,
-        headers: new Headers(retryAfter ? { "retry-after": retryAfter } : {}),
+        headers: new Headers(headers),
         text: async () => "x",
       });
 
-    answer(429);
+    answer(429, {});
     expect(
       (await PgServer.build({ files: [] }).catch((e) => e)).retryAfterSeconds
     ).toBeUndefined();
-    answer(429, "Wed, 21 Oct 2026 07:28:00 GMT");
+    answer(429, { "retry-after": "Wed, 21 Oct 2026 07:28:00 GMT" });
     expect(
       (await PgServer.build({ files: [] }).catch((e) => e)).retryAfterSeconds
     ).toBeUndefined();
-    answer(500, "30");
+    answer(500, { "retry-after": "30" });
     expect(
       (await PgServer.build({ files: [] }).catch((e) => e)).retryAfterSeconds
     ).toBeUndefined();

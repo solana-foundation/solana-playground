@@ -28,10 +28,13 @@ interface PgServerErrorInit {
  * `/api/build-server` sends; a date, a fraction or a negative number is
  * not read.
  *
- * @param value the header's value, `null` when the response had none
+ * @param value the header's value; `null` or `undefined` when there was none
  */
-export const parseRetryAfter = (value: string | null): number | undefined => {
-  if (value === null || !/^\d+$/.test(value.trim())) return undefined;
+export const parseRetryAfter = (
+  value: string | null | undefined
+): number | undefined => {
+  if (typeof value !== "string" || !/^\d+$/.test(value.trim()))
+    return undefined;
   return Number(value.trim());
 };
 

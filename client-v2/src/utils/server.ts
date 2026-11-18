@@ -152,7 +152,7 @@ export class PgServer {
  */
 const retryAfterOf = (response: Response) =>
   response.status === 429 || response.status === 503
-    ? parseRetryAfter(response.headers?.get("retry-after") ?? null)
+    ? parseRetryAfter(response.headers?.get("retry-after"))
     : undefined;
 
 /**

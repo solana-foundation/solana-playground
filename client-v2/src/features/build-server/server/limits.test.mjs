@@ -13,11 +13,10 @@ import {
 } from "./limits.mjs";
 
 const counts = (over) => ({
-  running: 0,
-  lastHour: 0,
-  runningFreesInSeconds: undefined,
-  hourFreesInSeconds: undefined,
-  ...over,
+  running: over.running ?? 0,
+  lastHour: over.lastHour ?? 0,
+  runningFreesInSeconds: over.runningFreesInSeconds,
+  hourFreesInSeconds: over.hourFreesInSeconds,
 });
 
 describe("judgeBuild", () => {
@@ -94,6 +93,7 @@ describe("countBuildsWith", () => {
           running: "1",
           last_hour: "5",
           running_frees_in: "42.5",
+          // eslint-disable-next-line unicorn/no-null -- a Postgres row: no build in the hour reads as null
           hour_frees_in: null,
         },
       ],
@@ -135,6 +135,7 @@ describe("checkBuildLimitWith", () => {
 describe("BUILD_MAX_DURATION_SECONDS", () => {
   it("equals the build route's maxDuration in vercel.json", () => {
     const config = JSON.parse(
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- a fixed path to the repository's vercel.json
       readFileSync(new URL("../../../../vercel.json", import.meta.url), "utf8")
     );
     assert.equal(
@@ -161,20 +162,21 @@ describe("the count on a real build_audit table", () => {
           [userId, other],
         ]);
       // `at` is set by hand: the rows say how long ago each build started
-      const row = (user, secondsAgo, status) =>
+      const rowFor = (user) => (secondsAgo, status) =>
         pool.query(
           `insert into build_audit (user_id, at, unstable, request_bytes, status)
            values ($1, now() - make_interval(secs => $2), false, 1, $3)`,
           [user, secondsAgo, status]
         );
+      const row = rowFor(userId);
 
       try {
         await clean();
-        await row(userId, 10, undefined); // running
-        await row(userId, BUILD_MAX_DURATION_SECONDS + 60, undefined); // function died
-        await row(userId, 120, 200); // finished
-        await row(userId, 2 * 60 * 60, undefined); // outside the hour
-        await row(other, 5, undefined); // someone else's
+        await row(10, undefined); // running
+        await row(BUILD_MAX_DURATION_SECONDS + 60, undefined); // function died
+        await row(120, 200); // finished
+        await row(2 * 60 * 60, undefined); // outside the hour
+        await rowFor(other)(5, undefined); // someone else's
 
         const result = await countBuildsWith((text, params) =>
           pool.query(text, params)
