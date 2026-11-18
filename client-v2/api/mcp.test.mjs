@@ -170,6 +170,138 @@ describe("/api/mcp limits", () => {
     assert.match(body.error.message, /larger than 100 bytes/);
   });
 
+  it("A response declaring a length over the cap is refused unread", async () => {
+    process.env.MCP_MAX_RESPONSE_BYTES = "100";
+    mock.method(
+      global,
+      "fetch",
+      async () =>
+        new Response("{}", {
+          headers: {
+            "content-type": "application/json",
+            "content-length": "99999",
+          },
+        })
+    );
+
+    const res = makeRes();
+    await handler(request("POST", "/api/mcp", toolsCall({ name: "x" })), res);
+
+    assert.match(JSON.parse(res.body).error.message, /larger than 100 bytes/);
+  });
+
+  it("A streamed response is refused once its chunks pass the cap", async () => {
+    process.env.MCP_MAX_RESPONSE_BYTES = "100";
+    let cancelled = false;
+    const stream = new ReadableStream({
+      pull(controller) {
+        controller.enqueue(new TextEncoder().encode("x".repeat(40)));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    mock.method(
+      global,
+      "fetch",
+      async () =>
+        new Response(stream, {
+          headers: { "content-type": "text/event-stream" },
+        })
+    );
+
+    const res = makeRes();
+    await handler(request("POST", "/api/mcp", toolsCall({ name: "x" })), res);
+
+    assert.match(JSON.parse(res.body).error.message, /larger than 100 bytes/);
+    assert.ok(cancelled);
+  });
+
+  it("An oversized error page still reports its status", async () => {
+    process.env.MCP_MAX_RESPONSE_BYTES = "100";
+    mock.method(
+      global,
+      "fetch",
+      async () =>
+        new Response("<html>".repeat(100), {
+          status: 502,
+          statusText: "Bad Gateway",
+        })
+    );
+
+    const res = makeRes();
+    await handler(request("POST", "/api/mcp", toolsCall({ name: "x" })), res);
+
+    assert.match(
+      JSON.parse(res.body).error.message,
+      /^502 Bad Gateway: Upstream response is larger than 100 bytes/
+    );
+  });
+
+  it("A body that stalls after the headers is cut at the timeout", async () => {
+    process.env.MCP_TIMEOUT_MS = "50";
+    mock.method(global, "fetch", async (_url, init) => {
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("data: {"));
+          init.signal.addEventListener("abort", () =>
+            controller.error(init.signal.reason)
+          );
+        },
+      });
+      return new Response(stream, {
+        headers: { "content-type": "text/event-stream" },
+      });
+    });
+
+    const res = makeRes();
+    await handler(request("POST", "/api/mcp", toolsCall({ name: "x" })), res);
+
+    assert.match(
+      JSON.parse(res.body).error.message,
+      /did not answer within 50 ms/
+    );
+  });
+
+  it("An event-stream answer is unwrapped as before", async () => {
+    mock.method(
+      global,
+      "fetch",
+      async () =>
+        new Response(
+          'event: message\ndata: {"jsonrpc":"2.0","id":1,"result":{"content":[]}}\n\n',
+          { headers: { "content-type": "text/event-stream" } }
+        )
+    );
+
+    const res = makeRes();
+    await handler(request("POST", "/api/mcp", toolsCall({ name: "x" })), res);
+
+    assert.deepEqual(JSON.parse(res.body), {
+      jsonrpc: "2.0",
+      id: 7,
+      result: { content: [] },
+    });
+  });
+
+  it("A zero bound falls back to its default", async () => {
+    process.env.MCP_MAX_REQUEST_BYTES = "0";
+    mock.method(
+      global,
+      "fetch",
+      async () =>
+        new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: {} }), {
+          headers: { "content-type": "application/json" },
+        })
+    );
+
+    const res = makeRes();
+    await handler(request("POST", "/api/mcp", toolsCall({ name: "x" })), res);
+
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(JSON.parse(res.body).result, {});
+  });
+
   it("A normal call still returns the upstream's answer", async () => {
     process.env.MCP_TIMEOUT_MS = "1000";
     mock.method(global, "fetch", async (_url, init) => {
@@ -235,6 +367,42 @@ describe("callUpstream redaction", () => {
       assert.ok(!error.message.includes(secret), `leaked ${secret}`);
     }
     assert.match(error.message, /\[redacted\]/);
+  });
+
+  it("A credential quoted percent-encoded is redacted", async () => {
+    const encoded = {
+      id: "a",
+      url: "https://a.test/mcp",
+      queryParams: { key: "key+with/odd=chars 42" },
+    };
+    mock.method(global, "fetch", async (url) => {
+      throw new Error(`connect ECONNREFUSED ${url}`);
+    });
+
+    const error = await callUpstream(encoded, {}, limits).then(
+      () => assert.fail("expected a rejection"),
+      (e) => e
+    );
+
+    assert.ok(!error.message.includes("odd"), error.message);
+  });
+
+  it("A parse error quoting the body is redacted", async () => {
+    mock.method(
+      global,
+      "fetch",
+      async () =>
+        new Response("not json token-abcdefghijklmnop", {
+          headers: { "content-type": "application/json" },
+        })
+    );
+
+    const error = await callUpstream(upstream, {}, limits).then(
+      () => assert.fail("expected a rejection"),
+      (e) => e
+    );
+
+    assert.ok(!error.message.includes("token-abcdefghijklmnop"));
   });
 
   it("A network error naming the URL is redacted too", async () => {

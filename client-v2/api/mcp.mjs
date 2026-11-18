@@ -21,7 +21,8 @@
  * Every request is bounded (`mcpEnv`): an upstream call is cut after
  * `MCP_TIMEOUT_MS`, a request body over `MCP_MAX_REQUEST_BYTES` is refused
  * with 413, and an upstream response over `MCP_MAX_RESPONSE_BYTES` is refused.
- * An upstream failure reaches the caller with the entry's credentials removed.
+ * An upstream failure reaches the caller, and the log, with every credential
+ * of four or more characters the entry carries removed (`secretsOf`).
  *
  * Plain ESM on raw Node request/response APIs — see `api/health.mjs` for why.
  */
@@ -69,10 +70,11 @@ const SEPARATOR = "__";
  */
 
 /**
- * A credential shorter than this is not removed from error text: it gives
- * little away, and removing it would mangle ordinary words and numbers.
+ * A value shorter than this is not removed from error text: it is no
+ * credential (a flag such as `1`), and removing it would mangle every number
+ * in the message, the status code included.
  */
-const MIN_SECRET_LENGTH = 8;
+const MIN_SECRET_LENGTH = 4;
 
 /**
  * The request body as the gateway reads it: unvalidated, its `id` echoed back verbatim.
@@ -188,7 +190,8 @@ const selected = (url, configured) => {
 /**
  * Every credential an entry carries, for removal from error text: its token,
  * header values, query values, bot-protection bypass, and whatever its URL
- * holds in user info or query.
+ * holds in user info or query. Each in its percent-encoded forms too, since an
+ * error that quotes the request URL quotes them encoded.
  *
  * @param {Upstream} upstream
  */
@@ -199,23 +202,57 @@ const secretsOf = (upstream) => {
   } catch {
     // An unparseable URL holds nothing to find; its other credentials still count
   }
-  return [
+  const values = [
     upstream.authToken,
     upstream.protection?.secret,
     ...Object.values(upstream.headers ?? {}),
     ...Object.values(upstream.queryParams ?? {}),
+    // `URL` keeps user info percent-encoded; the decoded form is added below
     url?.username,
     url?.password,
     ...(url ? [...url.searchParams.values()] : []),
-  ].filter(
-    (secret) => typeof secret === "string" && secret.length >= MIN_SECRET_LENGTH
-  );
+  ]
+    .filter((value) => value !== undefined && value !== null)
+    .map(String);
+
+  return values
+    .flatMap((value) => {
+      let decoded = value;
+      try {
+        decoded = decodeURIComponent(value);
+      } catch {
+        // Not percent-encoded: the value as given is the one to find
+      }
+      return [
+        value,
+        decoded,
+        encodeURIComponent(decoded),
+        // How `searchParams.set` writes it: a space as `+`
+        new URLSearchParams({ v: decoded }).toString().slice(2),
+      ];
+    })
+    .filter((secret) => secret.length >= MIN_SECRET_LENGTH);
 };
 
 /**
- * The response body as text, refused once it passes `limit` bytes: from
- * `content-length` when the upstream sent one, and by counting while reading
- * when it did not, so the rest is never buffered.
+ * Stop reading a response being refused. A cancel that fails (the stream
+ * already errored) is ignored: the refusal is the error worth reporting.
+ *
+ * @param {{ cancel: () => Promise<void> } | null} stream
+ */
+const cancelQuietly = async (stream) => {
+  try {
+    await stream?.cancel();
+  } catch {
+    // Nothing more to stop
+  }
+};
+
+/**
+ * The response body as text, refused once it passes `limit` bytes. A
+ * `content-length` over the limit refuses it unread; the bytes are counted
+ * while reading regardless, since that header can be absent or wrong, so the
+ * rest is never buffered.
  *
  * @param {Response} response
  * @param {number} limit bytes
@@ -224,7 +261,7 @@ const readCapped = async (response, limit) => {
   const tooLarge = () =>
     new Error(`Upstream response is larger than ${limit} bytes.`);
   if (Number(response.headers.get("content-length")) > limit) {
-    await response.body?.cancel();
+    await cancelQuietly(response.body);
     throw tooLarge();
   }
   if (!response.body) return "";
@@ -238,7 +275,7 @@ const readCapped = async (response, limit) => {
     bytes += value.byteLength;
     if (bytes > limit) {
       // Stop reading: the rest is never buffered
-      await reader.cancel();
+      await cancelQuietly(reader);
       throw tooLarge();
     }
     chunks.push(value);
@@ -262,12 +299,16 @@ const exchange = async (upstream, payload, limits) => {
   for (const [key, value] of Object.entries(upstream.queryParams ?? {})) {
     url.searchParams.set(key, value);
   }
-  // Covers the body too: aborting the request ends its response stream. A
-  // timer of our own rather than `AbortSignal.timeout`, whose timer does not
-  // keep the process alive, and is cleared once the call settles.
+  // Covers the body too: aborting the request ends its response stream. The
+  // flag tells the timer's abort from any other failure, and the timer is
+  // cleared once the call settles.
   const controller = new AbortController();
   const { signal } = controller;
-  const timer = setTimeout(() => controller.abort(), limits.timeoutMs);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, limits.timeoutMs);
   try {
     const response = await fetch(url, {
       method: "POST",
@@ -285,12 +326,16 @@ const exchange = async (upstream, payload, limits) => {
       signal,
     });
 
-    const text = await readCapped(response, limits.maxResponseBytes);
     if (!response.ok) {
+      // An oversized error page still reports its status
+      const detail = await readCapped(response, limits.maxResponseBytes).catch(
+        (/** @type {Error} */ e) => e.message
+      );
       throw new Error(
-        `${response.status} ${response.statusText}: ${text.slice(0, 200)}`
+        `${response.status} ${response.statusText}: ${detail.slice(0, 200)}`
       );
     }
+    const text = await readCapped(response, limits.maxResponseBytes);
 
     if (!response.headers.get("content-type")?.includes("text/event-stream")) {
       return JSON.parse(text);
@@ -300,7 +345,10 @@ const exchange = async (upstream, payload, limits) => {
     }
     throw new Error("Upstream sent an event stream with no data.");
   } catch (e) {
-    if (signal.aborted) {
+    if (
+      timedOut &&
+      (e === signal.reason || /** @type {Error} */ (e)?.name === "AbortError")
+    ) {
       throw new Error(
         `Upstream "${upstream.id}" did not answer within ${limits.timeoutMs} ms.`
       );
@@ -456,7 +504,7 @@ async function handler(req, res) {
   let ids;
   try {
     const read = await readBoundedBody(req, bounds.MCP_MAX_REQUEST_BYTES);
-    // `readJson` takes the text the way it takes a pre-parsed body
+    // `readBoundedBody` drained the stream, so `readJson` gets the text as a pre-parsed body
     body = await readJson(
       /** @type {import("node:http").IncomingMessage} */ (
         /** @type {unknown} */ ({ body: read.body })
@@ -492,8 +540,11 @@ async function handler(req, res) {
         return sendRpcError(res, id, -32601, `Method not supported: ${method}`);
     }
   } catch (e) {
-    // An upstream failure is the model's business, not a transport error
-    return sendRpcError(res, id, -32603, /** @type {Error} */ (e).message);
+    // An upstream failure is the model's business, not a transport error.
+    // Its message is redacted already (`callUpstream`), so it is logged as is.
+    const message = /** @type {Error} */ (e).message;
+    log.warn(`upstream call failed: ${message}`, { context: { method } });
+    return sendRpcError(res, id, -32603, message);
   }
 }
 
