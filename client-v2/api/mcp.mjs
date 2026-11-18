@@ -200,7 +200,8 @@ const secretsOf = (upstream) => {
   try {
     url = new URL(upstream.url);
   } catch {
-    // An unparseable URL holds nothing to find; its other credentials still count
+    // Its other credentials still count; `exchange` reports the URL itself
+    log.warn(`upstream "${upstream.id}" has an unparseable URL`);
   }
   const values = [
     upstream.authToken,
@@ -221,7 +222,10 @@ const secretsOf = (upstream) => {
       try {
         decoded = decodeURIComponent(value);
       } catch {
-        // Not percent-encoded: the value as given is the one to find
+        // A stray `%`: the value as given is the one to find
+        log.debug(
+          "a credential is not percent-decodable; matching it as given"
+        );
       }
       return [
         value,
@@ -243,8 +247,8 @@ const secretsOf = (upstream) => {
 const cancelQuietly = async (stream) => {
   try {
     await stream?.cancel();
-  } catch {
-    // Nothing more to stop
+  } catch (e) {
+    log.debug(`cancelling a refused response failed: ${String(e)}`);
   }
 };
 
@@ -543,7 +547,7 @@ async function handler(req, res) {
     // An upstream failure is the model's business, not a transport error.
     // Its message is redacted already (`callUpstream`), so it is logged as is.
     const message = /** @type {Error} */ (e).message;
-    log.warn(`upstream call failed: ${message}`, { context: { method } });
+    log.warn(`request failed: ${message}`, { context: { method } });
     return sendRpcError(res, id, -32603, message);
   }
 }
