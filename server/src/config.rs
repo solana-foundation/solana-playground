@@ -1,10 +1,13 @@
-use std::str::FromStr;
+use std::{str::FromStr, time::Duration};
 
 use anyhow::{anyhow, Result};
 use dotenv::dotenv;
 use solpg_server::SandboxLimits;
 
-use crate::middlewares::ApiKeys;
+use crate::{
+    middlewares::ApiKeys,
+    routes::{QueueLimits, DEFAULT_MAX_WAITING, DEFAULT_MAX_WAIT_SECS},
+};
 
 /// Server configuration
 #[derive(Debug)]
@@ -19,6 +22,8 @@ pub struct Config {
     pub verbose: bool,
     /// Maximum amount of concurrent builds
     pub build_concurrency: usize,
+    /// How many build requests may wait for a slot, and for how long
+    pub build_queue: QueueLimits,
     /// Keys the build, deploy and unstable routes accept in `x-api-key`, if
     /// any: `PG_API_KEYS`, comma-separated, one per client, or, only when it
     /// holds none, `PG_API_KEY`, a single key, which deployments set before
@@ -50,6 +55,13 @@ impl Config {
             payload_limit: get_env("PAYLOAD_LIMIT", 1024usize * 1024),
             verbose: get_env("VERBOSE", false),
             build_concurrency: get_env("BUILD_CONCURRENCY", 16usize),
+            build_queue: QueueLimits {
+                max_waiting: get_env("BUILD_QUEUE_LIMIT", DEFAULT_MAX_WAITING),
+                max_wait: Duration::from_secs(get_env(
+                    "BUILD_QUEUE_WAIT_SECS",
+                    DEFAULT_MAX_WAIT_SECS,
+                )),
+            },
             api_keys: api_keys_from(read_env)?,
             unstable_build: BuildConfig {
                 limits: Limits {

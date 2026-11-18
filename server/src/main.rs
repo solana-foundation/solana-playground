@@ -27,7 +27,10 @@ fn app(config: Config) -> Router {
     let build_routes = Router::new()
         .route(
             "/build",
-            post(build).with_state(BuildState::new(config.build_concurrency)),
+            post(build).with_state(BuildState::new(
+                config.build_concurrency,
+                config.build_queue,
+            )),
         )
         .route("/deploy/{uuid}", get(deploy))
         .layer(api_key.clone());

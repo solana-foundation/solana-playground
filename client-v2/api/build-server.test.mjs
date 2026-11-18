@@ -367,6 +367,37 @@ describe("/api/build-server", () => {
     assert.equal(auditCalls(d)[1].arguments[1][2], 500);
   });
 
+  it("passes a busy server's 503 and Retry-After through, and records the 503", async () => {
+    const d = depsWith({
+      fetch: mock.fn(
+        async () =>
+          new Response("The build server is busy, try again in 30 seconds", {
+            status: 503,
+            headers: { "content-type": "text/plain", "retry-after": "30" },
+          })
+      ),
+    });
+    const res = makeRes();
+
+    await handleWith(d)(postBuild(BUILD), res);
+
+    assert.equal(res.statusCode, 503);
+    assert.equal(res.headers["retry-after"], "30");
+    assert.match(res.body, /busy/);
+    assert.equal(auditCalls(d)[1].arguments[1][2], 503);
+  });
+
+  it("sends no Retry-After the server did not send", async () => {
+    const d = depsWith({
+      fetch: mock.fn(async () => new Response("boom", { status: 500 })),
+    });
+    const res = makeRes();
+
+    await handleWith(d)(postBuild(BUILD), res);
+
+    assert.equal(res.headers["retry-after"], undefined);
+  });
+
   it("answers 502 when the server cannot be reached, and records it", async () => {
     const d = depsWith({
       fetch: mock.fn(async () => {

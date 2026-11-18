@@ -1,4 +1,5 @@
 import { PgServer, PgServerError } from "./server";
+import { BUSY_SERVER_MESSAGE } from "./server-error";
 
 const settings = {
   server: { endpoint: "https://server.test" },
@@ -228,12 +229,18 @@ describe("a refusal", () => {
       ok: false,
       status: 503,
       headers: new Headers({ "retry-after": "5" }),
-      text: async () => "queue full",
+      text: async () => "The build server is busy, try again in 5 seconds",
     });
 
     const error = await PgServer.build({ files: [] }).catch((e) => e);
 
-    expect(error.retryAfterSeconds).toBe(5);
+    // The build server's own plain-text body is not shown; the words are ours
+    expect(error).toMatchObject({
+      status: 503,
+      retryAfterSeconds: 5,
+      message: BUSY_SERVER_MESSAGE,
+      isPlain: true,
+    });
   });
 
   it("reads no wait from a 429 without Retry-After, a date, or another status", async () => {

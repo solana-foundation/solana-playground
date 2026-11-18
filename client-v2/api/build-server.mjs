@@ -40,6 +40,10 @@
  * wait included (`REQUEST_TIME_LIMIT` in `server/src/routes/build.rs`,
  * HOO-2874, #174), sized to fit inside this one: change the two together. A
  * server without that bound keeps building after the user sees the failure.
+ * The server also bounds its queue for a slot (`QueueLimits`, HOO-2908): a
+ * request past it, or one that waits `PG_BUILD_QUEUE_WAIT_SECS` (60 s) without
+ * a slot, is answered `503` with `Retry-After` at once, and that pair is
+ * relayed as it came, so the Build stage can say "busy, retry in N s".
  * A caller that leaves aborts the request to the server.
  *
  * Plain ESM on raw Node request/response APIs — see `api/health.mjs` for why.
@@ -168,6 +172,9 @@ const relayHead = (res, upstream) => {
   res.statusCode = upstream.status;
   const type = upstream.headers.get("content-type");
   if (type) res.setHeader("content-type", type);
+  // A busy build server says when to come back; the Build stage shows it
+  const retryAfter = upstream.headers.get("retry-after");
+  if (retryAfter) res.setHeader("retry-after", retryAfter);
   res.setHeader("cache-control", "no-store");
 };
 
@@ -421,7 +428,9 @@ export const handleWith = (deps) => {
         error: "The build server refused this site. Try again later.",
       });
     }
-    if (upstream.status >= 500) {
+    // A 503 with Retry-After is the build server's queue saying it is full:
+    // the user is told to retry, nothing is broken
+    if (upstream.status >= 500 && !upstream.headers.has("retry-after")) {
       log.warn("build server answered with an error", {
         context: { path, status: upstream.status },
       });

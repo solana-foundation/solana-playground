@@ -36,6 +36,21 @@ export const parseRetryAfter = (value: string | null): number | undefined => {
 };
 
 /**
+ * What a busy answer says when it came without `/api/build-server`'s own
+ * words: the build server's full queue (HOO-2908) answers `503` with
+ * `Retry-After` and a plain-text body meant for logs, not for the Build stage
+ */
+export const BUSY_SERVER_MESSAGE =
+  "The build server is busy: too many builds are running.";
+
+/** The words a failed request shows: the refusal's, a busy answer's, or the raw body */
+const messageOf = (init: PgServerErrorInit): string => {
+  if (init.refusal) return init.refusal.error;
+  if (isBusyRefusalError(init)) return BUSY_SERVER_MESSAGE;
+  return `Server request failed (${init.url}): ${init.body}`;
+};
+
+/**
  * A request to the build server that failed. `status` is the HTTP status of
  * a refused request and `body` what the server answered; with no answer
  * (offline, CORS, abort), `status` is `undefined` and `body` is the network
@@ -58,11 +73,7 @@ export class PgServerError extends Error {
   readonly isPlain: boolean;
 
   constructor(init: PgServerErrorInit) {
-    super(
-      init.refusal?.error ??
-        `Server request failed (${init.url}): ${init.body}`,
-      "cause" in init ? { cause: init.cause } : undefined
-    );
+    super(messageOf(init), "cause" in init ? { cause: init.cause } : undefined);
     this.name = "PgServerError";
     this.url = init.url;
     this.status = init.status;

@@ -883,6 +883,44 @@ describe("BaseBuild", () => {
     expect(brandButtons(container)).toHaveLength(1);
   });
 
+  // HOO-2908: the seconds the server asked for count down to "try again now"
+  it("counts the busy answer's seconds down to try again now", () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <BaseBuild
+          {...props({
+            kind: "unreached",
+            failure: {
+              kind: "busy",
+              message: "The build server is busy.",
+              retryAfterSeconds: 3,
+            },
+          })}
+        />
+      );
+      expect(
+        screen.getByRole("heading", { name: "Builds are busy, retry in 3 s" })
+      ).toBeTruthy();
+
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(
+        screen.getByRole("heading", { name: "Builds are busy, retry in 1 s" })
+      ).toBeTruthy();
+
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(
+        screen.getByRole("heading", { name: "Builds are busy, try again now" })
+      ).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // HOO-2422: the Foundation's server builds only for a signed-in user
   it("asks a signed-out user to sign in, with that one action", async () => {
     const p = props({

@@ -435,23 +435,52 @@ const SignedOut = (p: BaseBuildProps) => (
 );
 
 /**
- * HOO-2907: the build service is busy, because this user already has a build
- * running or is past the hourly limit, or because the build server's queue is
- * full. It asked to be tried again in `retryAfterSeconds`. Not a red error:
- * the code was never built, so nothing is wrong with it. The server's own
- * words say which limit it was, and the one action is to try again.
+ * The build service is busy, because this user already has a build running
+ * or is past the hourly limit (HOO-2907, `429`), or because the build
+ * server's queue is full (HOO-2908, `503`). It asked to be tried again in
+ * `retryAfterSeconds`, which counts down here. Not a red error: the code was
+ * never built, so nothing is wrong with it. The server's own words say which
+ * limit it was. Try again stays enabled, since a slot may free sooner.
  */
 const Busy = (
   p: BaseBuildProps & { message: string; retryAfterSeconds: number }
-) => (
-  <Surface
-    title={`Builds are busy, retry in ${p.retryAfterSeconds} s`}
-    description={`${p.message} Your code is unchanged.`}
-    announce="status"
-    actions={<BrandBuildButton p={p} label="Try again" />}
-    progress={p}
-  />
-);
+) => {
+  const left = useCountdown(p.message, p.retryAfterSeconds);
+  return (
+    <Surface
+      title={
+        left > 0
+          ? `Builds are busy, retry in ${left} s`
+          : "Builds are busy, try again now"
+      }
+      description={`${p.message} Your code is unchanged.`}
+      announce="status"
+      actions={<BrandBuildButton p={p} label="Try again" />}
+      progress={p}
+    />
+  );
+};
+
+/**
+ * Whole seconds left of a busy answer's `Retry-After`, counting down to 0.
+ * A new answer restarts it.
+ */
+const useCountdown = (message: string, seconds: number) => {
+  const [left, setLeft] = useState(seconds);
+  useEffect(() => {
+    setLeft(seconds);
+    const id = setInterval(
+      () =>
+        setLeft((n) => {
+          if (n <= 1) clearInterval(id);
+          return Math.max(0, n - 1);
+        }),
+      1000
+    );
+    return () => clearInterval(id);
+  }, [message, seconds]);
+  return left;
+};
 
 /** What BUILD-04 keeps out of its first line: the server and the raw error */
 const Details = ({

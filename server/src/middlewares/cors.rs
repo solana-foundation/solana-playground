@@ -28,5 +28,7 @@ pub fn cors(client_urls: Vec<String>) -> CorsLayer {
         }))
         .allow_methods([Method::GET, Method::POST])
         .allow_headers([header::CONTENT_TYPE])
+        // A busy server's `503` says when to retry, which a browser on another origin may read
+        .expose_headers([header::RETRY_AFTER])
         .max_age(Duration::from_secs(600))
 }
