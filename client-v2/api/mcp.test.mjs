@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
 
-import handler, { callUpstream } from "./mcp.mjs";
+import handler, { callUpstream, createHandler } from "./mcp.mjs";
 import skillsHandler from "./skills.mjs";
 
 const makeRes = () => ({
@@ -32,7 +32,7 @@ describe("/api/mcp with SOURCES", () => {
     mock.restoreAll();
   });
 
-  it("Two servers through the override", async () => {
+  it("merges two servers from the override", async () => {
     // Each upstream answers with one tool named after its host
     mock.method(global, "fetch", async (url, init) => {
       const { id } = JSON.parse(init.body);
@@ -72,7 +72,7 @@ describe("/api/mcp with SOURCES", () => {
     assert.deepEqual(JSON.parse(skills.body).skills, []);
   });
 
-  it("The override is not JSON: 500 naming SOURCES", async () => {
+  it("answers 500 naming SOURCES when the override is not JSON", async () => {
     process.env.SOURCES = "[{";
 
     const res = makeRes();
@@ -105,7 +105,7 @@ describe("/api/mcp limits", () => {
     params,
   });
 
-  it("An upstream that never answers is cut at the timeout", async () => {
+  it("cuts an upstream that never answers at the timeout", async () => {
     process.env.MCP_TIMEOUT_MS = "50";
     // Answers only when aborted, as fetch does
     mock.method(
@@ -130,7 +130,7 @@ describe("/api/mcp limits", () => {
     assert.match(body.error.message, /did not answer within 50 ms/);
   });
 
-  it("A request body over the cap is refused with 413", async () => {
+  it("refuses a request body over the cap with 413", async () => {
     process.env.MCP_MAX_REQUEST_BYTES = "100";
     const fetchMock = mock.method(global, "fetch", async () => {
       throw new Error("must not be called");
@@ -150,7 +150,7 @@ describe("/api/mcp limits", () => {
     assert.equal(fetchMock.mock.callCount(), 0);
   });
 
-  it("An upstream response over the cap is refused", async () => {
+  it("refuses an upstream response over the cap", async () => {
     process.env.MCP_MAX_RESPONSE_BYTES = "100";
     mock.method(
       global,
@@ -170,7 +170,7 @@ describe("/api/mcp limits", () => {
     assert.match(body.error.message, /larger than 100 bytes/);
   });
 
-  it("A response declaring a length over the cap is refused unread", async () => {
+  it("refuses unread a response declaring a length over the cap", async () => {
     process.env.MCP_MAX_RESPONSE_BYTES = "100";
     mock.method(
       global,
@@ -190,7 +190,7 @@ describe("/api/mcp limits", () => {
     assert.match(JSON.parse(res.body).error.message, /larger than 100 bytes/);
   });
 
-  it("A streamed response is refused once its chunks pass the cap", async () => {
+  it("refuses a streamed response once its chunks pass the cap", async () => {
     process.env.MCP_MAX_RESPONSE_BYTES = "100";
     let cancelled = false;
     const stream = new ReadableStream({
@@ -217,7 +217,7 @@ describe("/api/mcp limits", () => {
     assert.ok(cancelled);
   });
 
-  it("An oversized error page still reports its status", async () => {
+  it("reports the status of an oversized error page", async () => {
     process.env.MCP_MAX_RESPONSE_BYTES = "100";
     mock.method(
       global,
@@ -238,7 +238,7 @@ describe("/api/mcp limits", () => {
     );
   });
 
-  it("A body that stalls after the headers is cut at the timeout", async () => {
+  it("cuts a body that stalls after the headers at the timeout", async () => {
     process.env.MCP_TIMEOUT_MS = "50";
     mock.method(global, "fetch", async (_url, init) => {
       const stream = new ReadableStream({
@@ -263,7 +263,7 @@ describe("/api/mcp limits", () => {
     );
   });
 
-  it("An event-stream answer is unwrapped as before", async () => {
+  it("unwraps an event-stream answer as before", async () => {
     mock.method(
       global,
       "fetch",
@@ -284,7 +284,7 @@ describe("/api/mcp limits", () => {
     });
   });
 
-  it("A zero bound falls back to its default", async () => {
+  it("falls back to the default for a zero bound", async () => {
     process.env.MCP_MAX_REQUEST_BYTES = "0";
     mock.method(
       global,
@@ -302,7 +302,7 @@ describe("/api/mcp limits", () => {
     assert.deepEqual(JSON.parse(res.body).result, {});
   });
 
-  it("A normal call still returns the upstream's answer", async () => {
+  it("returns the upstream's answer to a normal call", async () => {
     process.env.MCP_TIMEOUT_MS = "1000";
     mock.method(global, "fetch", async (_url, init) => {
       const { id } = JSON.parse(init.body);
@@ -343,7 +343,7 @@ describe("callUpstream redaction", () => {
     "bypass-secret-99887766",
   ];
 
-  it("An upstream error quoting the credentials reaches the caller without them", async () => {
+  it("removes the credentials an upstream error quotes", async () => {
     mock.method(global, "fetch", async (url, init) => {
       const echoed = [
         String(url),
@@ -357,7 +357,7 @@ describe("callUpstream redaction", () => {
       });
     });
 
-    const error = await callUpstream(upstream, {}, limits).then(
+    const error = await callUpstream(limits, upstream, {}).then(
       () => assert.fail("expected a rejection"),
       (e) => e
     );
@@ -369,7 +369,7 @@ describe("callUpstream redaction", () => {
     assert.match(error.message, /\[redacted\]/);
   });
 
-  it("A credential quoted percent-encoded is redacted", async () => {
+  it("removes a credential quoted percent-encoded", async () => {
     const encoded = {
       id: "a",
       url: "https://a.test/mcp",
@@ -379,7 +379,7 @@ describe("callUpstream redaction", () => {
       throw new Error(`connect ECONNREFUSED ${url}`);
     });
 
-    const error = await callUpstream(encoded, {}, limits).then(
+    const error = await callUpstream(limits, encoded, {}).then(
       () => assert.fail("expected a rejection"),
       (e) => e
     );
@@ -387,7 +387,7 @@ describe("callUpstream redaction", () => {
     assert.ok(!error.message.includes("odd"), error.message);
   });
 
-  it("A parse error quoting the body is redacted", async () => {
+  it("removes a credential from a parse error quoting the body", async () => {
     mock.method(
       global,
       "fetch",
@@ -397,7 +397,7 @@ describe("callUpstream redaction", () => {
         })
     );
 
-    const error = await callUpstream(upstream, {}, limits).then(
+    const error = await callUpstream(limits, upstream, {}).then(
       () => assert.fail("expected a rejection"),
       (e) => e
     );
@@ -405,12 +405,82 @@ describe("callUpstream redaction", () => {
     assert.ok(!error.message.includes("token-abcdefghijklmnop"));
   });
 
-  it("A network error naming the URL is redacted too", async () => {
+  it("removes the credentials from a JSON-RPC error answered with HTTP 200", async () => {
+    mock.method(
+      global,
+      "fetch",
+      async (_url, init) =>
+        new Response(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            error: {
+              code: -32001,
+              message: `refused ${init.headers.authorization}`,
+              data: { sent: init.headers["x-api-key"] },
+            },
+          }),
+          { headers: { "content-type": "application/json" } }
+        )
+    );
+
+    const answer = await callUpstream(limits, upstream, {});
+
+    assert.equal(answer.error.code, -32001);
+    assert.match(answer.error.message, /^refused /);
+    const text = JSON.stringify(answer);
+    for (const secret of secrets) {
+      assert.ok(!text.includes(secret), `leaked ${secret}`);
+    }
+  });
+
+  it("returns a result untouched even when it quotes a credential", async () => {
+    const result = { content: [{ type: "text", text: "urlkey-1234567890" }] };
+    mock.method(
+      global,
+      "fetch",
+      async () =>
+        new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }), {
+          headers: { "content-type": "application/json" },
+        })
+    );
+
+    const answer = await callUpstream(limits, upstream, {});
+
+    assert.deepEqual(answer.result, result);
+  });
+
+  it("names the timeout when an error page stalls", async () => {
+    mock.method(global, "fetch", async (_url, init) => {
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("<html>"));
+          init.signal.addEventListener("abort", () =>
+            controller.error(init.signal.reason)
+          );
+        },
+      });
+      return new Response(stream, { status: 502, statusText: "Bad Gateway" });
+    });
+
+    const error = await callUpstream(
+      { timeoutMs: 50, maxResponseBytes: 100000 },
+      upstream,
+      {}
+    ).then(
+      () => assert.fail("expected a rejection"),
+      (e) => e
+    );
+
+    assert.match(error.message, /did not answer within 50 ms/);
+  });
+
+  it("removes the credentials from a network error naming the URL", async () => {
     mock.method(global, "fetch", async (url) => {
       throw new Error(`connect ECONNREFUSED ${url}`);
     });
 
-    const error = await callUpstream(upstream, {}, limits).then(
+    const error = await callUpstream(limits, upstream, {}).then(
       () => assert.fail("expected a rejection"),
       (e) => e
     );
@@ -418,5 +488,66 @@ describe("callUpstream redaction", () => {
     for (const secret of secrets) {
       assert.ok(!error.message.includes(secret), `leaked ${secret}`);
     }
+  });
+});
+
+describe("/api/mcp with a signed-in caller", () => {
+  // The entry's credentials are sent only to a signed-in caller on this site
+  const signedIn = createHandler({
+    isAllowedOrigin: () => true,
+    readSession: async () => ({ status: "signed-in" }),
+  });
+  const token = "token-abcdefghijklmnop";
+  const bypass = "bypass-secret-99887766";
+
+  beforeEach(() => {
+    process.env.SOURCES = JSON.stringify([
+      {
+        kind: "mcp",
+        id: "a",
+        name: "A",
+        url: "https://a.test/mcp",
+        authToken: token,
+        protection: { provider: "vercel", secret: bypass },
+      },
+    ]);
+  });
+  afterEach(() => {
+    delete process.env.SOURCES;
+    mock.restoreAll();
+  });
+
+  it("removes the entry's credentials from an upstream error it relays", async () => {
+    const fetchMock = mock.method(
+      global,
+      "fetch",
+      async (_url, init) =>
+        new Response(
+          `rejected ${init.headers.authorization} ${init.headers["x-vercel-protection-bypass"]}`,
+          { status: 403, statusText: "Forbidden" }
+        )
+    );
+
+    const res = makeRes();
+    await signedIn(
+      request("POST", "/api/mcp", {
+        jsonrpc: "2.0",
+        id: 9,
+        method: "tools/call",
+        params: { name: "x" },
+      }),
+      res
+    );
+
+    // The credentials did reach the upstream, so the error had them to quote
+    assert.equal(
+      fetchMock.mock.calls[0].arguments[1].headers.authorization,
+      `Bearer ${token}`
+    );
+    const body = JSON.parse(res.body);
+    assert.equal(body.id, 9);
+    assert.match(body.error.message, /^403 Forbidden: rejected/);
+    assert.ok(!res.body.includes(token), res.body);
+    assert.ok(!res.body.includes(bypass), res.body);
   });
 });

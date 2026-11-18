@@ -64,6 +64,15 @@ const SEPARATOR = "__";
 /** @typedef {Record<string, Upstream>} Upstreams by id */
 
 /**
+ * Who is calling: whether the request comes from this site, and its session.
+ *
+ * @typedef {{
+ *   isAllowedOrigin: typeof isAllowedOrigin,
+ *   readSession: (req: import("node:http").IncomingMessage) => Promise<{ status: string }>,
+ * }} Session
+ */
+
+/**
  * How long one upstream call may run, and the largest response it may send.
  *
  * @typedef {{ timeoutMs: number, maxResponseBytes: number }} Limits
@@ -122,9 +131,10 @@ const compose = (signedIn) =>
  * without them, and brings their own keys through a browser entry.
  *
  * @param {import("node:http").IncomingMessage} req
+ * @param {Session} session
  * @returns {Promise<Upstreams>}
  */
-const upstreams = async (req) => {
+const upstreams = async (req, session) => {
   const full = compose(true);
   const open = compose(false);
   // The session is a database read, so it is looked up only when signing in changes the answer
@@ -133,8 +143,8 @@ const upstreams = async (req) => {
   // The origin first, so another site cannot borrow a visitor's session
   const signedIn =
     signingInMatters &&
-    isAllowedOrigin(req) &&
-    (await readSession(req)).status === "signed-in";
+    session.isAllowedOrigin(req) &&
+    (await session.readSession(req)).status === "signed-in";
 
   const servers = signedIn ? full : open.map(withoutCredentials);
   return Object.fromEntries(servers.map((s) => [s.id, s]));
@@ -258,10 +268,10 @@ const cancelQuietly = async (stream) => {
  * while reading regardless, since that header can be absent or wrong, so the
  * rest is never buffered.
  *
- * @param {Response} response
  * @param {number} limit bytes
+ * @param {Response} response
  */
-const readCapped = async (response, limit) => {
+const readCapped = async (limit, response) => {
   const tooLarge = () =>
     new Error(`Upstream response is larger than ${limit} bytes.`);
   if (Number(response.headers.get("content-length")) > limit) {
@@ -293,11 +303,11 @@ const readCapped = async (response, limit) => {
  * Streamable HTTP answers with JSON or a one-event SSE stream, so both are
  * unwrapped here and the caller only ever sees JSON.
  *
+ * @param {Limits} limits
  * @param {Upstream} upstream
  * @param {unknown} payload
- * @param {Limits} limits
  */
-const exchange = async (upstream, payload, limits) => {
+const exchange = async (limits, upstream, payload) => {
   // The entry's `authToken` and `queryParams` mean here what they mean in the browser (`features/mcp`)
   const url = new URL(upstream.url);
   for (const [key, value] of Object.entries(upstream.queryParams ?? {})) {
@@ -308,9 +318,9 @@ const exchange = async (upstream, payload, limits) => {
   // cleared once the call settles.
   const controller = new AbortController();
   const { signal } = controller;
-  let timedOut = false;
+  let hasTimedOut = false;
   const timer = setTimeout(() => {
-    timedOut = true;
+    hasTimedOut = true;
     controller.abort();
   }, limits.timeoutMs);
   try {
@@ -332,14 +342,18 @@ const exchange = async (upstream, payload, limits) => {
 
     if (!response.ok) {
       // An oversized error page still reports its status
-      const detail = await readCapped(response, limits.maxResponseBytes).catch(
-        (/** @type {Error} */ e) => e.message
+      // The timer's abort goes on to the timeout check below
+      const detail = await readCapped(limits.maxResponseBytes, response).catch(
+        (/** @type {Error} */ e) => {
+          if (hasTimedOut) throw e;
+          return e.message;
+        }
       );
       throw new Error(
         `${response.status} ${response.statusText}: ${detail.slice(0, 200)}`
       );
     }
-    const text = await readCapped(response, limits.maxResponseBytes);
+    const text = await readCapped(limits.maxResponseBytes, response);
 
     if (!response.headers.get("content-type")?.includes("text/event-stream")) {
       return JSON.parse(text);
@@ -350,7 +364,7 @@ const exchange = async (upstream, payload, limits) => {
     throw new Error("Upstream sent an event stream with no data.");
   } catch (e) {
     if (
-      timedOut &&
+      hasTimedOut &&
       (e === signal.reason || /** @type {Error} */ (e)?.name === "AbortError")
     ) {
       throw new Error(
@@ -366,19 +380,48 @@ const exchange = async (upstream, payload, limits) => {
 /**
  * {@link exchange}, with the entry's credentials removed from any error it
  * raises. The error text is the upstream's or the platform's, and either can
- * quote the request it was given: its URL, its headers, its token.
+ * quote the request it was given: its URL, its headers, its token. A JSON-RPC
+ * error the upstream answers with is redacted the same way.
  *
+ * @param {Limits} limits
  * @param {Upstream} upstream
  * @param {unknown} payload
- * @param {Limits} limits
  */
-export const callUpstream = async (upstream, payload, limits) => {
+export const callUpstream = async (limits, upstream, payload) => {
+  const redact = redactSecretsWith(secretsOf(upstream));
+  let answer;
   try {
-    return await exchange(upstream, payload, limits);
+    answer = await exchange(limits, upstream, payload);
   } catch (e) {
-    const redact = redactSecretsWith(secretsOf(upstream));
     throw new Error(redact(String(/** @type {Error} */ (e)?.message ?? e)));
   }
+  return withRedactedError(answer, redact);
+};
+
+/**
+ * `answer` with its JSON-RPC error's message and data redacted. An upstream
+ * can refuse a call with HTTP 200 and an `error` that quotes what it was
+ * sent; a result passes untouched.
+ *
+ * @template T
+ * @param {T} answer
+ * @param {(text: string) => string} redact
+ * @returns {T}
+ */
+const withRedactedError = (answer, redact) => {
+  const envelope = /** @type {{ error?: unknown }} */ (answer);
+  const error = envelope?.error;
+  if (!error || typeof error !== "object") return answer;
+  const { message, data } =
+    /** @type {{ message?: unknown, data?: unknown }} */ (error);
+  /** @type {Record<string, unknown>} */
+  const cleaned = { ...error };
+  if (typeof message === "string") cleaned.message = redact(message);
+  if (typeof data === "string") cleaned.data = redact(data);
+  else if (data !== undefined) {
+    cleaned.data = JSON.parse(redact(JSON.stringify(data)));
+  }
+  return /** @type {T} */ ({ ...envelope, error: cleaned });
 };
 
 /**
@@ -412,9 +455,9 @@ const listTools = async (id, ids, configured, limits) => {
   const lists = await Promise.all(
     ids.map(async (serverId) => {
       const payload = await callUpstream(
+        limits,
         configured[serverId],
-        rpcRequest("tools/list"),
-        limits
+        rpcRequest("tools/list")
       );
       /** @type {Array<{ name: string } & Record<string, unknown>>} */
       const tools = payload.result?.tools ?? [];
@@ -454,9 +497,9 @@ const callTool = async (id, ids, configured, params, limits) => {
   }
 
   const payload = await callUpstream(
+    limits,
     configured[serverId],
-    rpcRequest("tools/call", { ...params, name }),
-    limits
+    rpcRequest("tools/call", { ...params, name })
   );
 
   return { ...payload, id };
@@ -465,12 +508,13 @@ const callTool = async (id, ids, configured, params, limits) => {
 /**
  * @param {import("node:http").IncomingMessage} req
  * @param {import("node:http").ServerResponse} res
+ * @param {Session} session
  */
-async function handler(req, res) {
+async function handle(req, res, session) {
   warnAboutMissingObservabilityIds();
   let configured;
   try {
-    configured = await upstreams(req);
+    configured = await upstreams(req, session);
   } catch (e) {
     // A broken catalogue fails every request, with the entry at fault named, rather than serving part of it
     log.error(e, { report: true });
@@ -552,4 +596,22 @@ async function handler(req, res) {
   }
 }
 
-export default withObservability("mcp", handler);
+/**
+ * The route, with how it learns who is calling passed in, so
+ * `api/mcp.test.mjs` can drive a signed-in caller without a database.
+ *
+ * @param {Session} session
+ */
+export const createHandler =
+  (session) =>
+  /**
+   * @param {import("node:http").IncomingMessage} req
+   * @param {import("node:http").ServerResponse} res
+   */
+  (req, res) =>
+    handle(req, res, session);
+
+export default withObservability(
+  "mcp",
+  createHandler({ isAllowedOrigin, readSession })
+);
