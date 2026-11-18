@@ -18,9 +18,19 @@
  * an SSRF and an open relay; refusing the input removes the whole class.
  * Adding one is a deploy, or an operator setting the variables it names.
  *
+ * Every request is bounded (`mcpEnv`): an upstream call is cut after
+ * `MCP_TIMEOUT_MS`, a request body over `MCP_MAX_REQUEST_BYTES` is refused
+ * with 413, and an upstream response over `MCP_MAX_RESPONSE_BYTES` is refused.
+ * An upstream failure reaches the caller with the entry's credentials removed.
+ *
  * Plain ESM on raw Node request/response APIs — see `api/health.mjs` for why.
  */
 
+import {
+  BodyTooLarge,
+  readBoundedBody,
+  redactSecretsWith,
+} from "../src/features/agent/server.mjs";
 import {
   readJson,
   warnAboutMissingObservabilityIds,
@@ -31,7 +41,7 @@ import {
   composeServers,
   protectionHeaders,
 } from "../src/features/mcp/server.mjs";
-import { sourcesEnv } from "../src/shared/config/server-env.mjs";
+import { mcpEnv, sourcesEnv } from "../src/shared/config/server-env.mjs";
 import {
   rpcError,
   rpcRequest,
@@ -51,6 +61,18 @@ const SEPARATOR = "__";
 /** @typedef {import("../src/features/mcp/model/types").McpServerEntry} Upstream */
 
 /** @typedef {Record<string, Upstream>} Upstreams by id */
+
+/**
+ * How long one upstream call may run, and the largest response it may send.
+ *
+ * @typedef {{ timeoutMs: number, maxResponseBytes: number }} Limits
+ */
+
+/**
+ * A credential shorter than this is not removed from error text: it gives
+ * little away, and removing it would mangle ordinary words and numbers.
+ */
+const MIN_SECRET_LENGTH = 8;
 
 /**
  * The request body as the gateway reads it: unvalidated, its `id` echoed back verbatim.
@@ -164,6 +186,67 @@ const selected = (url, configured) => {
 };
 
 /**
+ * Every credential an entry carries, for removal from error text: its token,
+ * header values, query values, bot-protection bypass, and whatever its URL
+ * holds in user info or query.
+ *
+ * @param {Upstream} upstream
+ */
+const secretsOf = (upstream) => {
+  let url;
+  try {
+    url = new URL(upstream.url);
+  } catch {
+    // An unparseable URL holds nothing to find; its other credentials still count
+  }
+  return [
+    upstream.authToken,
+    upstream.protection?.secret,
+    ...Object.values(upstream.headers ?? {}),
+    ...Object.values(upstream.queryParams ?? {}),
+    url?.username,
+    url?.password,
+    ...(url ? [...url.searchParams.values()] : []),
+  ].filter(
+    (secret) => typeof secret === "string" && secret.length >= MIN_SECRET_LENGTH
+  );
+};
+
+/**
+ * The response body as text, refused once it passes `limit` bytes: from
+ * `content-length` when the upstream sent one, and by counting while reading
+ * when it did not, so the rest is never buffered.
+ *
+ * @param {Response} response
+ * @param {number} limit bytes
+ */
+const readCapped = async (response, limit) => {
+  const tooLarge = () =>
+    new Error(`Upstream response is larger than ${limit} bytes.`);
+  if (Number(response.headers.get("content-length")) > limit) {
+    await response.body?.cancel();
+    throw tooLarge();
+  }
+  if (!response.body) return "";
+
+  const reader = response.body.getReader();
+  const chunks = [];
+  let bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    if (bytes > limit) {
+      // Stop reading: the rest is never buffered
+      await reader.cancel();
+      throw tooLarge();
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+};
+
+/**
  * One JSON-RPC round trip to an upstream.
  *
  * Streamable HTTP answers with JSON or a one-event SSE stream, so both are
@@ -171,42 +254,79 @@ const selected = (url, configured) => {
  *
  * @param {Upstream} upstream
  * @param {unknown} payload
+ * @param {Limits} limits
  */
-const call = async (upstream, payload) => {
+const exchange = async (upstream, payload, limits) => {
   // The entry's `authToken` and `queryParams` mean here what they mean in the browser (`features/mcp`)
   const url = new URL(upstream.url);
   for (const [key, value] of Object.entries(upstream.queryParams ?? {})) {
     url.searchParams.set(key, value);
   }
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      accept: "application/json, text/event-stream",
-      "mcp-protocol-version": PROTOCOL_VERSION,
-      ...(upstream.authToken
-        ? { authorization: `Bearer ${upstream.authToken}` }
-        : {}),
-      ...protectionHeaders(upstream.protection),
-      ...upstream.headers,
-    },
-    body: JSON.stringify(payload),
-  });
+  // Covers the body too: aborting the request ends its response stream. A
+  // timer of our own rather than `AbortSignal.timeout`, whose timer does not
+  // keep the process alive, and is cleared once the call settles.
+  const controller = new AbortController();
+  const { signal } = controller;
+  const timer = setTimeout(() => controller.abort(), limits.timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        "mcp-protocol-version": PROTOCOL_VERSION,
+        ...(upstream.authToken
+          ? { authorization: `Bearer ${upstream.authToken}` }
+          : {}),
+        ...protectionHeaders(upstream.protection),
+        ...upstream.headers,
+      },
+      body: JSON.stringify(payload),
+      signal,
+    });
 
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(
-      `${response.status} ${response.statusText}: ${text.slice(0, 200)}`
-    );
-  }
+    const text = await readCapped(response, limits.maxResponseBytes);
+    if (!response.ok) {
+      throw new Error(
+        `${response.status} ${response.statusText}: ${text.slice(0, 200)}`
+      );
+    }
 
-  if (!response.headers.get("content-type")?.includes("text/event-stream")) {
-    return JSON.parse(text);
+    if (!response.headers.get("content-type")?.includes("text/event-stream")) {
+      return JSON.parse(text);
+    }
+    for (const line of text.split(/\r?\n/)) {
+      if (line.startsWith("data:")) return JSON.parse(line.slice(5).trim());
+    }
+    throw new Error("Upstream sent an event stream with no data.");
+  } catch (e) {
+    if (signal.aborted) {
+      throw new Error(
+        `Upstream "${upstream.id}" did not answer within ${limits.timeoutMs} ms.`
+      );
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
   }
-  for (const line of text.split(/\r?\n/)) {
-    if (line.startsWith("data:")) return JSON.parse(line.slice(5).trim());
+};
+
+/**
+ * {@link exchange}, with the entry's credentials removed from any error it
+ * raises. The error text is the upstream's or the platform's, and either can
+ * quote the request it was given: its URL, its headers, its token.
+ *
+ * @param {Upstream} upstream
+ * @param {unknown} payload
+ * @param {Limits} limits
+ */
+export const callUpstream = async (upstream, payload, limits) => {
+  try {
+    return await exchange(upstream, payload, limits);
+  } catch (e) {
+    const redact = redactSecretsWith(secretsOf(upstream));
+    throw new Error(redact(String(/** @type {Error} */ (e)?.message ?? e)));
   }
-  throw new Error("Upstream sent an event stream with no data.");
 };
 
 /**
@@ -233,14 +353,16 @@ const initialize = (id, ids) =>
  * @param {RpcId} id
  * @param {string[]} ids
  * @param {Upstreams} configured
+ * @param {Limits} limits
  */
-const listTools = async (id, ids, configured) => {
+const listTools = async (id, ids, configured, limits) => {
   const prefix = ids.length > 1;
   const lists = await Promise.all(
     ids.map(async (serverId) => {
-      const payload = await call(
+      const payload = await callUpstream(
         configured[serverId],
-        rpcRequest("tools/list")
+        rpcRequest("tools/list"),
+        limits
       );
       /** @type {Array<{ name: string } & Record<string, unknown>>} */
       const tools = payload.result?.tools ?? [];
@@ -263,8 +385,9 @@ const listTools = async (id, ids, configured) => {
  * @param {string[]} ids
  * @param {Upstreams} configured
  * @param {Record<string, unknown> | undefined} params
+ * @param {Limits} limits
  */
-const callTool = async (id, ids, configured, params) => {
+const callTool = async (id, ids, configured, params, limits) => {
   let serverId = ids[0];
   let name = params?.name;
 
@@ -278,9 +401,10 @@ const callTool = async (id, ids, configured, params) => {
       throw new Error(`Unknown upstream "${serverId}"`);
   }
 
-  const payload = await call(
+  const payload = await callUpstream(
     configured[serverId],
-    rpcRequest("tools/call", { ...params, name })
+    rpcRequest("tools/call", { ...params, name }),
+    limits
   );
 
   return { ...payload, id };
@@ -321,14 +445,27 @@ async function handler(req, res) {
     });
   }
   const url = new URL(req.url ?? "/", "http://localhost");
+  const bounds = mcpEnv();
+  /** @type {Limits} */
+  const limits = {
+    timeoutMs: bounds.MCP_TIMEOUT_MS,
+    maxResponseBytes: bounds.MCP_MAX_RESPONSE_BYTES,
+  };
 
   let body;
   let ids;
   try {
-    body = await readJson(req);
+    const read = await readBoundedBody(req, bounds.MCP_MAX_REQUEST_BYTES);
+    // `readJson` takes the text the way it takes a pre-parsed body
+    body = await readJson(
+      /** @type {import("node:http").IncomingMessage} */ (
+        /** @type {unknown} */ ({ body: read.body })
+      )
+    );
     ids = selected(url, configured);
   } catch (e) {
-    return sendJson(res, 400, { error: /** @type {Error} */ (e).message });
+    const status = e instanceof BodyTooLarge ? 413 : 400;
+    return sendJson(res, status, { error: /** @type {Error} */ (e).message });
   }
 
   const { id, method, params } = /** @type {RpcRequestBody} */ (body);
@@ -344,9 +481,13 @@ async function handler(req, res) {
       case "initialize":
         return sendJson(res, 200, initialize(id, ids));
       case "tools/list":
-        return sendJson(res, 200, await listTools(id, ids, configured));
+        return sendJson(res, 200, await listTools(id, ids, configured, limits));
       case "tools/call":
-        return sendJson(res, 200, await callTool(id, ids, configured, params));
+        return sendJson(
+          res,
+          200,
+          await callTool(id, ids, configured, params, limits)
+        );
       default:
         return sendRpcError(res, id, -32601, `Method not supported: ${method}`);
     }

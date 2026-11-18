@@ -623,6 +623,9 @@ build (`scripts/check-agent-env.mjs`).
 | `MCP_EXPLORER_BYPASS` | Optional. Vercel's Protection Bypass for Automation secret, for an Explorer deployment behind bot protection. Explorer is listed whether it is set or not. Store it as a Secret |
 | `MCP_EXPLORER_URL` | Optional, defaults to `https://explorer.solana.com/mcp` |
 | `MCP_EXPLORER_TOKEN` | Optional. A bearer token, for an Explorer deployment that gates on `MCP_ACCESS_KEYS`. Store it as a Secret |
+| `MCP_TIMEOUT_MS` | Optional, defaults to `20000`. How long `/api/mcp` waits for an upstream before answering with an error |
+| `MCP_MAX_REQUEST_BYTES` | Optional, defaults to `262144`. A larger request body to `/api/mcp` is refused with 413 |
+| `MCP_MAX_RESPONSE_BYTES` | Optional, defaults to `2097152`. A larger upstream response is refused and answered with an error |
 
 ## Conversation and project sync
 

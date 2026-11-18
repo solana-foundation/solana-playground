@@ -258,6 +258,18 @@ export const buildServerEnv = () => ({
 });
 
 /**
+ * The bounds on one `/api/mcp` request: how long an upstream call may run,
+ * and the largest request body and upstream response the gateway relays.
+ */
+export const mcpEnv = () => ({
+  /** Milliseconds; covers the whole round trip, response body included */
+  MCP_TIMEOUT_MS: readCount("MCP_TIMEOUT_MS", 20000),
+  MCP_MAX_REQUEST_BYTES: readCount("MCP_MAX_REQUEST_BYTES", 262144),
+  /** Per upstream response; under the platform's own response limit */
+  MCP_MAX_RESPONSE_BYTES: readCount("MCP_MAX_RESPONSE_BYTES", 2097152),
+});
+
+/**
  * Postgres for sync, and its opt-in kill switch. `DB_PROVIDER` picks how the
  * pool is built (`model/providers/` in the persistence feature); each provider
  * reads only its own variables.
