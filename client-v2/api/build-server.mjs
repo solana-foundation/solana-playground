@@ -20,10 +20,10 @@
  * download needs the same sign-in and is not recorded.
  *
  * **The build server takes only this route.** It is sent
- * `PG_BUILD_SERVER_API_KEY` as `x-api-key`, the server's own `PG_API_KEY`;
- * with that set on the server, a request without the key is refused. A
- * production deployment without it says so once, reported. That is
- * what a proxy alone lacked (#22): the server's URL is public, so a gate in
+ * `PG_BUILD_SERVER_API_KEY` as `x-api-key`, this deployment's entry of the
+ * server's `PG_API_KEYS`; with keys set on the server, a request without one
+ * is refused. A production deployment without it says so once, reported.
+ * That is what a proxy alone lacked (#22): the server's URL is public, so a gate in
  * front of an open server gates nothing.
  *
  * The answer keeps the build server's status and content type: a failed

@@ -4,7 +4,7 @@ mod cors;
 mod limit;
 mod log;
 
-pub use api_key::{require_api_key, ApiKey};
+pub use api_key::{require_api_key, ApiKeys};
 pub use compression::compression;
 pub use cors::cors;
 pub use limit::{concurrency_limit, payload_limit};
