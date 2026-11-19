@@ -49,6 +49,28 @@ describe("redactSecretsWith", () => {
     );
   });
 
+  it("removes the longer of two overlapping secrets whole, whatever their order", () => {
+    // The shorter one is a run inside the longer; taken first, it would split
+    // the longer and leave its first characters too short to match
+    const long = "ab+cdefghijklmnop";
+    const short = "cdefghijklmnop";
+    assert.equal(
+      redactSecretsWith([short, long])(`key=${long}`),
+      "key=[redacted]"
+    );
+  });
+
+  it("removes a key whole when another key shares a long run with it", () => {
+    // The `%20` and `+` encodings of one value: the first is longer, and its
+    // run `Charlie9%2Fsec` sits inside the second
+    const percent = "qry%20Charlie9%2Fsec";
+    const plus = "qry+Charlie9%2Fsec";
+    assert.equal(
+      redactSecretsWith([percent, plus])(`key=${plus}`),
+      "key=[redacted]"
+    );
+  });
+
   it("leaves text without a key unchanged", () => {
     assert.equal(redactSecretsWith([KEY])("slow down"), "slow down");
   });

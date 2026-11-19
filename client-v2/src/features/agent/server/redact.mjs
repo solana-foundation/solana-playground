@@ -22,18 +22,28 @@ const MASK = "[redacted]";
  * @param {ReadonlyArray<string | undefined | null>} secrets unset keys are skipped
  * @returns {(text: string) => string}
  */
-export const redactSecretsWith = (secrets) => (text) => {
-  let out = text;
-  for (const secret of new Set(secrets)) {
-    if (!secret) continue;
-    const shortest = Math.min(MIN_RUN, secret.length);
-    // Longest runs first, so a whole key is masked once rather than in pieces
-    for (let length = secret.length; length >= shortest; length -= 1) {
-      for (let start = 0; start + length <= secret.length; start += 1) {
-        const run = secret.slice(start, start + length);
-        if (out.includes(run)) out = out.split(run).join(MASK);
+export const redactSecretsWith = (secrets) => {
+  const keys = [...new Set(secrets)].filter(
+    /** @returns {secret is string} */ (secret) => !!secret
+  );
+  const longest = Math.max(0, ...keys.map((key) => key.length));
+  return (text) => {
+    let out = text;
+    // Runs of all keys together, longest first. Two keys can share a long run
+    // (a value's `%20` and `+` encodings), and masking a run of one before the
+    // whole of the other would split the other, leaving its first characters
+    // too short to match. Generated on the fly: a long token has many runs.
+    for (let length = longest; length >= 1; length -= 1) {
+      for (const key of keys) {
+        if (length > key.length || length < Math.min(MIN_RUN, key.length)) {
+          continue;
+        }
+        for (let at = 0; at + length <= key.length; at += 1) {
+          const run = key.slice(at, at + length);
+          if (out.includes(run)) out = out.split(run).join(MASK);
+        }
       }
     }
-  }
-  return out;
+    return out;
+  };
 };

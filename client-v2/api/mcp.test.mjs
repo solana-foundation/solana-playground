@@ -387,6 +387,42 @@ describe("callUpstream redaction", () => {
     assert.ok(!error.message.includes("odd"), error.message);
   });
 
+  it("removes a credential the 200-character cut of an error page falls inside", async () => {
+    mock.method(global, "fetch", async (_url, init) => {
+      // The cut leaves the token's first six characters, shorter than a run
+      const quoted = `${"x".repeat(194)}${init.headers.authorization.slice(7)}`;
+      return new Response(quoted, { status: 500, statusText: "Internal" });
+    });
+
+    const error = await callUpstream(limits, upstream, {}).then(
+      () => assert.fail("expected a rejection"),
+      (e) => e
+    );
+
+    assert.ok(!error.message.includes("token-"), error.message);
+  });
+
+  it("removes the whole query form of a value with a space and reserved characters", async () => {
+    const spaced = {
+      id: "a",
+      url: "https://a.test/mcp",
+      queryParams: { key: "qry Charlie9/sec+ret&" },
+    };
+    mock.method(global, "fetch", async (url) => {
+      return new Response(`not found: ${url}`, {
+        status: 404,
+        statusText: "Not Found",
+      });
+    });
+
+    const error = await callUpstream(limits, spaced, {}).then(
+      () => assert.fail("expected a rejection"),
+      (e) => e
+    );
+
+    assert.ok(!error.message.includes("qry"), error.message);
+  });
+
   it("removes a credential from a parse error quoting the body", async () => {
     mock.method(
       global,
