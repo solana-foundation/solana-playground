@@ -40,7 +40,9 @@ const reportOnly = Object.fromEntries(
   directiveList(headers["Content-Security-Policy-Report-Only"])
 );
 
-const LOOPBACK = ["localhost", "127.0.0.1", "[::1]"];
+// No "[::1]": CSP host sources have no IPv6 literal form, so browsers drop it
+// with a console warning, and the check below fails on one.
+const LOOPBACK = ["localhost", "127.0.0.1"];
 
 describe("vercel.json security headers", () => {
   it("names each directive once, since a browser reads only the first", () => {
