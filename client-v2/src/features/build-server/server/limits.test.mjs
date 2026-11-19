@@ -1,0 +1,223 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { describe, it, mock } from "node:test";
+
+import { createServerLogger } from "../../../shared/lib/logger/server.mjs";
+import {
+  BUILD_MAX_DURATION_SECONDS,
+  CALLER_LEFT,
+  checkBuildLimitWith,
+  countBuildsWith,
+  judgeBuild,
+  MAX_BUILDS_PER_HOUR,
+  MAX_RUNNING_BUILDS,
+  NEVER_SENT,
+  RUNNING_RETRY_AFTER_SECONDS,
+} from "./limits.mjs";
+
+const counts = (over) => ({
+  running: over.running ?? 0,
+  lastHour: over.lastHour ?? 0,
+  runningFreesInSeconds: over.runningFreesInSeconds,
+  hourFreesInSeconds: over.hourFreesInSeconds,
+});
+
+describe("judgeBuild", () => {
+  it("lets a user under both limits build", () => {
+    assert.deepEqual(
+      judgeBuild(
+        counts({
+          running: MAX_RUNNING_BUILDS - 1,
+          lastHour: MAX_BUILDS_PER_HOUR - 1,
+        })
+      ),
+      { ok: true }
+    );
+  });
+
+  it("refuses a build while one runs, asking again when it may have ended", () => {
+    assert.deepEqual(
+      judgeBuild(counts({ running: MAX_RUNNING_BUILDS, lastHour: 1 })),
+      {
+        ok: false,
+        limit: "running",
+        retryAfterSeconds: RUNNING_RETRY_AFTER_SECONDS,
+      }
+    );
+  });
+
+  it("never asks to wait past the time the running row stops counting", () => {
+    const verdict = judgeBuild(
+      counts({ running: 1, runningFreesInSeconds: 3.2 })
+    );
+    assert.deepEqual(verdict, {
+      ok: false,
+      limit: "running",
+      retryAfterSeconds: 4,
+    });
+  });
+
+  it("refuses past the hourly limit until the oldest build leaves the window", () => {
+    assert.deepEqual(
+      judgeBuild(
+        counts({ lastHour: MAX_BUILDS_PER_HOUR, hourFreesInSeconds: 1234.5 })
+      ),
+      { ok: false, limit: "hourly", retryAfterSeconds: 1235 }
+    );
+  });
+
+  it("answers with the longer wait when both limits are hit", () => {
+    assert.deepEqual(
+      judgeBuild(
+        counts({
+          running: 1,
+          lastHour: MAX_BUILDS_PER_HOUR,
+          hourFreesInSeconds: 600,
+        })
+      ),
+      { ok: false, limit: "hourly", retryAfterSeconds: 600 }
+    );
+  });
+
+  it("asks for at least one second", () => {
+    const verdict = judgeBuild(
+      counts({ lastHour: MAX_BUILDS_PER_HOUR, hourFreesInSeconds: -3 })
+    );
+    assert.equal(verdict.ok, false);
+    assert.equal(verdict.retryAfterSeconds, 1);
+  });
+});
+
+describe("countBuildsWith", () => {
+  it("reads the counts and the seconds `pg` sends as strings", async () => {
+    const query = mock.fn(async () => ({
+      rows: [
+        {
+          running: "1",
+          last_hour: "5",
+          running_frees_in: "42.5",
+          // eslint-disable-next-line unicorn/no-null -- a Postgres row: no build in the hour reads as null
+          hour_frees_in: null,
+        },
+      ],
+    }));
+
+    const result = await countBuildsWith(query)("u1");
+
+    assert.deepEqual(result, {
+      running: 1,
+      lastHour: 5,
+      runningFreesInSeconds: 42.5,
+      hourFreesInSeconds: undefined,
+    });
+    const [text, params] = query.mock.calls[0].arguments;
+    assert.match(text, /from build_audit\s+where user_id = \$1/);
+    assert.match(text, /status is null or status = \$4/);
+    assert.deepEqual(params, [
+      "u1",
+      BUILD_MAX_DURATION_SECONDS,
+      60 * 60,
+      CALLER_LEFT,
+    ]);
+  });
+
+  it("reads no row as no builds", async () => {
+    const result = await countBuildsWith(async () => ({ rows: [] }))("u1");
+    assert.equal(result.running, 0);
+    assert.equal(result.lastHour, 0);
+  });
+});
+
+describe("checkBuildLimitWith", () => {
+  it("lets a database failure through, so the route can refuse", async () => {
+    const query = async () => {
+      throw new Error("connection refused");
+    };
+    await assert.rejects(
+      checkBuildLimitWith(query)("u1"),
+      /connection refused/
+    );
+  });
+});
+
+describe("BUILD_MAX_DURATION_SECONDS", () => {
+  it("equals the build route's maxDuration in vercel.json", () => {
+    const config = JSON.parse(
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- a fixed path to the repository's vercel.json
+      readFileSync(new URL("../../../../vercel.json", import.meta.url), "utf8")
+    );
+    assert.equal(
+      config.functions["api/build-server.mjs"].maxDuration,
+      BUILD_MAX_DURATION_SECONDS
+    );
+  });
+});
+
+const DB = process.env.DATABASE_URL;
+
+describe("the count on a real build_audit table", () => {
+  it(
+    "counts running rows within maxDuration and every row within the hour, for one user",
+    { skip: !DB && "DATABASE_URL not set" },
+    async () => {
+      const pg = (await import("pg")).default;
+      const pool = new pg.Pool({ connectionString: DB, max: 1 });
+      // An idle client's dropped connection must not crash the test process;
+      // the query that needed it fails the test on its own
+      pool.on("error", () => {});
+      const userId = "test-user-build-limits";
+      const other = "test-user-build-limits-other";
+      const clean = () =>
+        pool.query("delete from build_audit where user_id = any($1)", [
+          [userId, other],
+        ]);
+      // `at` is set by hand: the rows say how long ago each build started
+      const rowFor = (user) => (secondsAgo, status) =>
+        pool.query(
+          `insert into build_audit (user_id, at, unstable, request_bytes, status)
+           values ($1, now() - make_interval(secs => $2), false, 1, $3)`,
+          [user, secondsAgo, status]
+        );
+      const row = rowFor(userId);
+
+      try {
+        await clean();
+        await row(10, undefined); // running
+        await row(BUILD_MAX_DURATION_SECONDS + 60, undefined); // function died
+        await row(120, 200); // finished
+        await row(20, CALLER_LEFT); // caller left, the server still compiles
+        await row(BUILD_MAX_DURATION_SECONDS + 30, CALLER_LEFT); // ended since
+        await row(15, NEVER_SENT); // caller left before the server was asked
+        await row(2 * 60 * 60, undefined); // outside the hour
+        await rowFor(other)(5, undefined); // someone else's
+
+        const result = await countBuildsWith((text, params) =>
+          pool.query(text, params)
+        )(userId);
+
+        assert.equal(result.running, 2);
+        assert.equal(result.lastHour, 6);
+        assert.ok(result.runningFreesInSeconds > 0);
+        assert.ok(result.runningFreesInSeconds <= BUILD_MAX_DURATION_SECONDS);
+        assert.ok(result.hourFreesInSeconds > 0);
+        assert.ok(result.hourFreesInSeconds <= 60 * 60);
+
+        const verdict = await checkBuildLimitWith((text, params) =>
+          pool.query(text, params)
+        )(userId);
+        assert.equal(verdict.ok, false);
+        assert.equal(verdict.limit, "running");
+      } finally {
+        // A failed cleanup must not hide the assertion that failed above;
+        // the rows it leaves are removed by `clean()` at the next run's start
+        await clean().catch((e) =>
+          createServerLogger("build-server:limits.test").warn(
+            "cleanup left test rows in build_audit",
+            { context: { message: String(e?.message ?? e) } }
+          )
+        );
+        await pool.end();
+      }
+    }
+  );
+});

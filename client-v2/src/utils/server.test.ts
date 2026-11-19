@@ -1,4 +1,5 @@
 import { PgServer, PgServerError } from "./server";
+import { BUSY_SERVER_MESSAGE } from "./server-error";
 
 const settings = {
   server: { endpoint: "https://server.test" },
@@ -199,6 +200,70 @@ describe("a refusal", () => {
     expect(error.message).toBe("Sign-in is unavailable right now.");
     expect(error.reason).toBeUndefined();
     expect(error.isPlain).toBe(false);
+  });
+
+  it("carries Retry-After of a 429, as a plain refusal", async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 429,
+      headers: new Headers({ "retry-after": "42" }),
+      text: async () =>
+        JSON.stringify({
+          error: "You already have a build running.",
+          reason: "build-limit",
+        }),
+    });
+
+    const error = await PgServer.build({ files: [] }).catch((e) => e);
+
+    expect(error).toMatchObject({
+      status: 429,
+      retryAfterSeconds: 42,
+      message: "You already have a build running.",
+      isPlain: true,
+    });
+  });
+
+  it("carries Retry-After of a 503 too, for a full build queue", async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 503,
+      headers: new Headers({ "retry-after": "5" }),
+      text: async () => "The build server is busy, try again in 5 seconds",
+    });
+
+    const error = await PgServer.build({ files: [] }).catch((e) => e);
+
+    // The build server's own plain-text body is not shown; the words are ours
+    expect(error).toMatchObject({
+      status: 503,
+      retryAfterSeconds: 5,
+      message: BUSY_SERVER_MESSAGE,
+      isPlain: true,
+    });
+  });
+
+  it("reads no wait from a 429 without Retry-After, a date, or another status", async () => {
+    const answer = (status: number, headers: Record<string, string>) =>
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status,
+        headers: new Headers(headers),
+        text: async () => "x",
+      });
+
+    answer(429, {});
+    expect(
+      (await PgServer.build({ files: [] }).catch((e) => e)).retryAfterSeconds
+    ).toBeUndefined();
+    answer(429, { "retry-after": "Wed, 21 Oct 2026 07:28:00 GMT" });
+    expect(
+      (await PgServer.build({ files: [] }).catch((e) => e)).retryAfterSeconds
+    ).toBeUndefined();
+    answer(500, { "retry-after": "30" });
+    expect(
+      (await PgServer.build({ files: [] }).catch((e) => e)).retryAfterSeconds
+    ).toBeUndefined();
   });
 
   it("keeps a plain-text error as it was, with no reason", async () => {

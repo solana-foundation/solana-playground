@@ -1,5 +1,6 @@
 /**
- * Whether the open project's last build was refused for sign-in.
+ * Whether the open project's last build was refused for sign-in, or because
+ * the build service was busy (HOO-2907).
  *
  * Such a refusal never reached the compiler, so the saved verdict
  * (`lastBuildFailed`) stays as it was. Without this mark, a passing build
@@ -10,7 +11,7 @@
  */
 const refused = new Set<string>();
 
-/** Mark the project whose build sign-in refused */
+/** Mark the project whose build was refused before it ran */
 export const markBuildRefused = (workspaceId: string | undefined) => {
   if (workspaceId !== undefined) refused.add(workspaceId);
 };
@@ -20,6 +21,6 @@ export const clearBuildRefused = (workspaceId: string | undefined) => {
   if (workspaceId !== undefined) refused.delete(workspaceId);
 };
 
-/** True when sign-in refused this project's last build */
+/** True when this project's last build was refused before it ran */
 export const isBuildRefused = (workspaceId: string | undefined) =>
   workspaceId !== undefined && refused.has(workspaceId);

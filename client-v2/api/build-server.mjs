@@ -12,6 +12,12 @@
  * `isAllowedOrigin` check as `/api/agent`; signed out is a `401` the Build
  * stage turns into a sign-in prompt, and unconfigured sign-in fails closed.
  *
+ * **A user has a bounded number of builds** (HOO-2907): one running and a
+ * capped number an hour, counted from their `build_audit` rows
+ * (`features/build-server/server/limits.mjs`). Past either, `429` with
+ * `Retry-After`, no audit row and nothing sent to the build server. The Build
+ * stage shows it as busy, not as a failed build.
+ *
  * **Every build is on record.** A `build_audit` row is written before a
  * `POST /build` (or its unstable twin) reaches the build server, and
  * completed when it answers: `499` when the caller left first, `502` when the
@@ -34,6 +40,10 @@
  * wait included (`REQUEST_TIME_LIMIT` in `server/src/routes/build.rs`,
  * HOO-2874, #174), sized to fit inside this one: change the two together. A
  * server without that bound keeps building after the user sees the failure.
+ * The server also bounds its queue for a slot (`QueueLimits`, HOO-2908): a
+ * request past it, or one that waits `PG_BUILD_QUEUE_WAIT_SECS` (60 s) without
+ * a slot, is answered `503` with `Retry-After` at once, and that pair is
+ * relayed as it came, so the Build stage can say "busy, retry in N s".
  * A caller that leaves aborts the request to the server.
  *
  * Plain ESM on raw Node request/response APIs — see `api/health.mjs` for why.
@@ -56,7 +66,10 @@ import {
   SIGNED_OUT_REASON,
 } from "../src/features/auth/server.mjs";
 import {
+  CALLER_LEFT,
+  checkBuildLimitWith,
   finishAuditWith,
+  NEVER_SENT,
   projectOf,
   resolveRoute,
   startAuditWith,
@@ -71,8 +84,13 @@ const log = createServerLogger("api:build-server");
 /** The build server's own default `PAYLOAD_LIMIT`; a larger body it refuses anyway */
 const MAX_BODY_BYTES = 1024 * 1024;
 
-/** What the audit records for a build whose caller left before the answer */
-const CALLER_LEFT = 499;
+/** `reason` of a `429` for a limit, which the client tells from other refusals */
+const BUSY_REASON = "build-limit";
+
+const BUSY_MESSAGE = {
+  running: "You already have a build running. Try again when it ends.",
+  hourly: "You have reached the hourly limit of builds. Try again later.",
+};
 
 const sendJson = (res, status, body) => {
   res.statusCode = status;
@@ -153,6 +171,11 @@ const relayHead = (res, upstream) => {
   res.statusCode = upstream.status;
   const type = upstream.headers.get("content-type");
   if (type) res.setHeader("content-type", type);
+  // A busy build server says when to come back, and the Build stage shows
+  // it; the client reads Retry-After only from a 429 or 503 (busy-refusal.ts)
+  const retryAfter = upstream.headers.get("retry-after");
+  const isBusy = upstream.status === 429 || upstream.status === 503;
+  if (isBusy && retryAfter) res.setHeader("retry-after", retryAfter);
   res.setHeader("cache-control", "no-store");
 };
 
@@ -277,6 +300,27 @@ export const handleWith = (deps) => {
       });
     }
 
+    // A user past a limit costs nothing more: no body read, no audit row,
+    // nothing sent to the build server (HOO-2907)
+    if (route.kind === "build") {
+      let verdict;
+      try {
+        verdict = await checkBuildLimitWith(deps.query)(session.user.id);
+      } catch (e) {
+        log.error(e, { report: true, context: { op: "checkBuildLimit" } });
+        return sendJson(res, 503, {
+          error: "Builds cannot be checked right now. Try again shortly.",
+        });
+      }
+      if (!verdict.ok) {
+        res.setHeader("retry-after", String(verdict.retryAfterSeconds));
+        return sendJson(res, 429, {
+          error: BUSY_MESSAGE[verdict.limit],
+          reason: BUSY_REASON,
+        });
+      }
+    }
+
     /** @type {string | undefined} */
     let body;
     /** @type {unknown} */
@@ -340,9 +384,10 @@ export const handleWith = (deps) => {
     if (API_KEY) headers["x-api-key"] = API_KEY;
 
     // A caller who left while the route waited (session, body, audit) is
-    // not worth a build: the close already fired, so nothing would abort it
+    // not worth a build: the close already fired, so nothing would abort it.
+    // No build starts, so the row must not hold the user's running slot
     if (res.destroyed || abort.signal.aborted) {
-      await finish(CALLER_LEFT, "");
+      await finish(NEVER_SENT, "");
       return;
     }
 
@@ -385,7 +430,11 @@ export const handleWith = (deps) => {
         error: "The build server refused this site. Try again later.",
       });
     }
-    if (upstream.status >= 500) {
+    // A 503 with Retry-After is the build server's queue saying it is full:
+    // the user is told to retry, nothing is broken
+    const isQueueFull =
+      upstream.status === 503 && upstream.headers.has("retry-after");
+    if (upstream.status >= 500 && !isQueueFull) {
       log.warn("build server answered with an error", {
         context: { path, status: upstream.status },
       });

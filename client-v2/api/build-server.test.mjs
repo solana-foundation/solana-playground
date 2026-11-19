@@ -92,6 +92,15 @@ const depsWith = (over) => {
   };
 };
 
+/**
+ * The statements that write or close the audit row, without the limit check's
+ * count that comes first
+ */
+const auditCalls = (d) =>
+  d.query.mock.calls.filter(
+    (c) => !/from build_audit\s+where user_id/.test(c.arguments[0])
+  );
+
 /** The handler's dependencies for a signed-in build that succeeds */
 const deps = () => depsWith({});
 
@@ -182,6 +191,98 @@ describe("/api/build-server", () => {
     assert.equal(d.fetch.mock.callCount(), 0);
   });
 
+  describe("per-user build limits", () => {
+    /** A `query` whose count statement answers `counts`, the rest as usual */
+    const queryWithCounts = (counts) =>
+      mock.fn(async (text) => {
+        if (/insert/.test(text)) return { rows: [{ id: "9" }] };
+        if (/from build_audit/.test(text) && /count\(\*\)/.test(text)) {
+          return { rows: [counts] };
+        }
+        return { rows: [] };
+      });
+    const inserts = (d) =>
+      d.query.mock.calls.filter((c) => /insert/.test(c.arguments[0]));
+
+    it("builds as before for a user under both limits", async () => {
+      const d = depsWith({
+        query: queryWithCounts({ running: "0", last_hour: "19" }),
+      });
+      const res = makeRes();
+
+      await handleWith(d)(postBuild(BUILD), res);
+
+      assert.equal(res.statusCode, 200);
+      assert.equal(d.fetch.mock.callCount(), 1);
+      assert.equal(inserts(d).length, 1);
+    });
+
+    it("answers 429 with Retry-After while a build runs, with no row and no forward", async () => {
+      const d = depsWith({
+        query: queryWithCounts({
+          running: "1",
+          last_hour: "1",
+          running_frees_in: "120",
+        }),
+      });
+      const res = makeRes();
+
+      await handleWith(d)(postBuild(BUILD), res);
+
+      assert.equal(res.statusCode, 429);
+      assert.equal(res.headers["retry-after"], "15");
+      assert.equal(JSON.parse(res.body).reason, "build-limit");
+      assert.equal(d.fetch.mock.callCount(), 0);
+      assert.equal(inserts(d).length, 0);
+    });
+
+    it("answers 429 past the hourly limit, asking again when the oldest build leaves the hour", async () => {
+      const d = depsWith({
+        query: queryWithCounts({
+          running: "0",
+          last_hour: "20",
+          hour_frees_in: "900.2",
+        }),
+      });
+      const res = makeRes();
+
+      await handleWith(d)(postBuild(BUILD), res);
+
+      assert.equal(res.statusCode, 429);
+      assert.equal(res.headers["retry-after"], "901");
+      assert.equal(d.fetch.mock.callCount(), 0);
+      assert.equal(inserts(d).length, 0);
+    });
+
+    it("refuses with 503 when the count cannot be read", async () => {
+      const d = depsWith({
+        query: mock.fn(async (text) => {
+          if (/count\(\*\)/.test(text)) throw new Error("db down");
+          return { rows: [{ id: "9" }] };
+        }),
+      });
+      const res = makeRes();
+
+      await handleWith(d)(postBuild(BUILD), res);
+
+      assert.equal(res.statusCode, 503);
+      assert.equal(d.fetch.mock.callCount(), 0);
+      assert.equal(inserts(d).length, 0);
+    });
+
+    it("counts nothing for a deploy download", async () => {
+      const d = depsWith({
+        query: queryWithCounts({ running: "1", last_hour: "99" }),
+      });
+      const res = makeRes();
+
+      await handleWith(d)(getPath(`deploy/${UUID}`), res);
+
+      assert.equal(res.statusCode, 200);
+      assert.equal(d.query.mock.callCount(), 0);
+    });
+  });
+
   it("forwards a build with the key and records it", async () => {
     const d = deps();
     const res = makeRes();
@@ -198,10 +299,10 @@ describe("/api/build-server", () => {
     assert.equal(init.headers["x-api-key"], "k3y");
     assert.deepEqual(JSON.parse(init.body), body);
 
-    const [insert, insertParams] = d.query.mock.calls[0].arguments;
+    const [insert, insertParams] = auditCalls(d)[0].arguments;
     assert.match(insert, /insert into build_audit/);
     assert.deepEqual(insertParams.slice(0, 4), ["u1", "p1", "hello", false]);
-    const [update, updateParams] = d.query.mock.calls[1].arguments;
+    const [update, updateParams] = auditCalls(d)[1].arguments;
     assert.match(update, /update build_audit/);
     assert.deepEqual(updateParams.slice(0, 3), [9, UUID, 200]);
   });
@@ -242,7 +343,7 @@ describe("/api/build-server", () => {
 
     await handleWith(d)(postBuild({ files: FILES, uuid: UUID }), makeRes());
 
-    const [, updateParams] = d.query.mock.calls[1].arguments;
+    const [, updateParams] = auditCalls(d)[1].arguments;
     assert.equal(updateParams[1], UUID);
   });
 
@@ -263,7 +364,64 @@ describe("/api/build-server", () => {
     assert.equal(res.statusCode, 500);
     assert.equal(res.body, "Invalid UUID");
     assert.equal(res.headers["content-type"], "text/plain");
-    assert.equal(d.query.mock.calls[1].arguments[1][2], 500);
+    assert.equal(auditCalls(d)[1].arguments[1][2], 500);
+  });
+
+  it("passes a busy server's 503 and Retry-After through, and records the 503", async () => {
+    const d = depsWith({
+      fetch: mock.fn(
+        async () =>
+          new Response("The build server is busy, try again in 30 seconds", {
+            status: 503,
+            headers: { "content-type": "text/plain", "retry-after": "30" },
+          })
+      ),
+    });
+    const res = makeRes();
+
+    await handleWith(d)(postBuild(BUILD), res);
+
+    assert.equal(res.statusCode, 503);
+    assert.equal(res.headers["retry-after"], "30");
+    assert.match(res.body, /busy/);
+    assert.equal(auditCalls(d)[1].arguments[1][2], 503);
+  });
+
+  it("sends no Retry-After the server did not send", async () => {
+    const d = depsWith({
+      fetch: mock.fn(async () => new Response("boom", { status: 500 })),
+    });
+    const res = makeRes();
+
+    await handleWith(d)(postBuild(BUILD), res);
+
+    assert.equal(res.headers["retry-after"], undefined);
+  });
+
+  it("drops a Retry-After that comes with a 500, and still logs the 500", async () => {
+    const d = depsWith({
+      fetch: mock.fn(
+        async () =>
+          new Response("boom", {
+            status: 500,
+            headers: { "retry-after": "30" },
+          })
+      ),
+    });
+    const res = makeRes();
+    const warn = mock.method(console, "warn", () => {});
+    try {
+      await handleWith(d)(postBuild(BUILD), res);
+
+      const logged = warn.mock.calls.filter((c) =>
+        JSON.stringify(c.arguments).includes("answered with an error")
+      );
+      assert.equal(logged.length, 1);
+    } finally {
+      warn.mock.restore();
+    }
+    assert.equal(res.statusCode, 500);
+    assert.equal(res.headers["retry-after"], undefined);
   });
 
   it("answers 502 when the server cannot be reached, and records it", async () => {
@@ -278,7 +436,7 @@ describe("/api/build-server", () => {
 
     assert.equal(res.statusCode, 502);
     assert.match(JSON.parse(res.body).error, /build server/i);
-    assert.equal(d.query.mock.calls[1].arguments[1][2], 502);
+    assert.equal(auditCalls(d)[1].arguments[1][2], 502);
   });
 
   it("relays a deploy's binary byte for byte, without an audit row", async () => {
@@ -399,7 +557,7 @@ describe("/api/build-server", () => {
     await handleWith(d)(postBuild(BUILD), res);
 
     assert.equal(signal.aborted, true);
-    assert.equal(d.query.mock.calls[1].arguments[1][2], 499);
+    assert.equal(auditCalls(d)[1].arguments[1][2], 499);
   });
 
   it("starts no build for a caller who left while the audit row was written", async () => {
@@ -417,7 +575,8 @@ describe("/api/build-server", () => {
     await handleWith(d)(postBuild(BUILD), res);
 
     assert.equal(d.fetch.mock.callCount(), 0);
-    assert.equal(query.mock.calls[1].arguments[1][2], 499);
+    // Not 499: nothing compiles, so the row must not hold the running slot
+    assert.equal(auditCalls({ query })[1].arguments[1][2], 444);
   });
 
   for (const [method, path] of [
@@ -480,7 +639,7 @@ describe("/api/build-server", () => {
     await handleWith(d)(req, res);
 
     assert.equal(res.statusCode, 400);
-    assert.equal(d.query.mock.callCount(), 0);
+    assert.equal(auditCalls(d).length, 0);
     assert.equal(d.fetch.mock.callCount(), 0);
   });
 
@@ -496,7 +655,7 @@ describe("/api/build-server", () => {
 
     assert.equal(res.statusCode, 502);
     assert.equal(JSON.parse(res.body).reason, undefined);
-    assert.equal(d.query.mock.calls[1].arguments[1][2], 502);
+    assert.equal(auditCalls(d)[1].arguments[1][2], 502);
   });
 
   it("answers 502 when the server's answer is cut off", async () => {
@@ -510,7 +669,7 @@ describe("/api/build-server", () => {
     await handleWith(d)(postBuild(BUILD), res);
 
     assert.equal(res.statusCode, 502);
-    assert.equal(d.query.mock.calls[1].arguments[1][2], 502);
+    assert.equal(auditCalls(d)[1].arguments[1][2], 502);
   });
 
   it("records 499, not the server's 200, when the caller left before the answer", async () => {
@@ -524,7 +683,7 @@ describe("/api/build-server", () => {
 
     await handleWith(d)(postBuild(BUILD), res);
 
-    assert.equal(d.query.mock.calls[1].arguments[1][2], 499);
+    assert.equal(auditCalls(d)[1].arguments[1][2], 499);
     assert.equal(res.chunks.length, 0);
   });
 
@@ -536,7 +695,7 @@ describe("/api/build-server", () => {
       makeRes()
     );
 
-    assert.equal(d.query.mock.calls[1].arguments[1][1], UUID);
+    assert.equal(auditCalls(d)[1].arguments[1][1], UUID);
   });
 
   it("records no UUID when neither side has a well-formed one", async () => {
@@ -551,7 +710,7 @@ describe("/api/build-server", () => {
       makeRes()
     );
 
-    assert.equal(d.query.mock.calls[1].arguments[1][1], undefined);
+    assert.equal(auditCalls(d)[1].arguments[1][1], undefined);
   });
 
   it("says once, in production, that the build server is open without a key", async () => {
