@@ -19,7 +19,7 @@ env_variables:
   # Keep equal to BUILD_SLOTS in the Dockerfile, which warms that many build slots.
   PG_BUILD_CONCURRENCY: "10"
   # Requests waiting for a build slot past this get 503 with Retry-After at once; one that waits PG_BUILD_QUEUE_WAIT_SECS without a slot gets it too. The wait plus the build must fit the proxy's 300 s (REQUEST_TIME_LIMIT, 280 s from arrival, bounds the sum).
-  PG_BUILD_QUEUE_LIMIT: "6"
+  PG_BUILD_QUEUE_LIMIT: "10"
   PG_BUILD_QUEUE_WAIT_SECS: "60"
   # Prefix-matched against Origin (no trailing slashes). The `solana-playground-` prefix temporarily admits dynamic Vercel preview URLs and might be dropped later.
   PG_CLIENT_URLS: "https://beta.solpg.io,https://playground.solana.com,https://solana-playground-two.vercel.app,https://solana-playground-,http://localhost,http://127.0.0.1"
