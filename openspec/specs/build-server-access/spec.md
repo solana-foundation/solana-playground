@@ -95,8 +95,8 @@ GitHub login when the user has one stored, the time, the
 project id and name the client sent, whether the route was unstable and the
 request size; and SHALL complete it with the program UUID (the server's, else
 the request's, and only a UUID), the status and the duration once the build
-ends. The status is the build server's, or `499` when the caller left first
-and `502` when the server could not be reached, cut its answer off or refused
+ends. The status is the build server's, `444` when the caller left before the
+build server was asked, `499` when the caller left after it, and `502` when the server could not be reached, cut its answer off or refused
 the route. A deploy download needs the same sign-in and is not recorded. When the row cannot be written,
 the route SHALL answer `503` and not call the build server. A build refused
 by a build limit is not forwarded and SHALL NOT write a row.
@@ -173,7 +173,8 @@ The route SHALL let each signed-in GitHub user have at most one build running
 and at most 20 builds in the last hour, counted from that user's audit rows.
 A row still without a status, or with `499` because the caller left while the
 build server kept compiling, SHALL count as running only within the route's
-`maxDuration`. A build over either limit SHALL be answered `429` with
+`maxDuration`. A row with `444` SHALL NOT count as running, since no build
+started. A build over either limit SHALL be answered `429` with
 `Retry-After` in seconds and the JSON `{ error, reason: "build-limit" }`, and
 SHALL NOT reach the build server. When the count cannot be read, the route
 SHALL answer `503`.

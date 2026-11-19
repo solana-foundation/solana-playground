@@ -69,6 +69,7 @@ import {
   CALLER_LEFT,
   checkBuildLimitWith,
   finishAuditWith,
+  NEVER_SENT,
   projectOf,
   resolveRoute,
   startAuditWith,
@@ -383,9 +384,10 @@ export const handleWith = (deps) => {
     if (API_KEY) headers["x-api-key"] = API_KEY;
 
     // A caller who left while the route waited (session, body, audit) is
-    // not worth a build: the close already fired, so nothing would abort it
+    // not worth a build: the close already fired, so nothing would abort it.
+    // No build starts, so the row must not hold the user's running slot
     if (res.destroyed || abort.signal.aborted) {
-      await finish(CALLER_LEFT, "");
+      await finish(NEVER_SENT, "");
       return;
     }
 

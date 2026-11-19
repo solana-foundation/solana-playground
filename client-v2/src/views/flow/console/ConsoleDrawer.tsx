@@ -16,11 +16,11 @@ import {
 import { CONSOLE_KEY, keyLabel } from "../../../widgets/layout-shell";
 import Terminal from "../../main/secondary/terminal/Component/Terminal";
 import { PgBuildOutput } from "../../sidebar/assistant/bridge/build-output";
-import { isBusyRefusal } from "../state/sign-in-refusal";
 import { PgFlow } from "../state/stage";
 import BaseConsoleDrawer from "./BaseConsoleDrawer";
-import type { ConsoleStatus } from "./status";
+import type { ConsoleClock, ConsoleStatus } from "./status";
 import {
+  consoleClockOf,
   describeConsoleStatus,
   runToStop,
   withoutClientRunHint,
@@ -39,18 +39,17 @@ interface ConsoleDrawerProps {
 }
 
 /**
- * How long the run in flight has taken, ticking once a second, or `null`
- * while nothing runs. A build counts from its own `startedAt`, as the Build
- * stage's slow line does, so the two agree after a remount; a deploy carries
- * no start time, so it counts from when the strip first saw it run. A busy
- * refusal counts from its `refusedAt` the same way.
+ * How long the clock `consoleClockOf` names has run, ticking once a second,
+ * or `null` while it does not tick. A clock with no `startedAt` counts from
+ * when the strip first saw it tick.
  */
-const useElapsed = (isRunning: boolean, startedAt: number | null) => {
-  const [seen, setSeen] = useState<number | null>(null);
+const useElapsed = (clock: ConsoleClock) => {
+  const startedAt = clock.isTicking ? clock.startedAt : undefined;
+  const [seen, setSeen] = useState<number>();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (!isRunning) {
-      setSeen(null);
+    if (!clock.isTicking) {
+      setSeen(undefined);
       return;
     }
     const start = Date.now();
@@ -58,9 +57,11 @@ const useElapsed = (isRunning: boolean, startedAt: number | null) => {
     setNow(start);
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, [isRunning, startedAt]);
+  }, [clock.isTicking, startedAt]);
   const since = startedAt ?? seen;
-  return !isRunning || since === null ? null : Math.max(0, now - since);
+  return !clock.isTicking || since === undefined
+    ? null
+    : Math.max(0, now - since);
 };
 
 /**
@@ -102,13 +103,7 @@ const ConsoleDrawer: FC<ConsoleDrawerProps> = ({
     };
   }, []);
 
-  // A busy refusal counts its wait down from when it was answered, so the
-  // clock runs for it too
-  const busy = isBusyRefusal(flow.buildFailure) ? flow.buildFailure : undefined;
-  const elapsed = useElapsed(
-    describeConsoleStatus(flow).tone === "running" || busy !== undefined,
-    flow.build === "running" ? flow.buildStartedAt : busy?.refusedAt ?? null
-  );
+  const elapsed = useElapsed(consoleClockOf(flow));
   const described = describeConsoleStatus(flow, elapsed);
   // The hint asks for a client run; once one has started, it has done its job
   const status = hasClientRun ? withoutClientRunHint(described) : described;

@@ -575,7 +575,8 @@ describe("/api/build-server", () => {
     await handleWith(d)(postBuild(BUILD), res);
 
     assert.equal(d.fetch.mock.callCount(), 0);
-    assert.equal(auditCalls({ query })[1].arguments[1][2], 499);
+    // Not 499: nothing compiles, so the row must not hold the running slot
+    assert.equal(auditCalls({ query })[1].arguments[1][2], 444);
   });
 
   for (const [method, path] of [

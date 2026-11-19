@@ -129,6 +129,36 @@ export const describeConsoleStatus = (
 };
 
 /**
+ * Whether the drawer's clock ticks, and from when. `startedAt` is
+ * `undefined` for a run that carries no start time, which the drawer counts
+ * from when it first saw the run.
+ */
+export type ConsoleClock =
+  | { isTicking: false }
+  | { isTicking: true; startedAt: number | undefined };
+
+/**
+ * The clock `describeConsoleStatus` needs for what it shows. A build counts
+ * from its own `startedAt`, as the Build stage's slow line does, so the two
+ * agree after a remount. A busy refusal counts its wait from `refusedAt`, but
+ * only while the strip shows it: the refusal stays in the flow while a deploy
+ * or an airdrop runs, and those count from their own start.
+ */
+export const consoleClockOf = (flow: FlowState): ConsoleClock => {
+  if (flow.build === "running") {
+    return { isTicking: true, startedAt: flow.buildStartedAt ?? undefined };
+  }
+  if (describeConsoleStatus(flow).tone === "running") {
+    return { isTicking: true, startedAt: undefined };
+  }
+  // A stop is shown over a busy refusal, as `describeConsoleStatus` orders it
+  if (flow.stopped === null && isBusyRefusal(flow.buildFailure)) {
+    return { isTicking: true, startedAt: flow.buildFailure.refusedAt };
+  }
+  return { isTicking: false };
+};
+
+/**
  * Which run the strip's Stop is named after, or `null` when the strip shows
  * no Stop. A running build names it, including the build a deploy runs first
  * (when the program is not built): it is what the strip says is running, and

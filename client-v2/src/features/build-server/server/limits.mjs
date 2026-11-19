@@ -55,6 +55,15 @@ export const RUNNING_RETRY_AFTER_SECONDS = 15;
 export const CALLER_LEFT = 499;
 
 /**
+ * What the audit records for a build whose caller left before the route
+ * asked the build server. Nothing compiles, so unlike `CALLER_LEFT` such a
+ * row does not count as running; a reload during the audit write would
+ * otherwise refuse the next build for the whole `BUILD_MAX_DURATION_SECONDS`.
+ * It still counts towards the hour, as every row does.
+ */
+export const NEVER_SENT = 444;
+
+/**
  * @typedef {(text: string, params?: unknown[]) => Promise<{ rows: any[] }>} Query
  */
 

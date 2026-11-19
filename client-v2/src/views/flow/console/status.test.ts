@@ -18,7 +18,7 @@ vi.mock("../../sidebar/assistant/bridge/build-output", () => ({
 }));
 
 import * as buildOutputModule from "../../sidebar/assistant/bridge/build-output";
-import { describeConsoleStatus, runToStop } from "./status";
+import { consoleClockOf, describeConsoleStatus, runToStop } from "./status";
 
 // The mocked module, typed as what the factory above returns
 const buildOutput = buildOutputModule as unknown as MockBuildOutput;
@@ -95,6 +95,63 @@ describe("describeConsoleStatus", () => {
     expect(describeConsoleStatus(busy(), 15_000)).toEqual({
       text: "Build busy · try again now",
       tone: "idle",
+    });
+  });
+
+  describe("consoleClockOf", () => {
+    it("counts a build from its own start", () => {
+      expect(
+        consoleClockOf(state({ build: "running", buildStartedAt: 500 }))
+      ).toEqual({ isTicking: true, startedAt: 500 });
+    });
+
+    it("counts a busy wait from when it was answered", () => {
+      expect(consoleClockOf(busy())).toEqual({
+        isTicking: true,
+        startedAt: 1000,
+      });
+    });
+
+    it("counts an airdrop after a busy refusal from its own start, not the refusal's", () => {
+      expect(
+        consoleClockOf(
+          state({
+            build: "done",
+            airdrops: 1,
+            buildFailure: busy().buildFailure,
+          })
+        )
+      ).toEqual({ isTicking: true, startedAt: undefined });
+    });
+
+    it("counts a deploy after a busy refusal from its own start, not the refusal's", () => {
+      expect(
+        consoleClockOf(
+          state({
+            build: "done",
+            deploy: "running",
+            buildFailure: busy().buildFailure,
+          })
+        )
+      ).toEqual({ isTicking: true, startedAt: undefined });
+    });
+
+    it("stops after a stop, though a busy refusal is kept", () => {
+      expect(
+        consoleClockOf(
+          state({
+            build: "done",
+            stopped: "deploy",
+            buildFailure: busy().buildFailure,
+          })
+        )
+      ).toEqual({ isTicking: false });
+    });
+
+    it("does not tick with nothing running", () => {
+      expect(consoleClockOf(state({ build: "done" }))).toEqual({
+        isTicking: false,
+      });
     });
   });
 

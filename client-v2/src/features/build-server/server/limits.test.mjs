@@ -10,6 +10,7 @@ import {
   judgeBuild,
   MAX_BUILDS_PER_HOUR,
   MAX_RUNNING_BUILDS,
+  NEVER_SENT,
   RUNNING_RETRY_AFTER_SECONDS,
 } from "./limits.mjs";
 
@@ -185,6 +186,7 @@ describe("the count on a real build_audit table", () => {
         await row(120, 200); // finished
         await row(20, CALLER_LEFT); // caller left, the server still compiles
         await row(BUILD_MAX_DURATION_SECONDS + 30, CALLER_LEFT); // ended since
+        await row(15, NEVER_SENT); // caller left before the server was asked
         await row(2 * 60 * 60, undefined); // outside the hour
         await rowFor(other)(5, undefined); // someone else's
 
@@ -193,7 +195,7 @@ describe("the count on a real build_audit table", () => {
         )(userId);
 
         assert.equal(result.running, 2);
-        assert.equal(result.lastHour, 5);
+        assert.equal(result.lastHour, 6);
         assert.ok(result.runningFreesInSeconds > 0);
         assert.ok(result.runningFreesInSeconds <= BUILD_MAX_DURATION_SECONDS);
         assert.ok(result.hourFreesInSeconds > 0);
