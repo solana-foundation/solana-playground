@@ -13,7 +13,8 @@ macro_rules! get_anchor_installation_command {
         // `avm` bug: tries to install unspecified `cargo-build-sbf` when invoking `anchor`.
         // Override the proxy binary with the actual `anchor` CLI to avoid automatic resolution.
         concat!(
-            "cargo install --git https://github.com/otter-sec/anchor avm --force && ",
+            "cargo install --git https://github.com/otter-sec/anchor ",
+            "--rev c414468f65492d32a81da1300814802e65576294 avm --locked --force && ",
             "avm install ",
             $lit,
             " && ",
