@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it, mock } from "node:test";
 
+import { createServerLogger } from "../../../shared/lib/logger/server.mjs";
 import {
   BUILD_MAX_DURATION_SECONDS,
   CALLER_LEFT,
@@ -209,7 +210,12 @@ describe("the count on a real build_audit table", () => {
       } finally {
         // A failed cleanup must not hide the assertion that failed above;
         // the rows it leaves are removed by `clean()` at the next run's start
-        await clean().catch(() => {});
+        await clean().catch((e) =>
+          createServerLogger("build-server:limits.test").warn(
+            "cleanup left test rows in build_audit",
+            { context: { message: String(e?.message ?? e) } }
+          )
+        );
         await pool.end();
       }
     }
