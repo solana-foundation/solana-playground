@@ -257,6 +257,37 @@ export const buildServerEnv = () => ({
   API_KEY: read("PG_BUILD_SERVER_API_KEY")?.trim() || undefined,
 });
 
+/** The longest delay `setTimeout` takes; a larger one fires at once */
+const MAX_TIMER_MS = 2147483647;
+
+/**
+ * A bound of at least 1: a zero timeout or cap would refuse every call, so
+ * it falls back to the default with a warning, as any invalid value does.
+ *
+ * @param {string} name
+ * @param {number} fallback
+ */
+const readBound = (name, fallback) =>
+  readChecked(
+    name,
+    fallback,
+    (value) => Number.isInteger(value) && value >= 1 && value <= MAX_TIMER_MS,
+    `a whole number from 1 to ${MAX_TIMER_MS}`
+  );
+
+/**
+ * The bounds of `/api/mcp`: the largest request body it reads, and, per
+ * upstream call, how long the call may run and the largest response the
+ * gateway buffers from it.
+ */
+export const mcpEnv = () => ({
+  /** Milliseconds per upstream call, response body included */
+  MCP_TIMEOUT_MS: readBound("MCP_TIMEOUT_MS", 20000),
+  MCP_MAX_REQUEST_BYTES: readBound("MCP_MAX_REQUEST_BYTES", 262144),
+  /** Per upstream response; a merged `tools/list` may total several of these */
+  MCP_MAX_RESPONSE_BYTES: readBound("MCP_MAX_RESPONSE_BYTES", 2097152),
+});
+
 /**
  * Postgres for sync, and its opt-in kill switch. `DB_PROVIDER` picks how the
  * pool is built (`model/providers/` in the persistence feature); each provider
