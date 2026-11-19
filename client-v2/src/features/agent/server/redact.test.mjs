@@ -71,6 +71,17 @@ describe("redactSecretsWith", () => {
     );
   });
 
+  it("takes time linear in the text, even against a long key", () => {
+    // Trying every run of a 1 KiB key against 2 MiB took 15 s and blocked
+    // the server; one run of the key in the text was enough to cause it
+    const long = `t${"k9".repeat(512)}`;
+    const text = `${"k9".repeat(4)}${"z".repeat(2 * 1024 * 1024)}${long}`;
+    const started = performance.now();
+    const out = redactSecretsWith([long])(text);
+    assert.ok(performance.now() - started < 1000, "took over a second");
+    assert.equal(out, `[redacted]${"z".repeat(2 * 1024 * 1024)}[redacted]`);
+  });
+
   it("leaves text without a key unchanged", () => {
     assert.equal(redactSecretsWith([KEY])("slow down"), "slow down");
   });

@@ -307,11 +307,11 @@ const readCapped = async (limit, response) => {
  *
  * @param {Limits} limits
  * @param {Upstream} upstream
- * @param {unknown} payload
  * @param {(text: string) => string} redact applied to an error page before
  *   it is cut, so the cut cannot leave a credential's first characters
+ * @param {unknown} payload
  */
-const exchange = async (limits, upstream, payload, redact) => {
+const exchange = async (limits, upstream, redact, payload) => {
   // The entry's `authToken` and `queryParams` mean here what they mean in the browser (`features/mcp`)
   const url = new URL(upstream.url);
   for (const [key, value] of Object.entries(upstream.queryParams ?? {})) {
@@ -398,7 +398,7 @@ export const callUpstream = async (limits, upstream, payload) => {
   const redact = redactSecretsWith(secretsOf(upstream));
   let answer;
   try {
-    answer = await exchange(limits, upstream, payload, redact);
+    answer = await exchange(limits, upstream, redact, payload);
   } catch (e) {
     throw new Error(redact(String(/** @type {Error} */ (e)?.message ?? e)));
   }

@@ -402,6 +402,53 @@ describe("callUpstream redaction", () => {
     assert.ok(!error.message.includes("token-"), error.message);
   });
 
+  it("leaves no part of a credential near the cut wherever it falls", async () => {
+    // A credential masked early shortens the page, pulling later text over
+    // the cut. The token shares no character with the page or `[redacted]`,
+    // so any of its characters in the message is a leak.
+    const token = "QZX7-QZX7-QZX7-QZX7-QZX7";
+    const quoting = { id: "a", url: "https://a.test/mcp", authToken: token };
+    for (let gap = 150; gap <= 260; gap += 1) {
+      mock.method(global, "fetch", async () => {
+        return new Response(`${token}${"y".repeat(gap)}${token}`, {
+          status: 500,
+          statusText: "Internal",
+        });
+      });
+
+      const error = await callUpstream(limits, quoting, {}).then(
+        () => assert.fail("expected a rejection"),
+        (e) => e
+      );
+
+      assert.ok(!/[QZX7]/.test(error.message), `gap ${gap}: ${error.message}`);
+      mock.restoreAll();
+    }
+  });
+
+  it("redacts a large error page against a long credential quickly", async () => {
+    const long = {
+      id: "a",
+      url: "https://a.test/mcp",
+      authToken: "t".repeat(1) + "k9".repeat(512),
+    };
+    mock.method(global, "fetch", async () => {
+      return new Response("z".repeat(2 * 1024 * 1024), {
+        status: 500,
+        statusText: "Internal",
+      });
+    });
+
+    const started = performance.now();
+    await callUpstream(
+      { timeoutMs: 5000, maxResponseBytes: 4 * 1024 * 1024 },
+      long,
+      {}
+    ).catch(() => {});
+
+    assert.ok(performance.now() - started < 1000, "took over a second");
+  });
+
   it("removes the whole query form of a value with a space and reserved characters", async () => {
     const spaced = {
       id: "a",
