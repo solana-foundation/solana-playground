@@ -865,6 +865,7 @@ describe("BaseBuild", () => {
         kind: "busy",
         message: "You already have a build running.",
         retryAfterSeconds: 15,
+        refusedAt: Date.now(),
       },
     });
     const { container } = render(<BaseBuild {...p} />);
@@ -895,6 +896,7 @@ describe("BaseBuild", () => {
               kind: "busy",
               message: "The build server is busy.",
               retryAfterSeconds: 3,
+              refusedAt: Date.now(),
             },
           })}
         />
@@ -913,6 +915,38 @@ describe("BaseBuild", () => {
       act(() => {
         vi.advanceTimersByTime(5000);
       });
+      expect(
+        screen.getByRole("heading", { name: "Builds are busy, try again now" })
+      ).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // A Build stage mounted again (after Write, say) shows what is left of the
+  // wait, not the whole wait over again
+  it("counts a busy wait from when it was answered, not from the mount", () => {
+    vi.useFakeTimers();
+    try {
+      const busyFor = (refusedAt: number) =>
+        props({
+          kind: "unreached",
+          failure: {
+            kind: "busy",
+            message: "You have started too many builds this hour.",
+            retryAfterSeconds: 15,
+            refusedAt,
+          },
+        });
+      const { unmount } = render(
+        <BaseBuild {...busyFor(Date.now() - 10_000)} />
+      );
+      expect(
+        screen.getByRole("heading", { name: "Builds are busy, retry in 5 s" })
+      ).toBeTruthy();
+      unmount();
+
+      render(<BaseBuild {...busyFor(Date.now() - 60_000)} />);
       expect(
         screen.getByRole("heading", { name: "Builds are busy, try again now" })
       ).toBeTruthy();

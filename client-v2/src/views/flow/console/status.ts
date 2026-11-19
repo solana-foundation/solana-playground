@@ -5,7 +5,11 @@ import type { statusDotVariants } from "@/shared/ui/status-dot";
 import { PgBuildOutput } from "../../sidebar/assistant/bridge/build-output";
 import { parseBuildReport } from "../stages/build-report";
 import { msLabel } from "../stages/build-view";
-import { isBusyRefusal, isSignInRefusal } from "../state/sign-in-refusal";
+import {
+  busySecondsLeft,
+  isBusyRefusal,
+  isSignInRefusal,
+} from "../state/sign-in-refusal";
 import type { FlowState, RunKind } from "../state/stage";
 
 type StatusDotVariant = NonNullable<
@@ -58,7 +62,8 @@ const running = (what: string, elapsedMs: number | null): ConsoleStatus => ({
  * system's ("Built in 11.8 s"), derived from `PgFlow.state` plus (only on a
  * failed build) the first diagnostic code out of `PgBuildOutput.latest` via
  * `parseBuildReport`. `elapsedMs` is how long the run in flight has taken,
- * which only the drawer's clock knows.
+ * or, after a busy refusal, how long ago the refusal was answered, which only
+ * the drawer's clock knows.
  *
  * Pure and framework-free so it is unit-testable without rendering
  * `ConsoleDrawer`; the component only has to call it on every `PgFlow`
@@ -92,8 +97,12 @@ export const describeConsoleStatus = (
     return { text: "Sign in to build", tone: "idle" };
   }
   if (isBusyRefusal(flow.buildFailure)) {
+    const left = busySecondsLeft(flow.buildFailure, elapsedMs ?? 0);
     return {
-      text: `Build busy · retry in ${flow.buildFailure.retryAfterSeconds} s`,
+      text:
+        left > 0
+          ? `Build busy \u00b7 retry in ${left} s`
+          : "Build busy \u00b7 try again now",
       tone: "idle",
     };
   }

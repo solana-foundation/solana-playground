@@ -6,7 +6,7 @@
  * route passes in, so this feature imports no other.
  */
 export { finishAuditWith, startAuditWith } from "./server/audit.mjs";
-export { checkBuildLimitWith } from "./server/limits.mjs";
+export { CALLER_LEFT, checkBuildLimitWith } from "./server/limits.mjs";
 export {
   MAX_PROJECT_FIELD,
   projectOf,

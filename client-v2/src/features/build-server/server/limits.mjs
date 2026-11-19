@@ -30,10 +30,12 @@ export const MAX_BUILDS_PER_HOUR = 20;
 export const BUILD_WINDOW_SECONDS = 60 * 60;
 
 /**
- * How long a row with no `status` still counts as a running build: the
- * function's `maxDuration` in `vercel.json` for `api/build-server.mjs`. A
- * function that died leaves `status` null for good, so a row older than this
- * is not a running build. `limits.test.mjs` fails when the two differ.
+ * How long a row with no `status`, or with `CALLER_LEFT`, still counts as a
+ * running build: the function's `maxDuration` in `vercel.json` for
+ * `api/build-server.mjs`, which the build server's `REQUEST_TIME_LIMIT` fits
+ * inside. A function that died leaves `status` null for good, so a row older
+ * than this is not a running build. `limits.test.mjs` fails when the two
+ * differ.
  */
 export const BUILD_MAX_DURATION_SECONDS = 300;
 
@@ -43,6 +45,14 @@ export const BUILD_MAX_DURATION_SECONDS = 300;
  * for minutes.
  */
 export const RUNNING_RETRY_AFTER_SECONDS = 15;
+
+/**
+ * What the audit records for a build whose caller left before the answer.
+ * The build server keeps compiling it and holds its slot until the build
+ * process ends, so such a row still counts as running: a user who stops a
+ * build and starts another must not take a second slot.
+ */
+export const CALLER_LEFT = 499;
 
 /**
  * @typedef {(text: string, params?: unknown[]) => Promise<{ rows: any[] }>} Query
@@ -77,12 +87,12 @@ const numberOrUndefined = (value) =>
 export const countBuildsWith = (query) => async (userId) => {
   const { rows } = await query(
     `select
-       count(*) filter (where status is null
+       count(*) filter (where (status is null or status = $4)
                           and at > now() - make_interval(secs => $2::double precision))
          as running,
        count(*) as last_hour,
        extract(epoch from (
-         min(at) filter (where status is null
+         min(at) filter (where (status is null or status = $4)
                            and at > now() - make_interval(secs => $2::double precision))
          + make_interval(secs => $2::double precision) - now()))
          as running_frees_in,
@@ -92,7 +102,7 @@ export const countBuildsWith = (query) => async (userId) => {
      from build_audit
      where user_id = $1
        and at > now() - make_interval(secs => $3::double precision)`,
-    [userId, BUILD_MAX_DURATION_SECONDS, BUILD_WINDOW_SECONDS]
+    [userId, BUILD_MAX_DURATION_SECONDS, BUILD_WINDOW_SECONDS, CALLER_LEFT]
   );
   const row = rows[0] ?? {};
   return {

@@ -37,3 +37,17 @@ export const isBuildRefusal = (
   failure: BuildFailure | null | undefined
 ): failure is Extract<BuildFailure, { kind: "signed-out" | "busy" }> =>
   isSignInRefusal(failure) || isBusyRefusal(failure);
+
+/**
+ * Whole seconds left of a busy refusal's wait, `elapsedMs` after it was
+ * answered; 0 once a build may be tried again. The Build surface and the
+ * console strip both count with it, from `refusedAt`, so neither restarts the
+ * wait when it mounts again.
+ *
+ * @param failure the busy refusal
+ * @param elapsedMs how long ago it was answered
+ */
+export const busySecondsLeft = (
+  failure: Extract<BuildFailure, { kind: "busy" }>,
+  elapsedMs: number
+) => Math.max(0, failure.retryAfterSeconds - Math.floor(elapsedMs / 1000));

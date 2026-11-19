@@ -65,19 +65,37 @@ describe("describeConsoleStatus", () => {
     ).toEqual({ text: "Sign in to build", tone: "idle" });
   });
 
+  // HOO-2907: a busy refusal is told in the normal colour, with its wait
+  const busy = () =>
+    state({
+      build: "done",
+      buildFailure: {
+        kind: "busy",
+        message: "You already have a build running.",
+        retryAfterSeconds: 15,
+        refusedAt: 1000,
+      },
+    });
+
   it("says builds are busy and for how long, in the normal colour", () => {
-    expect(
-      describeConsoleStatus(
-        state({
-          build: "done",
-          buildFailure: {
-            kind: "busy",
-            message: "You already have a build running.",
-            retryAfterSeconds: 15,
-          },
-        })
-      )
-    ).toEqual({ text: "Build busy · retry in 15 s", tone: "idle" });
+    expect(describeConsoleStatus(busy())).toEqual({
+      text: "Build busy · retry in 15 s",
+      tone: "idle",
+    });
+  });
+
+  it("counts a busy wait down from when it was answered", () => {
+    expect(describeConsoleStatus(busy(), 4500)).toEqual({
+      text: "Build busy · retry in 11 s",
+      tone: "idle",
+    });
+  });
+
+  it("says a build may be tried again once the busy wait has passed", () => {
+    expect(describeConsoleStatus(busy(), 15_000)).toEqual({
+      text: "Build busy · try again now",
+      tone: "idle",
+    });
   });
 
   it("is blank before the first build", () => {

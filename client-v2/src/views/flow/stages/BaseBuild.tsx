@@ -2,6 +2,7 @@ import { CircleAlert, CircleCheck, CircleX, History } from "lucide-react";
 import type { FocusEvent, ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import { useElapsed } from "@/shared/lib/hooks/use-elapsed";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { cn } from "@/shared/lib/utils";
 import { AsyncButton } from "@/shared/ui/async-button";
@@ -37,6 +38,7 @@ import {
   EMPTY_SOURCE_HINT,
   fileLabel,
 } from "../../../commands/build/empty-source";
+import { busySecondsLeft } from "../state/sign-in-refusal";
 import type { BuildFailure } from "../state/stage";
 import type { BuildSurface } from "./build-surface";
 import type { DiagnosticView, FailedView } from "./build-view";
@@ -349,13 +351,7 @@ const Unreached = (p: BaseBuildProps & { failure: BuildFailure | null }) => {
   }
   if (p.failure?.kind === "signed-out") return <SignedOut {...p} />;
   if (p.failure?.kind === "busy") {
-    return (
-      <Busy
-        {...p}
-        message={p.failure.message}
-        retryAfterSeconds={p.failure.retryAfterSeconds}
-      />
-    );
+    return <Busy {...p} refusal={p.failure} />;
   }
   const noAnswer = p.failure?.kind === "no-answer";
   return (
@@ -438,14 +434,19 @@ const SignedOut = (p: BaseBuildProps) => (
  * The build service is busy, because this user already has a build running
  * or is past the hourly limit (HOO-2907, `429`), or because the build
  * server's queue is full (HOO-2908, `503`). It asked to be tried again in
- * `retryAfterSeconds`, which counts down here. Not a red error: the code was
- * never built, so nothing is wrong with it. The server's own words say which
- * limit it was. Try again stays enabled, since a slot may free sooner.
+ * `retryAfterSeconds`, which counts down here from the refusal's own time, so
+ * leaving the stage and coming back shows what is left of the wait. Not a red
+ * error: the code was never built, so nothing is wrong with it. The server's
+ * own words say which limit it was. Try again stays enabled, since a slot may
+ * free sooner.
  */
 const Busy = (
-  p: BaseBuildProps & { message: string; retryAfterSeconds: number }
+  p: BaseBuildProps & {
+    refusal: Extract<BuildFailure, { kind: "busy" }>;
+  }
 ) => {
-  const left = useCountdown(p.message, p.retryAfterSeconds);
+  const elapsedMs = useElapsed(p.refusal.refusedAt) ?? 0;
+  const left = busySecondsLeft(p.refusal, elapsedMs);
   return (
     <Surface
       title={
@@ -453,33 +454,12 @@ const Busy = (
           ? `Builds are busy, retry in ${left} s`
           : "Builds are busy, try again now"
       }
-      description={`${p.message} Your code is unchanged.`}
+      description={`${p.refusal.message} Your code is unchanged.`}
       announce="status"
       actions={<BrandBuildButton p={p} label="Try again" />}
       progress={p}
     />
   );
-};
-
-/**
- * Whole seconds left of a busy answer's `Retry-After`, counting down to 0.
- * A new answer restarts it.
- */
-const useCountdown = (message: string, seconds: number) => {
-  const [left, setLeft] = useState(seconds);
-  const isCounting = left > 0;
-  // A new answer starts the count again
-  useEffect(() => {
-    setLeft(seconds);
-  }, [message, seconds]);
-  // Ticks while there is time left; the updater stays pure, as React may
-  // call it twice
-  useEffect(() => {
-    if (!isCounting) return;
-    const id = setInterval(() => setLeft((n) => Math.max(0, n - 1)), 1000);
-    return () => clearInterval(id);
-  }, [isCounting]);
-  return left;
 };
 
 /** What BUILD-04 keeps out of its first line: the server and the raw error */

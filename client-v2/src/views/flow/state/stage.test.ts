@@ -354,6 +354,7 @@ describe("PgFlow.reduce, a stopped run", () => {
     kind: "busy",
     message: "You already have a build running.",
     retryAfterSeconds: 15,
+    refusedAt: 9,
   } as const;
 
   it("a build refused as busy goes back to the last settled build", () => {
@@ -1584,6 +1585,7 @@ describe("what a rejected command tells the flow (HOO-2422)", () => {
       kind: "busy",
       message: "You already have a build running.",
       retryAfterSeconds: 15,
+      refusedAt: expect.any(Number),
     });
     sub.dispose();
   });

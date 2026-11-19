@@ -66,6 +66,7 @@ import {
   SIGNED_OUT_REASON,
 } from "../src/features/auth/server.mjs";
 import {
+  CALLER_LEFT,
   checkBuildLimitWith,
   finishAuditWith,
   projectOf,
@@ -81,9 +82,6 @@ const log = createServerLogger("api:build-server");
 
 /** The build server's own default `PAYLOAD_LIMIT`; a larger body it refuses anyway */
 const MAX_BODY_BYTES = 1024 * 1024;
-
-/** What the audit records for a build whose caller left before the answer */
-const CALLER_LEFT = 499;
 
 /** `reason` of a `429` for a limit, which the client tells from other refusals */
 const BUSY_REASON = "build-limit";

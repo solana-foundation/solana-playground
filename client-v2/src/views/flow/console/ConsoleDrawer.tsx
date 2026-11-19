@@ -16,6 +16,7 @@ import {
 import { CONSOLE_KEY, keyLabel } from "../../../widgets/layout-shell";
 import Terminal from "../../main/secondary/terminal/Component/Terminal";
 import { PgBuildOutput } from "../../sidebar/assistant/bridge/build-output";
+import { isBusyRefusal } from "../state/sign-in-refusal";
 import { PgFlow } from "../state/stage";
 import BaseConsoleDrawer from "./BaseConsoleDrawer";
 import type { ConsoleStatus } from "./status";
@@ -41,7 +42,8 @@ interface ConsoleDrawerProps {
  * How long the run in flight has taken, ticking once a second, or `null`
  * while nothing runs. A build counts from its own `startedAt`, as the Build
  * stage's slow line does, so the two agree after a remount; a deploy carries
- * no start time, so it counts from when the strip first saw it run.
+ * no start time, so it counts from when the strip first saw it run. A busy
+ * refusal counts from its `refusedAt` the same way.
  */
 const useElapsed = (isRunning: boolean, startedAt: number | null) => {
   const [seen, setSeen] = useState<number | null>(null);
@@ -100,9 +102,12 @@ const ConsoleDrawer: FC<ConsoleDrawerProps> = ({
     };
   }, []);
 
+  // A busy refusal counts its wait down from when it was answered, so the
+  // clock runs for it too
+  const busy = isBusyRefusal(flow.buildFailure) ? flow.buildFailure : undefined;
   const elapsed = useElapsed(
-    describeConsoleStatus(flow).tone === "running",
-    flow.build === "running" ? flow.buildStartedAt : null
+    describeConsoleStatus(flow).tone === "running" || busy !== undefined,
+    flow.build === "running" ? flow.buildStartedAt : busy?.refusedAt ?? null
   );
   const described = describeConsoleStatus(flow, elapsed);
   // The hint asks for a client run; once one has started, it has done its job

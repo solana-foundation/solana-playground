@@ -171,7 +171,8 @@ per instance that the build server is open.
 
 The route SHALL let each signed-in GitHub user have at most one build running
 and at most 20 builds in the last hour, counted from that user's audit rows.
-A row still without a status SHALL count as running only within the route's
+A row still without a status, or with `499` because the caller left while the
+build server kept compiling, SHALL count as running only within the route's
 `maxDuration`. A build over either limit SHALL be answered `429` with
 `Retry-After` in seconds and the JSON `{ error, reason: "build-limit" }`, and
 SHALL NOT reach the build server. When the count cannot be read, the route
@@ -190,6 +191,13 @@ SHALL answer `503`.
   another
 - **THEN** the route answers `429` with `Retry-After` set to the seconds until
   their oldest build in that hour leaves it
+
+#### Scenario: A build whose caller left (manual)
+
+- **WHEN** a signed-in user stops a build, so its row records `499`, and
+  starts another within the route's `maxDuration`
+- **THEN** the route answers `429` with `reason: "build-limit"`, since the
+  build server still compiles the first
 
 #### Scenario: A build whose function died (manual)
 
@@ -214,7 +222,10 @@ SHALL answer `503`.
 A build answered `429` or `503` with `Retry-After` SHALL NOT be shown as a
 failed build. The Build stage SHALL title it "Builds are busy, retry in N s",
 counting N down each second to "Builds are busy, try again now", SHALL show
-the answer's words, and SHALL carry one "Try again" button. The stage SHALL
+the answer's words, and SHALL carry one "Try again" button. N SHALL count
+from when the answer arrived, so a Build stage shown again later shows what is
+left of the wait, and the status bar's "Build busy · retry in N s" SHALL count
+down with it to "Build busy · try again now". The stage SHALL
 keep its last settled state, and the terminal SHALL print the refusal as a
 plain line. A `503` without `Retry-After` SHALL stay an ordinary failure.
 
@@ -228,8 +239,14 @@ plain line. A `503` without `Retry-After` SHALL stay an ordinary failure.
 #### Scenario: The wait runs out (manual)
 
 - **WHEN** the Build stage has shown a busy refusal for the seconds it named
-- **THEN** its title reads "Builds are busy, try again now", and "Try again"
-  runs the build again
+- **THEN** its title reads "Builds are busy, try again now", the status bar
+  reads "Build busy · try again now", and "Try again" runs the build again
+
+#### Scenario: Leaving the Build stage keeps the wait (manual)
+
+- **WHEN** a user turned away for 15 seconds opens Write and comes back to
+  Build 10 seconds later
+- **THEN** the Build stage reads "Builds are busy, retry in 5 s"
 
 #### Scenario: A busy refusal does not stand in for a failed build (manual)
 

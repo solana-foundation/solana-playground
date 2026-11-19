@@ -82,13 +82,19 @@ export interface FlowState {
  * `/api/build-server` asked for a GitHub sign-in (HOO-2422), `other` for anything
  * else (ANY-00). `busy` is a refusal because the service is busy (HOO-2907):
  * the user is past a build limit, or the build server's queue is full, and
- * `retryAfterSeconds` is the wait the server asked for. `message` is the
- * command's own error, for the details.
+ * `retryAfterSeconds` is the wait the server asked for, counted from
+ * `refusedAt` (epoch ms), so a surface mounted later shows what is left of it.
+ * `message` is the command's own error, for the details.
  */
 export type BuildFailure =
   | { kind: "no-answer" | "other"; message: string }
   | { kind: "signed-out"; message: string }
-  | { kind: "busy"; message: string; retryAfterSeconds: number }
+  | {
+      kind: "busy";
+      message: string;
+      retryAfterSeconds: number;
+      refusedAt: number;
+    }
   | { kind: "empty-source"; message: string; file: string };
 
 export type FlowEvent =
@@ -230,7 +236,12 @@ const buildFailureOf = (err: unknown): BuildFailure => {
   if (isSignInRefusalError(err)) return { kind: "signed-out", message: text };
   const retryAfterSeconds = getBusyRetryAfter(err);
   if (retryAfterSeconds !== undefined) {
-    return { kind: "busy", message: text, retryAfterSeconds };
+    return {
+      kind: "busy",
+      message: text,
+      retryAfterSeconds,
+      refusedAt: Date.now(),
+    };
   }
   return { kind: answered === false ? "no-answer" : "other", message: text };
 };

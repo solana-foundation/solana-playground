@@ -4,6 +4,7 @@ import { describe, it, mock } from "node:test";
 
 import {
   BUILD_MAX_DURATION_SECONDS,
+  CALLER_LEFT,
   checkBuildLimitWith,
   countBuildsWith,
   judgeBuild,
@@ -109,8 +110,13 @@ describe("countBuildsWith", () => {
     });
     const [text, params] = query.mock.calls[0].arguments;
     assert.match(text, /from build_audit\s+where user_id = \$1/);
-    assert.match(text, /status is null/);
-    assert.deepEqual(params, ["u1", BUILD_MAX_DURATION_SECONDS, 60 * 60]);
+    assert.match(text, /status is null or status = \$4/);
+    assert.deepEqual(params, [
+      "u1",
+      BUILD_MAX_DURATION_SECONDS,
+      60 * 60,
+      CALLER_LEFT,
+    ]);
   });
 
   it("reads no row as no builds", async () => {
@@ -177,6 +183,8 @@ describe("the count on a real build_audit table", () => {
         await row(10, undefined); // running
         await row(BUILD_MAX_DURATION_SECONDS + 60, undefined); // function died
         await row(120, 200); // finished
+        await row(20, CALLER_LEFT); // caller left, the server still compiles
+        await row(BUILD_MAX_DURATION_SECONDS + 30, CALLER_LEFT); // ended since
         await row(2 * 60 * 60, undefined); // outside the hour
         await rowFor(other)(5, undefined); // someone else's
 
@@ -184,8 +192,8 @@ describe("the count on a real build_audit table", () => {
           pool.query(text, params)
         )(userId);
 
-        assert.equal(result.running, 1);
-        assert.equal(result.lastHour, 3);
+        assert.equal(result.running, 2);
+        assert.equal(result.lastHour, 5);
         assert.ok(result.runningFreesInSeconds > 0);
         assert.ok(result.runningFreesInSeconds <= BUILD_MAX_DURATION_SECONDS);
         assert.ok(result.hourFreesInSeconds > 0);
