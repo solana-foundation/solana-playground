@@ -159,6 +159,19 @@ const publicUrl = (name, value, restricted) => {
   ];
 };
 
+/**
+ * The path production's `REACT_APP_SERVER_URL` names: this deployment's own
+ * build route, `BUILD_SERVER_ROUTE` in src/settings/server/default-endpoint.ts.
+ * A path, not an address, so it is the one value of that variable that is
+ * not a URL.
+ */
+const BUILD_SERVER_ROUTE = "/api/build-server";
+
+/** @type {ShapeCheck} */
+// eslint-disable-next-line max-params -- one signature for every entry of VALUE_SHAPES
+const buildServerUrl = (name, value, restricted) =>
+  value === BUILD_SERVER_ROUTE ? [] : publicUrl(name, value, restricted);
+
 /** @type {ShapeCheck} */
 const sentryDsn = (name, value) => {
   if (!URL.canParse(value) || new URL(value).protocol !== "https:") {
@@ -180,6 +193,7 @@ const sentryDsn = (name, value) => {
  */
 const VALUE_SHAPES = [
   [(name) => name === "REACT_APP_SENTRY_DSN", sentryDsn],
+  [(name) => name === "REACT_APP_SERVER_URL", buildServerUrl],
   [(name) => name.endsWith("_URL"), publicUrl],
   [
     (name) => name.endsWith("_SEND_TX_PER_SECOND"),

@@ -82,6 +82,23 @@ test("passes production's values", () => {
   assert.deepEqual(publicEnvProblems(ALLOWED, PRODUCTION_LIKE), []);
 });
 
+test("passes the build-server route as REACT_APP_SERVER_URL", () => {
+  const route = /BUILD_SERVER_ROUTE = "([^"]+)"/.exec(
+    fs.readFileSync(
+      path.join(clientDir, "src", "settings", "server", "default-endpoint.ts"),
+      "utf8"
+    )
+  )?.[1];
+  assert.equal(route, "/api/build-server");
+  assert.deepEqual(
+    publicEnvProblems(ALLOWED, {
+      ...PRODUCTION_LIKE,
+      REACT_APP_SERVER_URL: route,
+    }),
+    []
+  );
+});
+
 for (const [label, env, expected] of [
   [
     "fails a REACT_APP_* the client does not read",
@@ -253,6 +270,11 @@ for (const [label, env, expected] of [
   [
     "fails a URL variable that is not a URL",
     { REACT_APP_SERVER_URL: "api.solpg.io" },
+    /REACT_APP_SERVER_URL is not a URL/,
+  ],
+  [
+    "fails a path other than the build-server route",
+    { REACT_APP_SERVER_URL: "/api/other" },
     /REACT_APP_SERVER_URL is not a URL/,
   ],
   [
