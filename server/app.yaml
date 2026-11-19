@@ -8,12 +8,18 @@ automatic_scaling:
 
 # Runtime configuration is supplied via GCP-managed env vars and/or secrets.
 # Keep this file free of credentials so the manifest is safe to commit.
-# PG_API_KEY, when set there, makes the build and deploy routes answer only a
-# request whose x-api-key header matches: the client deployment's
-# /api/build-server route, which holds the same value as PG_BUILD_SERVER_API_KEY.
+# PG_API_KEYS, a comma-separated list set from a GCP secret, never here, makes
+# the build, deploy and unstable routes answer only a request whose x-api-key
+# header matches one entry. Each client of the server holds its own entry, so
+# one can be rotated or revoked alone: the client deployment's
+# /api/build-server route holds one as PG_BUILD_SERVER_API_KEY. PG_API_KEY, a
+# single key, is read only while PG_API_KEYS holds no key.
 env_variables:
   # Each cargo-build-sbf peaks ~3.7GB and ~1 core; sized with resources below for 3 concurrent builds, leaving 1 core for serving.
   PG_BUILD_CONCURRENCY: "3"
+  # Requests waiting for a build slot past this get 503 with Retry-After at once; one that waits PG_BUILD_QUEUE_WAIT_SECS without a slot gets it too. The wait plus the build must fit the proxy's 300 s (REQUEST_TIME_LIMIT, 280 s from arrival, bounds the sum).
+  PG_BUILD_QUEUE_LIMIT: "6"
+  PG_BUILD_QUEUE_WAIT_SECS: "60"
   # Prefix-matched against Origin (no trailing slashes). The `solana-playground-` prefix temporarily admits dynamic Vercel preview URLs and might be dropped later.
   PG_CLIENT_URLS: "https://beta.solpg.io,https://playground.solana.com,https://solana-playground-two.vercel.app,https://solana-playground-,http://localhost,http://127.0.0.1"
 

@@ -349,6 +349,51 @@ describe("PgFlow.reduce, a stopped run", () => {
       failure: { kind: "signed-out", message: "Sign in with GitHub to build." },
     });
 
+  // HOO-2907: a busy service is no more a failed build than a sign-in prompt
+  const BUSY = {
+    kind: "busy",
+    message: "You already have a build running.",
+    retryAfterSeconds: 15,
+    refusedAt: 9,
+  } as const;
+
+  it("a build refused as busy goes back to the last settled build", () => {
+    const rebuilding = PgFlow.reduce(builtOnce(), {
+      type: "build-start",
+      at: 9,
+    });
+
+    const s = PgFlow.reduce(rebuilding, {
+      type: "build-finish",
+      failed: true,
+      errorCount: 0,
+      ms: 40,
+      failure: BUSY,
+    });
+
+    expect(s.build).toBe("done");
+    expect(s.buildSettled).toBe("done");
+    expect(s.buildMs).toBe(3000);
+    expect(s.buildFailure).toEqual(BUSY);
+  });
+
+  it("a new build drops the busy refusal", () => {
+    const refused = PgFlow.reduce(
+      PgFlow.reduce(builtOnce(), { type: "build-start", at: 9 }),
+      {
+        type: "build-finish",
+        failed: true,
+        errorCount: 0,
+        ms: 40,
+        failure: BUSY,
+      }
+    );
+
+    const s = PgFlow.reduce(refused, { type: "build-start", at: 20 });
+
+    expect(s.buildFailure).toBeNull();
+  });
+
   it("a new build drops the sign-in refusal", () => {
     const s = PgFlow.reduce(refusedOnce(), { type: "build-start", at: 20 });
 
@@ -1522,6 +1567,40 @@ describe("what a rejected command tells the flow (HOO-2422)", () => {
       kind: "signed-out",
       message: "Sign in with GitHub to build.",
     });
+    sub.dispose();
+  });
+
+  it("reads a 429 or 503 with Retry-After as busy, with the wait", async () => {
+    const { sub, build } = await listen();
+
+    build({
+      err: Object.assign(new Error("You already have a build running."), {
+        answered: true,
+        status: 429,
+        retryAfterSeconds: 15,
+      }),
+    });
+
+    expect(PgFlow.state.buildFailure).toEqual({
+      kind: "busy",
+      message: "You already have a build running.",
+      retryAfterSeconds: 15,
+      refusedAt: expect.any(Number),
+    });
+    sub.dispose();
+  });
+
+  it("keeps a 503 with no Retry-After as other", async () => {
+    const { sub, build } = await listen();
+
+    build({
+      err: Object.assign(new Error("Sign-in is unavailable."), {
+        answered: true,
+        status: 503,
+      }),
+    });
+
+    expect(PgFlow.state.buildFailure).toMatchObject({ kind: "other" });
     sub.dispose();
   });
 

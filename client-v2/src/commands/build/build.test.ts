@@ -258,6 +258,25 @@ describe("commands/build/build", () => {
       expect(isBuildRefused("id-b")).toBe(false);
     });
 
+    // busy-build-refusals: a busy service never reached the compiler either,
+    // so Deploy is told this source never built, as for sign-in
+    it("keeps the saved verdict and marks the project when a busy service refuses its build", async () => {
+      utils.PgServer.build.mockRejectedValue(
+        Object.assign(new Error("You already have a build running."), {
+          answered: true,
+          status: 429,
+          retryAfterSeconds: 15,
+        })
+      );
+
+      const err = await run().catch((e: unknown) => e);
+
+      expect((err as Error).message).toBe("You already have a build running.");
+      expect(utils.PgProgramInfo.update).not.toHaveBeenCalled();
+      expect(isBuildRefused("id-a")).toBe(true);
+      clearBuildRefused("id-a");
+    });
+
     it("clears the mark once a build reaches the compiler", async () => {
       markBuildRefused("id-a");
       utils.PgServer.build.mockResolvedValue({
@@ -506,6 +525,44 @@ describe("commands/build/build", () => {
         ["build_failed", { framework: "anchor", reason: "server" }],
       ]);
       clearBuildRefused("id-a");
+    });
+
+    // client-v2-build: A build turned away as busy is counted as busy
+    it.each([429, 503])(
+      "counts a %i with Retry-After as busy",
+      async (status) => {
+        utils.PgServer.build.mockRejectedValue(
+          Object.assign(new Error("The build server is busy."), {
+            answered: true,
+            status,
+            retryAfterSeconds: 30,
+          })
+        );
+
+        await run().catch(() => undefined);
+
+        expect(buildEvents()).toEqual([
+          ["build_started", { framework: "anchor" }],
+          ["build_failed", { framework: "anchor", reason: "busy" }],
+        ]);
+        clearBuildRefused("id-a");
+      }
+    );
+
+    it("counts a 503 without Retry-After as server", async () => {
+      utils.PgServer.build.mockRejectedValue(
+        Object.assign(new Error("Server request failed"), {
+          answered: true,
+          status: 503,
+        })
+      );
+
+      await run().catch(() => undefined);
+
+      expect(buildEvents()).toEqual([
+        ["build_started", { framework: "anchor" }],
+        ["build_failed", { framework: "anchor", reason: "server" }],
+      ]);
     });
   });
 });

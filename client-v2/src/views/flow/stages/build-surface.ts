@@ -1,5 +1,5 @@
 import type { BuildOutput } from "../../sidebar/assistant/bridge/build-output";
-import { isSignInRefusal } from "../state/sign-in-refusal";
+import { isBuildRefusal } from "../state/sign-in-refusal";
 import type { BuildFailure, FlowState, StageStatus } from "../state/stage";
 
 /**
@@ -74,9 +74,10 @@ export const buildSurface = ({
 }): BuildSurface => {
   const settled = flow.build === "running" ? flow.buildSettled : flow.build;
 
-  // A refusal for sign-in keeps the build where it was settled, so it is
-  // read from the failure, not the status (HOO-2422)
-  if (isSignInRefusal(flow.buildFailure)) {
+  // A refusal for sign-in or a busy service keeps the build where it was
+  // settled, so it is read from the failure, not the status (HOO-2422,
+  // HOO-2907)
+  if (isBuildRefusal(flow.buildFailure)) {
     return { kind: "unreached", failure: flow.buildFailure };
   }
 

@@ -1,3 +1,4 @@
+import { isBusyRefusalError } from "./busy-refusal";
 import { isSignInRefusalError } from "./sign-in-refusal";
 
 /** `PgServerError.body` when the refusal's body could not be read */
@@ -15,7 +16,42 @@ interface PgServerErrorInit {
    * why, e.g. `"signed-out"`. Absent for the build server's own errors.
    */
   refusal?: { error: string; reason?: string };
+  /**
+   * Seconds the server asked the caller to wait (`Retry-After`), read only
+   * from a `429` or `503`; absent when it did not say
+   */
+  retryAfterSeconds?: number;
 }
+
+/**
+ * The seconds a `Retry-After` header asks for. Only the delay form, which
+ * `/api/build-server` sends; a date, a fraction or a negative number is
+ * not read.
+ *
+ * @param value the header's value; `null` or `undefined` when there was none
+ */
+export const parseRetryAfter = (
+  value: string | null | undefined
+): number | undefined => {
+  if (typeof value !== "string" || !/^\d+$/.test(value.trim()))
+    return undefined;
+  return Number(value.trim());
+};
+
+/**
+ * What a busy answer says when it came without `/api/build-server`'s own
+ * words: the build server's full queue (HOO-2908) answers `503` with
+ * `Retry-After` and a plain-text body meant for logs, not for the Build stage
+ */
+export const BUSY_SERVER_MESSAGE =
+  "The build server is busy: too many builds are running.";
+
+/** The words a failed request shows: the refusal's, a busy answer's, or the raw body */
+const messageOf = (init: PgServerErrorInit): string => {
+  if (init.refusal) return init.refusal.error;
+  if (isBusyRefusalError(init)) return BUSY_SERVER_MESSAGE;
+  return `Server request failed (${init.url}): ${init.body}`;
+};
 
 /**
  * A request to the build server that failed. `status` is the HTTP status of
@@ -30,24 +66,24 @@ export class PgServerError extends Error {
   readonly body: string;
   /** Why `/api/build-server` refused, when it said, e.g. `"signed-out"` */
   readonly reason?: string;
+  /** How long the server asked to wait before trying again, when it did */
+  readonly retryAfterSeconds?: number;
   /**
-   * A refusal for sign-in names something the person can do, so the
-   * terminal prints it as a plain line rather than a process error
+   * A refusal for sign-in, or for a busy service, names something the person
+   * can do, so the terminal prints it as a plain line rather than a process
+   * error
    */
   readonly isPlain: boolean;
 
   constructor(init: PgServerErrorInit) {
-    super(
-      init.refusal?.error ??
-        `Server request failed (${init.url}): ${init.body}`,
-      "cause" in init ? { cause: init.cause } : undefined
-    );
+    super(messageOf(init), "cause" in init ? { cause: init.cause } : undefined);
     this.name = "PgServerError";
     this.url = init.url;
     this.status = init.status;
     this.body = init.body;
     this.reason = init.refusal?.reason;
-    this.isPlain = isSignInRefusalError(this);
+    this.retryAfterSeconds = init.retryAfterSeconds;
+    this.isPlain = isSignInRefusalError(this) || isBusyRefusalError(this);
   }
 
   /**

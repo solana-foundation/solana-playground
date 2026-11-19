@@ -62,12 +62,8 @@ Greptile reviews only PRs into `master` on the foundation repository, as
   the Flow view inside it. Default to this one.
 
 `server/` and `wasm/` are upstream's and out of scope per the project's
-own principles ("No backend changes"), with one fork-owned exception in
-`wasm/`: the built-in wallet signs the CLIs' transactions at the send step
-under the key origin (OpenSpec `wallet-cli-signing`). On an upstream sync keep
-`solana-client/src/deferred_signer.rs` and its call in
-`send_transaction_with_config`, `utils/solana-playground-utils/src/wallet.rs`
-with the `wallet` feature, and the CLIs' `wallet_signer()` calls.
+own principles ("No backend changes"), except for the fork-owned changes
+listed under "Gotchas".
 
 ## Commit messages
 
@@ -164,6 +160,23 @@ Asked to build something in the client, look in `openspec/changes/` first.
   `client-v2/scripts/vercel-install.sh` installs it from what those pins lock
   (`client-v2/docs/deploy-client-vercel.md`, "wasm-bindgen"). A bump changes
   the pin and the lockfile together.
+- **`wasm/` also carries the built-in wallet's CLI signing, which an upstream
+  sync must keep:** the wallet signs the CLIs' transactions at the send step
+  under the key origin (OpenSpec `wallet-cli-signing`). Keep
+  `solana-client/src/deferred_signer.rs` and its call in
+  `send_transaction_with_config`, `utils/solana-playground-utils/src/wallet.rs`
+  with the `wallet` feature, and the CLIs' `wallet_signer()` calls.
+- **`server/` carries fork-owned changes that an upstream sync must keep,**
+  so a conflict there is resolved by hand, never by taking upstream's file:
+  the share routes and MongoDB are gone (`e5d1cf747`); the stable build runs
+  Anchor 1.1.2 without IDL generation (`c45a8dcd9`); `routes/build.rs` gives
+  each request `REQUEST_TIME_LIMIT`, wait included, holds the slot until the
+  build process ends and sweeps old build directories (HOO-2874, #174); and
+  `Permit::acquire` bounds the wait for a slot with `QueueLimits`, answering
+  `Error::Busy` (`503` with `Retry-After`) past it (HOO-2908, #182), set by
+  `PG_BUILD_QUEUE_LIMIT` and `PG_BUILD_QUEUE_WAIT_SECS` in `config.rs` and
+  `server/app.yaml`. `REQUEST_TIME_LIMIT` fits inside the `maxDuration` of
+  `api/build-server.mjs` in `client-v2/vercel.json`: change the two together.
 - **The wasm packages are real unless `USE_WASM_STUBS=true` says
   otherwise.** Four of the five local `wasm/*/pkg` deps compile from Rust, and
   `yarn install` refuses to run while those directories are missing. The fork

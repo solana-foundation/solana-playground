@@ -176,7 +176,7 @@ async function checkProgram() {
     // now would upload that binary. A second refusal throws and stops here
     PgTerminal.println(
       PgTerminal.warning(
-        "Warning: Your last build was refused for sign-in. Building the current sources first."
+        "Warning: Your last build was refused before it ran. Building the current sources first."
       ),
       { noColor: true }
     );

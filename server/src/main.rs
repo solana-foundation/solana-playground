@@ -12,22 +12,25 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use solpg_server::log::{self, info, warn};
+use solpg_server::log::{self, error, info};
 use tokio::net::TcpListener;
 
 use self::{config::Config, middlewares::*, routes::*};
 
 /// The server's routes and middleware, as `main` serves them. Separate so a
-/// test can check which routes the API key guards.
+/// test can check which routes the API keys guard.
 fn app(config: Config) -> Router {
-    // Off unless `PG_API_KEY` is set. Guards what costs the server work or
-    // serves a build's output
-    let api_key = middleware::from_fn_with_state(config.api_key, require_api_key);
+    // Off unless `PG_API_KEYS` or `PG_API_KEY` is set. Guards what costs the
+    // server work or serves a build's output
+    let api_key = middleware::from_fn_with_state(config.api_keys, require_api_key);
 
     let build_routes = Router::new()
         .route(
             "/build",
-            post(build).with_state(BuildState::new(config.build_concurrency)),
+            post(build).with_state(BuildState::new(
+                config.build_concurrency,
+                config.build_queue,
+            )),
         )
         .route("/deploy/{uuid}", get(deploy))
         .layer(api_key.clone());
@@ -72,9 +75,16 @@ async fn main() -> Result<()> {
     #[cfg(feature = "unstable")]
     setup::setup().await?;
 
-    match &config.api_key {
-        Some(_) => info!("API key required on build, deploy and unstable routes"),
-        None => warn!("PG_API_KEY is not set: build, deploy and unstable routes are open"),
+    match &config.api_keys {
+        Some(keys) => info!(
+            "API key required on build, deploy and unstable routes; {} accepted",
+            keys.len()
+        ),
+        // `error!`, the one level a server without `RUST_LOG` prints, as on App
+        // Engine: an open server must show in its logs
+        None => error!(
+            "Neither PG_API_KEYS nor PG_API_KEY is set: build, deploy and unstable routes are open"
+        ),
     }
     let port = config.port;
     let app = app(config);
@@ -100,7 +110,7 @@ mod tests {
 
     fn guarded_app() -> Router {
         let mut config = Config::from_env().unwrap();
-        config.api_key = ApiKey::new("s3cret".to_owned());
+        config.api_keys = ApiKeys::new(Some("s3cret,other"), None).unwrap();
         app(config)
     }
 
@@ -129,12 +139,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn the_key_lets_a_build_through_to_its_handler() {
+    async fn every_key_lets_a_build_through_to_its_handler() {
         // An empty body fails in the handler's extractor, past the key check
-        assert_ne!(
-            status("POST", "/build", Some("s3cret")).await,
-            StatusCode::UNAUTHORIZED
-        );
+        for key in ["s3cret", "other"] {
+            assert_ne!(
+                status("POST", "/build", Some(key)).await,
+                StatusCode::UNAUTHORIZED,
+                "{key}"
+            );
+        }
     }
 
     #[cfg(feature = "unstable")]
