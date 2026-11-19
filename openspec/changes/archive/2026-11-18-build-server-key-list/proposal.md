@@ -13,8 +13,13 @@ sharing that key, so no client can be rotated or revoked without the others
   per client, and admits a request on `/build`, `/deploy/<uuid>` and every
   `/unstable` route whose `x-api-key` matches any entry. A key outside the
   list, or no key, gets `401`, as today.
-- `PG_API_KEY`, the single key deployments already set, counts as one more
-  entry, so a server configured before this change keeps working unchanged.
+- `PG_API_KEY`, the single key deployments already set, is read only while
+  `PG_API_KEYS` holds no key, so a server configured before this change keeps
+  working unchanged, and a key left in it cannot outlive its removal from the
+  list.
+- A key variable set without a usable key stops the server at start instead
+  of leaving the routes open, and the server logs an open start at `ERROR`,
+  the one level App Engine prints.
 - Each comparison stays constant-time, and every entry is compared whichever
   matches. The server logs how many keys it accepts, never a key.
 - `/api/build-server` keeps sending one key, `PG_BUILD_SERVER_API_KEY`, now
@@ -34,7 +39,9 @@ None.
 
 - `build-server-access`: "The build server can require an API key" accepts
   any key of a list instead of one key, and gains scenarios for a second
-  client's key and a removed key.
+  client's key, a removed key, both variables set and a variable set without
+  a key. The scenario for `/share/<id>`, a route the server does not have, is
+  dropped.
 
 ## Impact
 
@@ -43,7 +50,7 @@ None.
   API key check itself (HOO-2422): an upstream sync keeps it.
 - Operations: production moves its key into `PG_API_KEYS`, held in a GCP
   secret, when a second client needs access; until then `PG_API_KEY` alone
-  works. Revoking a client is removing its entry and restarting the server.
+  works. Revoking a client is removing its entry and redeploying the server.
 - Out of scope: storing SHA-256 digests of the keys instead of the keys;
   naming each key's client in logs or the audit trail; a client that runs
   only in a browser, which would publish its key and needs a route of its

@@ -20,31 +20,68 @@ pub const API_KEY_HEADER: &str = "x-api-key";
 pub struct ApiKeys(Arc<[String]>);
 
 impl ApiKeys {
-    /// The keys of `list`, comma-separated, and `key`, a single key, or `None`
-    /// when neither holds one.
+    /// The keys of `list` (`PG_API_KEYS`), comma-separated, or, only when
+    /// `list` holds none, `key` (`PG_API_KEY`), a single key; `None` when
+    /// both are unset.
     ///
-    /// Each key is trimmed, since a trailing newline from a secret file would
-    /// never match a header, and an empty one is dropped, since it would admit
-    /// any caller that sends an empty header.
-    pub fn new(list: Option<&str>, key: Option<&str>) -> Option<Self> {
-        let keys: Vec<String> = list
-            .into_iter()
-            .flat_map(|list| list.split(','))
-            .chain(key)
-            .map(str::trim)
-            .filter(|key| !key.is_empty())
-            .map(ToOwned::to_owned)
-            .collect();
-        (!keys.is_empty()).then(|| Self(keys.into()))
+    /// The two never combine: a key left in `key` after the list is set would
+    /// survive removing its entry from the list, and revoking a client would
+    /// not revoke it.
+    ///
+    /// Fails when either is set but no key comes out, rather than leaving the
+    /// routes open: whoever set one meant them guarded. Fails too on a key
+    /// with a space or a character outside visible ASCII, which a client
+    /// could never send in a header, such as a list separated by newlines.
+    /// No error names a key.
+    pub fn new(list: Option<&str>, key: Option<&str>) -> Result<Option<Self>, String> {
+        let entries = list.into_iter().flat_map(|list| list.split(','));
+        let keys = match Self::from_entries(entries, "PG_API_KEYS")? {
+            Some(keys) => Some(keys),
+            None => Self::from_entries(key, "PG_API_KEY")?,
+        };
+        if keys.is_none() && (list.is_some() || key.is_some()) {
+            return Err("PG_API_KEYS or PG_API_KEY is set but holds no key; \
+                unset both to leave the build, deploy and unstable routes open"
+                .into());
+        }
+        Ok(keys)
     }
 
-    /// How many keys are accepted.
+    /// Each entry is trimmed, since a trailing newline from a secret file
+    /// would never match a header, and an empty one is dropped, since it would
+    /// admit any caller that sends an empty header.
+    fn from_entries<'a>(
+        entries: impl IntoIterator<Item = &'a str>,
+        name: &str,
+    ) -> Result<Option<Self>, String> {
+        let mut keys = Vec::new();
+        for (n, entry) in entries.into_iter().enumerate() {
+            let key = entry.trim();
+            if key.is_empty() {
+                continue;
+            }
+            if !key.bytes().all(|byte| byte.is_ascii_graphic()) {
+                return Err(format!(
+                    "entry {} of {name} holds a space or a character outside \
+                     visible ASCII, which no request can send",
+                    n + 1
+                ));
+            }
+            keys.push(key.to_owned());
+        }
+        Ok((!keys.is_empty()).then(|| Self(keys.into())))
+    }
+
+    /// How many keys are accepted; never zero, since [`ApiKeys::new`] gives
+    /// `None` rather than an empty list.
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
     /// Whether `given` is one of the keys. Every key is compared, whichever
-    /// matches, so the time taken does not tell a caller which one it was.
+    /// matches, so the time taken does not tell a caller which key matched.
+    /// It can tell how many keys share the length of what was sent; keys of
+    /// one length, as `openssl rand -hex 32` makes, leave nothing to learn.
     fn contains(&self, given: &[u8]) -> bool {
         self.0.iter().fold(false, |found, key| {
             found | constant_time_eq(given, key.as_bytes())
@@ -103,8 +140,12 @@ mod tests {
 
     use super::*;
 
+    fn keys(list: Option<&str>, key: Option<&str>) -> ApiKeys {
+        ApiKeys::new(list, key).unwrap().unwrap()
+    }
+
     fn app(list: Option<&str>) -> Router {
-        let keys = ApiKeys::new(list, None);
+        let keys = list.map(|list| keys(Some(list), None));
         let guarded = Router::new()
             .route("/build", get(|| async { "built" }))
             .layer(middleware::from_fn_with_state(keys, require_api_key));
@@ -195,15 +236,39 @@ mod tests {
     }
 
     #[test]
-    fn empty_keys_count_as_unset() {
-        assert!(ApiKeys::new(None, None).is_none());
-        assert!(ApiKeys::new(Some(""), Some("")).is_none());
-        assert!(ApiKeys::new(Some(" , \n,"), Some(" \n")).is_none());
+    fn neither_set_is_unset() {
+        assert!(ApiKeys::new(None, None).unwrap().is_none());
+    }
+
+    #[test]
+    fn a_variable_set_without_a_key_fails() {
+        for (list, key) in [
+            (Some(""), None),
+            (None, Some("")),
+            (Some(""), Some("")),
+            (Some(" , \n,"), Some(" \n")),
+        ] {
+            assert!(ApiKeys::new(list, key).is_err(), "{list:?} {key:?}");
+        }
+    }
+
+    #[test]
+    fn a_key_no_request_can_send_fails() {
+        for (list, key) in [
+            (Some("s3cret\nother"), None),
+            (Some("s3cret,two words"), None),
+            (None, Some("s3cr\u{e9}t")),
+        ] {
+            let error = ApiKeys::new(list, key).expect_err("an error");
+            for key in ["s3cret", "other", "two", "words", "s3cr"] {
+                assert!(!error.contains(key), "{error}");
+            }
+        }
     }
 
     #[test]
     fn empty_entries_are_dropped() {
-        let keys = ApiKeys::new(Some(",s3cret,, other ,"), None).unwrap();
+        let keys = keys(Some(",s3cret,, other ,"), None);
         assert_eq!(keys.len(), 2);
         assert!(keys.contains(b"s3cret"));
         assert!(keys.contains(b"other"));
@@ -211,37 +276,47 @@ mod tests {
     }
 
     #[test]
-    fn the_single_key_joins_the_list() {
-        let keys = ApiKeys::new(Some("playground"), Some("legacy")).unwrap();
+    fn the_single_key_is_ignored_once_the_list_is_set() {
+        let keys = keys(Some("playground,explorer"), Some("legacy"));
         assert_eq!(keys.len(), 2);
         assert!(keys.contains(b"playground"));
-        assert!(keys.contains(b"legacy"));
+        assert!(!keys.contains(b"legacy"));
+    }
 
-        let alone = ApiKeys::new(None, Some("legacy")).unwrap();
-        assert!(alone.contains(b"legacy"));
+    #[test]
+    fn the_single_key_is_used_when_the_list_holds_none() {
+        for list in [None, Some(""), Some(" , \n")] {
+            let keys = keys(list, Some("legacy"));
+            assert_eq!(keys.len(), 1, "{list:?}");
+            assert!(keys.contains(b"legacy"), "{list:?}");
+        }
+    }
+
+    #[test]
+    fn a_key_removed_from_the_list_is_401_even_if_it_is_the_single_key() {
+        let keys = keys(Some("explorer"), Some("playground"));
+        assert!(!keys.contains(b"playground"));
+        assert!(keys.contains(b"explorer"));
     }
 
     #[test]
     fn the_single_key_is_not_split() {
-        let keys = ApiKeys::new(None, Some("a,b")).unwrap();
+        let keys = keys(None, Some("a,b"));
         assert!(keys.contains(b"a,b"));
         assert!(!keys.contains(b"a"));
     }
 
     #[tokio::test]
     async fn a_trailing_newline_is_not_part_of_the_key() {
-        let keys = ApiKeys::new(Some("s3cret\n"), Some("other\n"));
-        let guarded = Router::new()
-            .route("/build", get(|| async { "built" }))
-            .layer(middleware::from_fn_with_state(keys, require_api_key));
-        assert_eq!(
-            status(guarded.clone(), "/build", Some("s3cret")).await,
-            StatusCode::OK
-        );
-        assert_eq!(
-            status(guarded, "/build", Some("other")).await,
-            StatusCode::OK
-        );
+        for keys in [keys(Some("s3cret\n"), None), keys(None, Some("s3cret\r\n"))] {
+            let guarded = Router::new()
+                .route("/build", get(|| async { "built" }))
+                .layer(middleware::from_fn_with_state(Some(keys), require_api_key));
+            assert_eq!(
+                status(guarded, "/build", Some("s3cret")).await,
+                StatusCode::OK
+            );
+        }
     }
 
     #[tokio::test]
@@ -254,10 +329,14 @@ mod tests {
 
     #[test]
     fn debug_redacts_every_key() {
-        let printed = format!("{:?}", ApiKeys::new(Some("s3cret,other"), Some("legacy")));
-        for key in ["s3cret", "other", "legacy"] {
+        let printed = format!("{:?}", keys(Some("s3cret,other"), None));
+        for key in ["s3cret", "other"] {
             assert!(!printed.contains(key), "{printed}");
         }
-        assert!(printed.contains("3 redacted"), "{printed}");
+        assert!(printed.contains("2 redacted"), "{printed}");
+
+        let printed = format!("{:?}", keys(None, Some("legacy")));
+        assert!(!printed.contains("legacy"), "{printed}");
+        assert!(printed.contains("1 redacted"), "{printed}");
     }
 }

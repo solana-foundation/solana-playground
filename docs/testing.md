@@ -504,7 +504,7 @@ curl -s http://localhost:8080/deploy/<uuid> | head -c 4 | od -c
 
 Use a minimal native program for `lib.rs`: `solana_program::entrypoint!` with a handler that returns `Ok(())`.
 
-A server started with `PG_API_KEYS` (or `PG_API_KEY`) set refuses both requests, and every `/unstable` route, without one
+A server started with `PG_API_KEYS` (or, without it, `PG_API_KEY`) set refuses both requests, and every `/unstable` route, without one
 of its keys: add `-H "x-api-key: <one of the keys>"` to each `curl` (HOO-2422, HOO-2890). A local profile leaves both
 unset.
 
@@ -515,8 +515,11 @@ Expect:
 - [ ] `/deploy/<uuid>` returns the program binary: its first bytes print as `177   E   L   F`.
 - [ ] with `PG_API_KEYS=<key a>,<key b>` set, the build `curl` passes with either key, and returns `401` without the
       header or with a key outside the list.
-- [ ] after `<key b>` is removed from `PG_API_KEYS` and the server restarted, `<key b>` gets `401` and `<key a>` still
-      passes.
+- [ ] after `<key b>` is removed from `PG_API_KEYS` and the server recreated (`docker compose up -d server`;
+      `docker compose restart` keeps the old environment), `<key b>` gets `401` and `<key a>` still passes.
+- [ ] with `PG_API_KEYS=<key a>` and `PG_API_KEY=<key b>`, `<key a>` passes and `<key b>` gets `401`.
+- [ ] with `PG_API_KEYS=` set empty and `PG_API_KEY` unset, the server stops at start with an error naming
+      `PG_API_KEYS`.
 
 ## 4. Static assets: default `.rs` files and templates
 

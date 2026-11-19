@@ -12,7 +12,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use solpg_server::log::{self, info, warn};
+use solpg_server::log::{self, error, info};
 use tokio::net::TcpListener;
 
 use self::{config::Config, middlewares::*, routes::*};
@@ -77,7 +77,9 @@ async fn main() -> Result<()> {
             "API key required on build, deploy and unstable routes; {} accepted",
             keys.len()
         ),
-        None => warn!(
+        // `error!`, the one level a server without `RUST_LOG` prints, as on App
+        // Engine: an open server must show in its logs
+        None => error!(
             "Neither PG_API_KEYS nor PG_API_KEY is set: build, deploy and unstable routes are open"
         ),
     }
@@ -105,7 +107,7 @@ mod tests {
 
     fn guarded_app() -> Router {
         let mut config = Config::from_env().unwrap();
-        config.api_keys = ApiKeys::new(Some("s3cret,other"), None);
+        config.api_keys = ApiKeys::new(Some("s3cret,other"), None).unwrap();
         app(config)
     }
 

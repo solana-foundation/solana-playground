@@ -30,7 +30,7 @@ per instance that the build server is open.
 
 #### Scenario: A removed key (manual)
 
-- **WHEN** one entry is removed from `PG_API_KEYS` and the server restarted
+- **WHEN** one entry is removed from `PG_API_KEYS` and the server redeployed
 - **THEN** a request with that key gets `401` and the remaining keys still
   pass
 
@@ -39,7 +39,15 @@ per instance that the build server is open.
 - **WHEN** only `PG_API_KEY` is set
 - **THEN** the server admits that key alone, as before this change
 
-#### Scenario: The share routes stay open (manual)
+#### Scenario: Both variables set (manual)
 
-- **WHEN** `PG_API_KEYS` is set and a request reaches `/share/<id>`
-- **THEN** the server answers as before
+- **WHEN** `PG_API_KEYS` holds a key and `PG_API_KEY` is set too
+- **THEN** only the list's keys pass; the value of `PG_API_KEY` gets `401`
+  unless it is also an entry of the list
+
+#### Scenario: A key variable set without a key (manual)
+
+- **WHEN** `PG_API_KEYS` or `PG_API_KEY` is set but holds no key, or a key with
+  a space or a character outside visible ASCII
+- **THEN** the server stops at start with an error that names the variable and
+  no key, rather than leaving the routes open
