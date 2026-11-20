@@ -185,7 +185,10 @@ Through the proxy, as the operator (install
 [`cloud-sql-proxy`](https://cloud.google.com/sql/docs/postgres/sql-proxy#install) and `psql` first):
 
 ```sh
-cloud-sql-proxy --auto-iam-authn --gcloud-auth --port 5434 "$PROJECT_ID:$REGION:solpg" &
+# gcloud's token, in the environment so `ps` does not show it; it lasts about an hour
+token=$(gcloud auth print-access-token)
+CSQL_PROXY_TOKEN=$token CSQL_PROXY_LOGIN_TOKEN=$token \
+  cloud-sql-proxy --auto-iam-authn --port 5434 "$PROJECT_ID:$REGION:solpg" &
 psql "postgres://$(printf %s "$OPERATOR" | sed 's/@/%40/')@127.0.0.1:5434/postgres?sslmode=disable"
 ```
 
@@ -325,7 +328,9 @@ gcloud sql users create "$OPERATOR" --instance=solpg-preview --type=cloud_iam_us
 Through the proxy, as the operator, as in step 5:
 
 ```sh
-cloud-sql-proxy --auto-iam-authn --gcloud-auth --port 5434 "$PROJECT_ID:$REGION:solpg-preview" &
+token=$(gcloud auth print-access-token)
+CSQL_PROXY_TOKEN=$token CSQL_PROXY_LOGIN_TOKEN=$token \
+  cloud-sql-proxy --auto-iam-authn --port 5434 "$PROJECT_ID:$REGION:solpg-preview" &
 psql "postgres://$(printf %s "$OPERATOR" | sed 's/@/%40/')@127.0.0.1:5434/postgres?sslmode=disable"
 ```
 

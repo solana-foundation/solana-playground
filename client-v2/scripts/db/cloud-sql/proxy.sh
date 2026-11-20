@@ -8,9 +8,10 @@
 #   CLOUD_SQL_LOGIN_USER  optional; the IAM database user the proxy logs in as,
 #                         on Application Default Credentials, which must belong
 #                         to it (google-github-actions/auth's in CI). Unset, the
-#                         proxy logs in as gcloud's active account on gcloud's
-#                         credentials, a service account without
-#                         `.gserviceaccount.com`
+#                         proxy logs in as gcloud's active account, a service
+#                         account without `.gserviceaccount.com`, on the access
+#                         token `gcloud auth print-access-token` prints, which
+#                         lasts about an hour
 #   CLOUD_SQL_PROXY_PORT  optional; 5434, clear of the compose Postgres
 #
 # The proxy runs with `--auto-iam-authn`, so its credentials and the user name
@@ -89,11 +90,17 @@ start_proxy() {
     return 1
   }
   command -v psql >/dev/null 2>&1 || { echo "psql required" >&2; return 1; }
-  # The credentials of the identity login_user names
-  local auth=()
-  [ -n "${CLOUD_SQL_LOGIN_USER:-}" ] || auth=(--gcloud-auth)
+  # The credentials of the identity login_user names. The proxy refuses
+  # `--gcloud-auth` with `--auto-iam-authn`, so gcloud's go in as its access
+  # token, in the environment so no command line shows it. With
+  # CLOUD_SQL_LOGIN_USER the token is empty, which the proxy reads as unset.
+  local token=
+  if [ -z "${CLOUD_SQL_LOGIN_USER:-}" ]; then
+    token=$(gcloud auth print-access-token) || return 1
+  fi
   PROXY_LOG=$(mktemp)
-  cloud-sql-proxy --auto-iam-authn ${auth[@]+"${auth[@]}"} --port "$PROXY_PORT" "$CLOUD_SQL_INSTANCE" >"$PROXY_LOG" 2>&1 &
+  CSQL_PROXY_TOKEN=$token CSQL_PROXY_LOGIN_TOKEN=$token \
+    cloud-sql-proxy --auto-iam-authn --port "$PROXY_PORT" "$CLOUD_SQL_INSTANCE" >"$PROXY_LOG" 2>&1 &
   PROXY_PID=$!
   for _ in $(seq 1 60); do
     grep -q 'ready for new connections' "$PROXY_LOG" && return 0

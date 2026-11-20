@@ -85,7 +85,10 @@ commands below read `$PROJECT_ID`, `$REGION`, `$OPERATOR`, `$PRODUCTION_DB_USER`
 To open `psql` on `solpg` as the operator, which several checks do, from any directory:
 
 ```sh
-cloud-sql-proxy --auto-iam-authn --gcloud-auth --port 5434 "$PROJECT_ID:$REGION:solpg" &
+# gcloud's token, in the environment so `ps` does not show it; it lasts about an hour
+token=$(gcloud auth print-access-token)
+CSQL_PROXY_TOKEN=$token CSQL_PROXY_LOGIN_TOKEN=$token \
+  cloud-sql-proxy --auto-iam-authn --port 5434 "$PROJECT_ID:$REGION:solpg" &
 psql "postgres://$(printf %s "$OPERATOR" | sed 's/@/%40/')@127.0.0.1:5434/solpg?sslmode=disable"
 # afterwards: kill %1
 ```
