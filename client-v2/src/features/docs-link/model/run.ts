@@ -226,6 +226,8 @@ const fundsFor =
  * connect ended with no wallet (shown as `failed`)
  */
 const walletForRun = async (): Promise<WalletOrigin | undefined> => {
+  // Under the key-origin provider the wallet may still be loading
+  await PgWallet.untilLoaded();
   if (PgWallet.state !== "setup" && PgWallet.state !== "disconnected") {
     return "existing";
   }

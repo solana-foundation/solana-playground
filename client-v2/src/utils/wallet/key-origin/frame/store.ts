@@ -9,13 +9,29 @@ export interface KeyStore {
   put(entries: [string, Uint8Array][]): Promise<void>;
   /** Drop a key; a key that is not there is not an error */
   remove(publicKey: string): Promise<void>;
+  /**
+   * Keep the text of a wallet the app could not read, as it is: it may hold
+   * keys in a shape nothing parses, so it leaves the app's origin only once
+   * stored here. Keeping the same text twice stores it once.
+   */
+  keep(text: string): Promise<void>;
+  /** Every text kept */
+  kept(): Promise<string[]>;
 }
 
 const STORE_NAME = "keys";
+/** Unreadable wallet texts, each under its SHA-256 */
+const KEPT_STORE_NAME = "unreadable";
 const LOCK_NAME = "pg-wallet-keys";
 
 /** The key origin's database of keys */
 export const KEY_DB_NAME = "pg-wallet-keys";
+
+/**
+ * The database of kept texts beside a key database: its own, so the key
+ * database keeps version 1 and a key page of an earlier build still opens it
+ */
+const keptDbNameOf = (name: string) => `${name}-unreadable`;
 
 /** Resolves on commit, so a write the browser aborts is a failure */
 const settled = (tx: IDBTransaction) =>
@@ -26,19 +42,19 @@ const settled = (tx: IDBTransaction) =>
   });
 
 /**
- * A key store over the key origin's own IndexedDB database. Every write runs
- * under the `pg-wallet-keys` Web Lock where the browser has one, so two key
- * page instances cannot interleave.
+ * Opens a version 1 database of one object store, once, and again after the
+ * browser closed it
  *
- * @param name database name
+ * @param store the object store's name
+ * @returns for the database name, a function that opens it
  */
-export const indexedDbKeyStore = (name: string): KeyStore => {
+const openerFor = (store: string) => (name: string) => {
   let opened: Promise<IDBDatabase> | undefined;
-  const open = () => {
+  return () => {
     opened ??= new Promise<IDBDatabase>((resolve, reject) => {
       const request = indexedDB.open(name, 1);
       request.onupgradeneeded = () => {
-        request.result.createObjectStore(STORE_NAME);
+        request.result.createObjectStore(store);
       };
       request.onsuccess = () => {
         const db = request.result;
@@ -55,6 +71,28 @@ export const indexedDbKeyStore = (name: string): KeyStore => {
     opened.catch(() => (opened = undefined));
     return opened;
   };
+};
+
+/** The SHA-256 of a text, in hex: a short key for any length of text */
+const sha256Of = async (text: string) =>
+  Array.from(
+    new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))
+    ),
+    (byte) => byte.toString(16).padStart(2, "0")
+  ).join("");
+
+/**
+ * A key store over the key origin's own IndexedDB database, with the kept
+ * texts in a second one beside it (`keptDbNameOf`). Every write runs under
+ * the `pg-wallet-keys` Web Lock where the browser has one, so two key page
+ * instances cannot interleave.
+ *
+ * @param name database name
+ */
+export const indexedDbKeyStore = (name: string): KeyStore => {
+  const open = openerFor(STORE_NAME)(name);
+  const openKept = openerFor(KEPT_STORE_NAME)(keptDbNameOf(name));
 
   const exclusive = <T>(task: () => Promise<T>): Promise<T> =>
     typeof navigator !== "undefined" && navigator.locks
@@ -96,6 +134,24 @@ export const indexedDbKeyStore = (name: string): KeyStore => {
         tx.objectStore(STORE_NAME).delete(publicKey);
         await settled(tx);
       });
+    },
+    keep(text) {
+      return exclusive(async () => {
+        const key = await sha256Of(text);
+        const db = await openKept();
+        const tx = db.transaction(KEPT_STORE_NAME, "readwrite");
+        tx.objectStore(KEPT_STORE_NAME).put(text, key);
+        await settled(tx);
+      });
+    },
+    async kept() {
+      const db = await openKept();
+      const tx = db.transaction(KEPT_STORE_NAME, "readonly");
+      const values = tx.objectStore(KEPT_STORE_NAME).getAll();
+      await settled(tx);
+      return values.result.filter(
+        (value): value is string => typeof value === "string"
+      );
     },
   };
 };
@@ -171,6 +227,49 @@ if (import.meta.vitest) {
       expect((await store.all()).size).toBe(0);
     });
 
+    it("keeps an unreadable wallet's text once, beside the keys", async () => {
+      const store = indexedDbKeyStore(KEY_DB_NAME);
+      await store.put([["a", secret(1)]]);
+
+      await store.keep("{not json");
+      await store.keep("{not json");
+      await indexedDbKeyStore(KEY_DB_NAME).keep("[1,2]");
+
+      expect((await store.kept()).sort()).toEqual(["[1,2]", "{not json"]);
+      expect(Array.from((await store.all()).keys())).toEqual(["a"]);
+    });
+
+    it("keeps texts beside a key database of an earlier build, which stays version 1", async () => {
+      await new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open("old", 1);
+        request.onupgradeneeded = () => {
+          request.result
+            .createObjectStore("keys")
+            .put(Array.from(secret(1)), "a");
+        };
+        request.onsuccess = () => {
+          request.result.close();
+          resolve();
+        };
+        request.onerror = () => reject(request.error);
+      });
+      const store = indexedDbKeyStore("old");
+
+      await store.keep("{not json");
+
+      expect((await store.all()).get("a")).toEqual(secret(1));
+      expect(await store.kept()).toEqual(["{not json"]);
+      const version = await new Promise<number>((resolve, reject) => {
+        const request = indexedDB.open("old");
+        request.onsuccess = () => {
+          resolve(request.result.version);
+          request.result.close();
+        };
+        request.onerror = () => reject(request.error);
+      });
+      expect(version).toBe(1);
+    });
+
     it("asks the browser to keep the storage, where it can be asked", async () => {
       const persist = vi.fn(async () => true);
       expect(await requestPersistence({ persist })).toBe(true);
@@ -196,8 +295,13 @@ if (import.meta.vitest) {
 
       await store.put([["a", secret(1)]]);
       await store.remove("a");
+      await store.keep("{not json");
 
-      expect(names).toEqual(["pg-wallet-keys", "pg-wallet-keys"]);
+      expect(names).toEqual([
+        "pg-wallet-keys",
+        "pg-wallet-keys",
+        "pg-wallet-keys",
+      ]);
     });
   });
 }

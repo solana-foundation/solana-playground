@@ -57,15 +57,68 @@ export const reportFailure = (error: unknown) => {
   return `The key page failed: ${kind}`;
 };
 
+const V1_PREFIX = 0x81;
+
+/** The v1 config mask's bits, and the bytes of the value each one adds */
+const V1_CONFIG_PRIORITY_FEE = 0b11;
+const V1_CONFIG_VALUE_BYTES: [mask: number, bytes: number][] = [
+  [0b100, 4], // compute unit limit
+  [0b1000, 4], // loaded accounts data size limit
+  [0b10000, 4], // heap size
+];
+const V1_CONFIG_KNOWN_BITS = 0b11111;
+
 /**
- * Whether bytes read as a serialized transaction message, legacy or v0. A
- * transaction message is signed as a transaction; signing it as a "message"
- * would let a page get a transaction signed without the transaction flow.
+ * Whether bytes read as exactly one v1 transaction message (SIMD-0385), laid
+ * out as `@solana/kit`'s v1 message codec writes it: prefix, header (3),
+ * config mask (u32), lifetime (32), instruction count (u8), static account
+ * count (u8), the accounts, the config values the mask marks, then every
+ * instruction's header (program index u8, account count u8, data length u16)
+ * before every instruction's account indexes and data. Integers are little
+ * endian. A mask with a bit this layout does not know cannot be measured, so
+ * it does not read as a message.
+ *
+ * @param bytes the bytes to inspect, the prefix first
+ * @returns whether the bytes are exactly one v1 message
+ */
+const isV1TransactionMessage = (bytes: Uint8Array) => {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  // Prefix, header, mask, lifetime and the two counts
+  const fixed = 1 + 3 + 4 + 32 + 1 + 1;
+  if (bytes.length < fixed || bytes[0] !== V1_PREFIX) return false;
+  const required = bytes[1];
+  const mask = view.getUint32(4, true);
+  const instructions = bytes[fixed - 2];
+  const accounts = bytes[fixed - 1];
+  if (required === 0 || accounts < required) return false;
+  if ((mask & ~V1_CONFIG_KNOWN_BITS) !== 0) return false;
+  const priorityFee = mask & V1_CONFIG_PRIORITY_FEE;
+  // The fee is one u64 over both bits: one bit alone is malformed
+  if (priorityFee !== 0 && priorityFee !== V1_CONFIG_PRIORITY_FEE) return false;
+
+  let at = fixed + accounts * PUBLIC_KEY_LENGTH;
+  if (priorityFee) at += 8;
+  for (const [bit, size] of V1_CONFIG_VALUE_BYTES) {
+    if (mask & bit) at += size;
+  }
+  const headersEnd = at + instructions * 4;
+  if (headersEnd > bytes.length) return false;
+  let payloads = 0;
+  for (let i = 0; i < instructions; i++) {
+    const header = at + i * 4;
+    if (bytes[header] >= accounts) return false;
+    payloads += bytes[header + 1] + view.getUint16(header + 2, true);
+  }
+  return headersEnd + payloads === bytes.length;
+};
+
+/**
+ * Whether bytes read as exactly one legacy or v0 transaction message
  *
  * @param bytes the bytes to inspect
- * @returns whether the bytes are exactly one serialized message
+ * @returns whether the bytes are exactly one such message
  */
-const isTransactionMessage = (bytes: Uint8Array) => {
+const isLegacyOrV0TransactionMessage = (bytes: Uint8Array) => {
   let at = 0;
   const byteAt = () => (at < bytes.length ? bytes[at++] : undefined);
   const skip = (count: number) => {
@@ -93,7 +146,7 @@ const isTransactionMessage = (bytes: Uint8Array) => {
   if (first === undefined) return false;
   let isVersioned = false;
   if (first & VERSIONED_FLAG) {
-    // Only version 0 exists
+    // v1 has its own layout (`isV1TransactionMessage`); later versions none yet
     if (first !== VERSIONED_FLAG) return false;
     isVersioned = true;
   } else {
@@ -125,6 +178,21 @@ const isTransactionMessage = (bytes: Uint8Array) => {
   }
   return at === bytes.length;
 };
+
+/**
+ * Whether bytes read as a serialized transaction message: legacy, v0 or v1.
+ * A transaction message is signed as a transaction; signing it as a
+ * "message" would let a page get a transaction signed without the
+ * transaction flow. A prefix above v1 names a version with no layout yet, so
+ * it reads as not a message, as text whose first byte is not ASCII must.
+ *
+ * @param bytes the bytes to inspect
+ * @returns whether the bytes are exactly one serialized message
+ */
+const isTransactionMessage = (bytes: Uint8Array) =>
+  bytes[0] === V1_PREFIX
+    ? isV1TransactionMessage(bytes)
+    : isLegacyOrV0TransactionMessage(bytes);
 
 const unknownAccount = (publicKey: string) =>
   new Refusal(`No key for account ${publicKey}`);
@@ -205,6 +273,10 @@ export const handlerWith = (store: KeyStore) => {
         if (missing) throw new Refusal("The keys were not stored");
         return { ok: true, result: present };
       }
+      case "keep":
+        await store.keep(request.text);
+        // eslint-disable-next-line unicorn/no-null -- the wire's "nothing"
+        return { ok: true, result: null };
     }
   };
 
@@ -226,13 +298,16 @@ if (import.meta.vitest) {
 
   describe("utils/wallet/key-origin/frame/handler", () => {
     let PgWeb3: typeof import("../../../web3").PgWeb3;
+    let kit: typeof import("@solana/kit");
 
     beforeAll(async () => {
       ({ PgWeb3 } = await import("../../../web3"));
+      kit = await import("@solana/kit");
     });
 
     const memoryStore = () => {
       const kept = new Map<string, Uint8Array>();
+      const texts = new Set<string>();
       const store: KeyStore = {
         all: async () => new Map(kept),
         put: async (entries) => {
@@ -241,8 +316,12 @@ if (import.meta.vitest) {
         remove: async (k) => {
           kept.delete(k);
         },
+        keep: async (text) => {
+          texts.add(text);
+        },
+        kept: async () => Array.from(texts),
       };
-      return { kept, store };
+      return { kept, store, texts };
     };
 
     let id = 0;
@@ -410,6 +489,102 @@ if (import.meta.vitest) {
       }
     });
 
+    it("keeps an unreadable wallet's text and answers with nothing", async () => {
+      const { store, texts } = memoryStore();
+      const handle = handlerWith(store);
+
+      const reply = await ask(handle, { type: "keep", text: "{not json" });
+
+      // eslint-disable-next-line unicorn/no-null -- the wire's "nothing"
+      expect(reply).toMatchObject({ ok: true, result: null });
+      expect(Array.from(texts)).toEqual(["{not json"]);
+    });
+
+    it("refuses to sign a v1 transaction message as a message", async () => {
+      const { store } = memoryStore();
+      const handle = handlerWith(store);
+      const publicKey = await created(handle);
+      const program = base58Encode(new Uint8Array(32).fill(9));
+      const other = base58Encode(new Uint8Array(32).fill(5));
+      const blockhash = base58Encode(new Uint8Array(32).fill(7));
+      const compileWith = (
+        config: Parameters<typeof kit.setTransactionMessageConfig>[0]
+      ) =>
+        kit.getCompiledTransactionMessageEncoder().encode(
+          kit.compileTransactionMessage(
+            kit.pipe(
+              kit.createTransactionMessage({ version: 1 }),
+              (m) =>
+                kit.setTransactionMessageFeePayer(kit.address(publicKey), m),
+              (m) =>
+                kit.setTransactionMessageLifetimeUsingBlockhash(
+                  {
+                    blockhash: kit.blockhash(blockhash),
+                    lastValidBlockHeight: 1n,
+                  },
+                  m
+                ),
+              (m) => kit.setTransactionMessageConfig(config, m),
+              (m) =>
+                kit.appendTransactionMessageInstructions(
+                  [
+                    {
+                      programAddress: kit.address(program),
+                      accounts: [
+                        {
+                          address: kit.address(other),
+                          role: kit.AccountRole.WRITABLE,
+                        },
+                      ],
+                      data: Uint8Array.from([1, 2, 3]),
+                    },
+                    { programAddress: kit.address(program) },
+                  ],
+                  m
+                )
+            )
+          )
+        );
+
+      for (const message of [
+        compileWith({}),
+        compileWith({ priorityFeeLamports: 5_000n, computeUnitLimit: 200_000 }),
+        compileWith({ loadedAccountsDataSizeLimit: 1_000, heapSize: 65_536 }),
+      ]) {
+        // kit's encoder types its bytes read-only
+        const bytes = new Uint8Array(message as Uint8Array);
+        expect(bytes[0]).toBe(0x81);
+        expect(isTransactionMessage(bytes)).toBe(true);
+        expect(isTransactionMessage(bytes.slice(0, -1))).toBe(false);
+        // A config mask the layout does not know, or half of the fee's bits
+        for (const mask of [0b100000, 0b1]) {
+          const changed = Uint8Array.from(bytes);
+          changed[4] = (changed[4] & ~0b11) | mask;
+          expect(isTransactionMessage(changed)).toBe(false);
+        }
+        // A version after v1 has no layout to check
+        const later = Uint8Array.from(bytes);
+        later[0] = 0x82;
+        expect(isTransactionMessage(later)).toBe(false);
+        expect(
+          isTransactionMessage(Uint8Array.from(Array.from(bytes).concat(0)))
+        ).toBe(false);
+        expect(
+          await ask(handle, { type: "sign", publicKey, kind: "message", bytes })
+        ).toMatchObject({ ok: false, error: "This message is a transaction" });
+        expect(
+          (
+            await ask(handle, {
+              type: "sign",
+              publicKey,
+              kind: "transaction",
+              bytes,
+            })
+          ).ok
+        ).toBe(true);
+      }
+    });
+
     it("does not take ordinary text for a transaction message", () => {
       expect(
         isTransactionMessage(new TextEncoder().encode("Sign in to x"))
@@ -432,6 +607,8 @@ if (import.meta.vitest) {
           throw failure;
         },
         remove: async () => {},
+        keep: async () => {},
+        kept: async () => [],
       });
 
       expect(await ask(handle, { type: "create" })).toMatchObject({

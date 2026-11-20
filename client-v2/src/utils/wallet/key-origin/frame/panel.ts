@@ -417,6 +417,8 @@ if (import.meta.vitest) {
         remove: async (k) => {
           kept.delete(k);
         },
+        keep: async () => {},
+        kept: async () => [],
       };
       const importKeyFile = importKeyFileWith(handlerWith(store));
 

@@ -3,6 +3,7 @@ import { Keypair, PublicKey } from "@solana/web3.js";
 
 import {
   expect,
+  home,
   LONG,
   openTerminal,
   replaceFile,
@@ -291,6 +292,76 @@ test("wallet-storage: The key origin is blocked", async ({ page }) => {
   await expect
     .poll(async () => (await storedWallet(page))?.accounts[0]?.kp, LONG)
     .toBeUndefined();
+});
+
+test("wallet-storage: A slow key origin does not hold the first render", async ({
+  page,
+}) => {
+  // The key page never answers: before HOO-2934 the first render waited for
+  // its load and handshake timeouts, 40 s
+  // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- a route glob over the loopback key origin; the rule's loopback exception does not read a port wildcard
+  await page.route("http://127.0.0.1:*/**", () => {});
+
+  // Not until `load`: that waits for the hung key page's frame too
+  const started = Date.now();
+  await page.goto("/", { waitUntil: "commit" });
+
+  await expect(home(page)).toBeVisible({ timeout: 25_000 });
+  expect(Date.now() - started).toBeLessThan(25_000);
+  await expect(walletStep(page)).toHaveCount(0);
+});
+
+/** The texts the key page keeps for wallets the app could not read */
+const keptTexts = (frame: Frame) =>
+  frame.evaluate(
+    () =>
+      new Promise<string[]>((resolve, reject) => {
+        const open = indexedDB.open("pg-wallet-keys-unreadable");
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const db = open.result;
+          if (!db.objectStoreNames.contains("unreadable")) return resolve([]);
+          const all = db
+            .transaction("unreadable", "readonly")
+            .objectStore("unreadable")
+            .getAll();
+          all.onerror = () => reject(all.error);
+          all.onsuccess = () => resolve(all.result.map(String));
+        };
+      })
+  );
+
+test("wallet-storage: An unreadable wallet moves to the key origin", async ({
+  page,
+}) => {
+  // Cut mid-array: not JSON, and still holding a key's bytes
+  const kp = Array.from(Keypair.generate().secretKey);
+  const text = `{"state":"pg","accounts":[{"name":"Wallet 1","kp":[${kp.join(
+    ","
+  )}]`;
+  await page.addInitScript((seeded) => {
+    if (sessionStorage.getItem("e2e-wallet-seeded")) return;
+    sessionStorage.setItem("e2e-wallet-seeded", "1");
+    localStorage.setItem("wallet", seeded);
+  }, text);
+
+  await seedWorkspace(page);
+
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => [
+          localStorage.getItem("wallet") === null,
+          localStorage.getItem("wallet.unreadable") === null,
+        ]),
+      LONG
+    )
+    .toEqual([true, true]);
+  for (const value of await localValues(page)) {
+    expect(value).not.toMatch(SECRET_KEY_ARRAY);
+  }
+  const frame = keyFrame(page);
+  expect(await keptTexts(frame as Frame)).toEqual([text]);
 });
 
 /**

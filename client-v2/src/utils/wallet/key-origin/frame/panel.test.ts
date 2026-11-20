@@ -25,6 +25,8 @@ const storeOf = (all: KeyStore["all"]): KeyStore => ({
   all,
   put: async () => {},
   remove: async () => {},
+  keep: async () => {},
+  kept: async () => [],
 });
 
 const unused = async (): Promise<KeyReply> => {

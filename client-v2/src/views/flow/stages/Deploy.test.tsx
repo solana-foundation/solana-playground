@@ -41,6 +41,7 @@ const mocks = vi.hoisted(() => ({
     accounts: [] as unknown[],
     currentIndex: -1,
     addFirst: vi.fn(),
+    untilLoaded: vi.fn(async () => undefined),
     // The Fund dialog's receiver when no Playground wallet is current
     create: vi.fn(() => ({ publicKey: { toBase58: () => "F1rstAccount" } })),
     switch: vi.fn(),
@@ -405,6 +406,34 @@ describe("Deploy stage", () => {
     expect(mocks.wallet.addFirst).toHaveBeenCalledOnce();
     expect(mocks.wallet.switch).not.toHaveBeenCalled();
     expect(walletAtDeploy).toBe(WALLET);
+  });
+
+  it("waits for the wallet a slow key origin loads, switching nothing over it", async () => {
+    const wallet = mocks.wallet as typeof mocks.wallet & { state?: string };
+    const { accounts, untilLoaded } = wallet;
+    wallet.state = "loading";
+    // The load brings a connected standard wallet, whose current derives a
+    // moment after the load settles
+    wallet.untilLoaded.mockImplementation(async () => {
+      wallet.state = "sol";
+      wallet.accounts = [{}];
+      setTimeout(becomeCurrent);
+      return undefined;
+    });
+    try {
+      render(<Deploy onChangeNetwork={() => {}} />);
+
+      await pressDeploy();
+      await act(async () => new Promise((r) => setTimeout(r, 10)));
+
+      expect(mocks.wallet.switch).not.toHaveBeenCalled();
+      expect(mocks.wallet.addFirst).not.toHaveBeenCalled();
+      expect(mocks.execute).toHaveBeenCalled();
+    } finally {
+      wallet.state = undefined;
+      wallet.accounts = accounts;
+      untilLoaded.mockImplementation(async () => undefined);
+    }
   });
 
   it("asks about a failed build in the panel and stops on Cancel", async () => {

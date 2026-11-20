@@ -20,7 +20,7 @@ import type {
   WalletAccount,
   WalletState,
 } from "./types";
-import { PgWallet, readWith, refuseKeylessRecord } from "./wallet";
+import { loadingWith, PgWallet, readWith, refuseKeylessRecord } from "./wallet";
 import { WALLET_LOCAL_KEY, type WalletRead } from "./wallet-storage";
 
 // The connection module reads build-time globals the unit runner does not
@@ -223,6 +223,8 @@ describe("utils/wallet/wallet", () => {
         remove: async (publicKey) => {
           kept.delete(publicKey);
         },
+        keep: async () => {},
+        kept: async () => [],
       });
       let id = 0;
       const link: KeyFrame = {
@@ -572,6 +574,76 @@ describe("utils/wallet/wallet", () => {
       const unavailable: WalletRead = { kind: "unavailable" };
       expect(refuseKeylessRecord(none)).toBe(none);
       expect(refuseKeylessRecord(unavailable)).toBe(unavailable);
+    });
+  });
+
+  describe("while the wallet is loading", () => {
+    afterEach(() => {
+      Reflect.deleteProperty(PgWallet, "state");
+    });
+
+    it("add refuses, so no account is made over the accounts being read", () => {
+      Object.defineProperty(PgWallet, "state", {
+        get: () => "loading",
+        configurable: true,
+      });
+      const update = vi.spyOn(PgWallet, "update");
+
+      expect(() => PgWallet.add()).toThrow("Wallet still loading");
+      expect(update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("loadingWith, the page load's read under the key-origin provider", () => {
+    const stored: WalletState = {
+      state: "pg",
+      accounts: [],
+      currentIndex: -1,
+      show: false,
+      standardWallets: [],
+      // eslint-disable-next-line unicorn/no-null -- the stored shape: no standard wallet
+      standardName: null,
+    };
+
+    const ORIGIN = "https://wallet-keys.example";
+
+    it("answers loading at once while the key page never answers", () => {
+      const take = vi.fn();
+      const read = vi.fn(async () => stored);
+
+      const { wallet } = loadingWith(take)(
+        readWith(ORIGIN)(() => new Promise<KeyFrame>(() => {}))(read)
+      );
+
+      expect(wallet.state).toBe("loading");
+      expect(take).not.toHaveBeenCalled();
+      expect(read).not.toHaveBeenCalled();
+    });
+
+    it("takes the wallet once the key page answers", async () => {
+      let answer: (frame: KeyFrame) => void = () => {};
+      const take = vi.fn();
+
+      loadingWith(take)(
+        readWith(ORIGIN)(
+          () => new Promise<KeyFrame>((resolve) => (answer = resolve))
+        )(async () => stored)
+      );
+      answer({} as KeyFrame);
+
+      await vi.waitFor(() => expect(take).toHaveBeenCalledWith(stored));
+    });
+
+    it("takes an unavailable wallet when the read fails", async () => {
+      const take = vi.fn();
+
+      loadingWith(take)(Promise.reject(new Error("store gone")));
+
+      await vi.waitFor(() =>
+        expect(take).toHaveBeenCalledWith(
+          expect.objectContaining({ state: "unavailable" })
+        )
+      );
     });
   });
 

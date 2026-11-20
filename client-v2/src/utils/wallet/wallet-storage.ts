@@ -302,6 +302,17 @@ export type MoveKeys = (
   others: { accounts: number[][]; stray: number[][] }
 ) => Promise<{ record: SerializedWalletState; keys: number[][] }>;
 
+/**
+ * What a read under the key-origin provider moves into the key page: the keys
+ * (`MoveKeys`), and the text of a wallet nothing here can read, which may hold
+ * keys in a shape no parser finds (`keep`, `key-origin/move.ts`'s
+ * `keepTextWith`), resolving once the key page stored it
+ */
+export interface KeyMove {
+  keys: MoveKeys;
+  keep: (text: string) => Promise<void>;
+}
+
 /** What a move is handed when no copy holds a wallet, only stray keys */
 const NO_RECORD: SerializedWalletState = {
   state: "setup",
@@ -492,6 +503,75 @@ export const walletStorageWith =
 
     const readLocal = readLocalWith(() => undefined);
 
+    /**
+     * Whether `text`, the `localStorage` wallet, is one `readLocal` keeps
+     * aside as unreadable: not JSON, or JSON of no wallet's shape. The
+     * pre-accounts format is neither: `readLocal` reads it as none and leaves
+     * it, since another tab is upgrading it.
+     */
+    const isUnreadable = (text: string) => {
+      let value: unknown;
+      try {
+        value = JSON.parse(text);
+      } catch {
+        // The parser's message quotes the text, so key bytes: the caller
+        // reports the unreadable wallet without it
+        return true;
+      }
+      return !isLegacyWallet(value) && !isStoredWallet(value);
+    };
+
+    /**
+     * Under the key-origin provider: hand every unreadable copy of the
+     * wallet in `localStorage` (the entry itself, and the one kept aside) to
+     * the key page as it is, then drop it from the app's origin. A copy
+     * rewritten meanwhile stays for the next read. A failure is reported:
+     * every copy not yet removed stays where it was, as before the key
+     * origin (stored by the key page too when only its removal failed), and
+     * the next read tries again, while the wallet itself still loads, since
+     * nothing in it depends on them.
+     */
+    const handOverUnreadable = async (keep: KeyMove["keep"]) => {
+      const found: [key: string, text: string][] = [];
+      try {
+        const entry = local.getItem(WALLET_LOCAL_KEY);
+        if (entry !== null && isUnreadable(entry)) {
+          found.push([WALLET_LOCAL_KEY, entry]);
+        }
+        const aside = local.getItem(UNREADABLE_KEY);
+        if (aside !== null) found.push([UNREADABLE_KEY, aside]);
+      } catch (error) {
+        // Storage refused: nothing can be read from it, and `readLocal`
+        // meets the same refusal and goes on to the store
+        reportFailure("localStorage unavailable", error);
+        return;
+      }
+      if (found.length === 0) return;
+      const reportFound = reportFailureWith({ texts: found.length });
+      try {
+        for (const text of new Set(found.map(([, entry]) => entry))) {
+          await keep(text);
+        }
+      } catch (error) {
+        reportFound("Unreadable wallet not handed to the key page", error);
+        return;
+      }
+      try {
+        for (const [key, text] of found) {
+          // A copy someone rewrote meanwhile is not the one handed over
+          if (local.getItem(key) === text) local.removeItem(key);
+        }
+      } catch (error) {
+        reportFound("Unreadable wallet left in localStorage", error);
+        return;
+      }
+      // A damaged wallet is worth hearing of, though nothing failed here
+      log.warn("unreadable wallet handed to the key page", {
+        report: true,
+        context: { texts: found.length },
+      });
+    };
+
     /** Keep the first unreadable copy aside; a later one never replaces it */
     const keepUnreadable = (text: string) => {
       try {
@@ -607,7 +687,7 @@ export const walletStorageWith =
      * so the read is `unavailable` and the next one tries again
      */
     const isMoveBlocked = (
-      move: MoveKeys | undefined,
+      move: KeyMove | undefined,
       fromLocal:
         | { wallet: SerializedWalletState; damaged: unknown[] }
         | undefined
@@ -636,7 +716,8 @@ export const walletStorageWith =
       }
     };
 
-    const migrate = async (move: MoveKeys | undefined): Promise<WalletRead> => {
+    const migrate = async (move: KeyMove | undefined): Promise<WalletRead> => {
+      if (move) await handOverUnreadable(move.keep);
       const fromLocal = readLocal();
       if (isDegraded()) {
         if (isMoveBlocked(move, fromLocal)) return UNAVAILABLE;
@@ -696,7 +777,10 @@ export const walletStorageWith =
             ...misshapen,
             ...aside,
           ]);
-          const moved = await move(merged ?? NO_RECORD, { accounts, stray });
+          const moved = await move.keys(merged ?? NO_RECORD, {
+            accounts,
+            stray,
+          });
           if (merged) merged = moved.record;
           movedKeys = moved.keys;
         } catch (error) {
@@ -814,7 +898,10 @@ export const walletStorageWith =
        * Read the wallet as `read` does, under the key-origin provider: every
        * key in every copy is moved into the key page first, under the same
        * lock, and the copies are written without key bytes only once it
-       * confirmed them all. The wallet reads `unavailable`, and the next read
+       * confirmed them all. An unreadable `localStorage` wallet, and the copy
+       * kept aside, go to the key page as text first, and leave
+       * `localStorage` once it stored them; while it does not take them they
+       * stay, and the wallet still loads. The wallet reads `unavailable`, and the next read
        * tries again, while key bytes would stay on the app's origin: a move
        * that fails, a store that cannot be read while `localStorage` holds
        * keys, a store that refuses its record without key bytes, damaged
@@ -823,9 +910,9 @@ export const walletStorageWith =
        * `localStorage` wallet the store refuses is rewritten without key
        * bytes and loads from there.
        *
-       * @param move moves keys into the key page
+       * @param move moves keys and unreadable texts into the key page
        */
-      readMovingKeys(move: MoveKeys): Promise<WalletRead> {
+      readMovingKeys(move: KeyMove): Promise<WalletRead> {
         return store.exclusive(() => migrate(move));
       },
 

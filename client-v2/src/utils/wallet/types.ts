@@ -5,8 +5,10 @@ export interface WalletState {
   /**
    * Wallet connection state. `unavailable`: a wallet may be stored but could
    * not be read; it is never saved, so the stored wallet stays as it was.
+   * `loading`: under the key-origin provider, the page load's read waits for
+   * the key page; never saved either.
    */
-  state: "setup" | "disconnected" | "pg" | "sol" | "unavailable";
+  state: "setup" | "disconnected" | "pg" | "sol" | "unavailable" | "loading";
   /** All accounts */
   accounts: WalletAccount[];
   /** Current wallet index */
@@ -34,8 +36,11 @@ export interface WalletAccount {
   kp?: number[];
 }
 
-/** The connection states a stored wallet can have: `unavailable` is never saved */
-export type SavedWalletState = Exclude<WalletState["state"], "unavailable">;
+/** The connection states a stored wallet can have: `unavailable` and `loading` are never saved */
+export type SavedWalletState = Exclude<
+  WalletState["state"],
+  "unavailable" | "loading"
+>;
 
 /** Serialized wallet that's used in storage */
 export type SerializedWalletState = Pick<

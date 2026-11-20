@@ -18,12 +18,13 @@ export type KeyRequest = { id: number } & (
     }
   | { type: "forget"; publicKey: string }
   | { type: "adopt"; keys: number[][] }
+  | { type: "keep"; text: string }
 );
 
 /**
  * The key page's answer: `accounts` and `adopt` give public keys, `create` the
  * public key of the key it made and stored, `sign` the 64 signature bytes,
- * `forget` `null`. Never key bytes.
+ * `forget` and `keep` `null`. Never key bytes.
  */
 export type KeyReply = {
   id: number;
@@ -74,6 +75,8 @@ export const isKeyRequest = (x: unknown): x is KeyRequest => {
       );
     case "adopt":
       return Array.isArray(x.keys) && x.keys.every(isSecretKey);
+    case "keep":
+      return isString(x.text);
     default:
       return false;
   }
@@ -257,6 +260,7 @@ if (import.meta.vitest) {
         },
         { id: 5, type: "forget", publicKey: "abc" },
         { id: 6, type: "adopt", keys: [key, key] },
+        { id: 7, type: "keep", text: "{not json" },
       ];
       for (const request of requests) expect(isKeyRequest(request)).toBe(true);
     });
@@ -270,6 +274,7 @@ if (import.meta.vitest) {
         { id: 1, type: "nope" },
         { type: "accounts" },
         { id: 1, type: "keep", publicKey: "abc" },
+        { id: 1, type: "keep", text: [1, 2, 3] },
         { id: 1, type: "forget" },
         {
           id: 1,

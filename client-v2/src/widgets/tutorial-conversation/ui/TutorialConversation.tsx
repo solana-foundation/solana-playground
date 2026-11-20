@@ -412,6 +412,8 @@ const runner = announceDeploys(
  */
 const createWallet = async (beatId: string) => {
   try {
+    // A wallet still loading from the key origin has no accounts yet
+    await PgWallet.untilLoaded();
     if (!PgWallet.accounts.length) await PgWallet.addFirst();
     else if (PgWallet.state === "setup" || PgWallet.state === "disconnected") {
       PgWallet.state = "pg";

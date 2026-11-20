@@ -1,8 +1,12 @@
 import { PgCommon, PgTerminal, PgView, PgWallet } from "../../utils";
+import type { WalletState } from "../../utils/wallet/types";
 import { createArgs, createCmd } from "../create";
 import { PgDeployRun } from "../deploy/run";
 import { SETUP_REJECTED } from "./setup-rejected";
 import { WalletUnavailableError } from "./wallet-unavailable";
+
+/** The wallet's state as it is now, not as an earlier check narrowed it */
+const stateNow = (): WalletState["state"] => PgWallet.state;
 
 export const connect = createCmd({
   name: "connect",
@@ -80,12 +84,17 @@ export const connectTo = async (walletName: string | undefined) => {
       break;
     }
 
+    // Still on the page load's read (the key page has not answered): read
+    // again and wait, then go on as for an unavailable wallet
+    case "loading":
     case "unavailable": {
       // Read it again, as Get set up's Try again does: once the list is
       // dismissed or completed, this is the only way to retry
       await PgWallet.refresh();
-      if (PgWallet.state === "unavailable") throw new WalletUnavailableError();
-      if (PgWallet.state === "pg" || PgWallet.state === "sol") {
+      // Through a call: the switch narrowed `PgWallet.state` to before the read
+      const state = stateNow();
+      if (state === "unavailable") throw new WalletUnavailableError();
+      if (state === "pg" || state === "sol") {
         PgTerminal.println(PgTerminal.success("Wallet loaded."));
         break;
       }
