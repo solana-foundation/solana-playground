@@ -125,6 +125,21 @@ RUN cargo-build-sbf --manifest-path programs/Cargo.toml -- --locked
 RUN test "$(ls "${HOME}/.cache/solana")" = "$(printf '%s\n' "${PLATFORM_TOOLS_VERSION}" "${CRITERION_VERSION}" | sort)" \
     || { echo "the Solana SDK fetched tools other than the pinned ones:" >&2; ls "${HOME}/.cache/solana" >&2; exit 1; }
 
+# Warm every build slot, so a fresh instance's first builds do not compile all dependencies.
+# A slot `programs/<id>` builds into its own `target`; `program::build` skips setting up a slot
+# that has `ready`. The manifest points at `../default` as `program::build` points it at `../<uuid>`.
+# Match BUILD_SLOTS to `PG_BUILD_CONCURRENCY` in `app.yaml`.
+ARG BUILD_SLOTS=10
+RUN for id in $(seq 0 $((BUILD_SLOTS - 1))); do \
+      mkdir -p programs/$id \
+      && cp programs/Cargo.lock programs/$id/ \
+      && sed 's|"default/|"../default/|' programs/Cargo.toml > programs/$id/Cargo.toml \
+      && cp -a programs/target programs/$id/target \
+      && cargo-build-sbf --manifest-path programs/$id/Cargo.toml --offline -- --locked \
+      && touch programs/$id/ready \
+      || exit 1; \
+    done
+
 # Start server
 COPY --from=build /build/target/release/solpg-server .
 # Restrict the server binary to its owner so a future unprivileged builder

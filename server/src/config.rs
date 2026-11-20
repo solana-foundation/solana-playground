@@ -54,7 +54,8 @@ impl Config {
             port: get_env("PORT", 8080u16),
             payload_limit: get_env("PAYLOAD_LIMIT", 1024usize * 1024),
             verbose: get_env("VERBOSE", false),
-            build_concurrency: get_env("BUILD_CONCURRENCY", 16usize),
+            // Same as `PG_BUILD_CONCURRENCY` in `app.yaml` and `BUILD_SLOTS` in the Dockerfile
+            build_concurrency: get_env("BUILD_CONCURRENCY", 10usize),
             build_queue: QueueLimits {
                 max_waiting: get_env("BUILD_QUEUE_LIMIT", DEFAULT_MAX_WAITING),
                 max_wait: Duration::from_secs(get_env(
