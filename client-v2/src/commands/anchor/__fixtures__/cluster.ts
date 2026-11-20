@@ -3,6 +3,7 @@ import {
   type Address,
   address,
   getAddressEncoder,
+  getBase58Decoder,
   getBase64Decoder,
   getOptionEncoder,
   getSignatureFromTransaction,
@@ -22,7 +23,11 @@ import {
   PROGRAM_METADATA_PROGRAM_ADDRESS,
 } from "@solana-program/program-metadata";
 import { readFileSync } from "fs";
-import { FailedTransactionMetadata, LiteSVM } from "litesvm";
+import {
+  FailedTransactionMetadata,
+  LiteSVM,
+  TransactionMetadata,
+} from "litesvm";
 import { join } from "path";
 
 /** Written by `regenerate.sh` beside it; `__dirname`, which Playwright's CommonJS and vitest both define */
@@ -39,7 +44,7 @@ class RpcError extends Error {
   }
 }
 
-/** A cluster that runs the Program Metadata program, and answers the JSON-RPC methods the `anchor` subcommands call */
+/** A cluster that runs the Program Metadata program, and answers the JSON-RPC methods the `anchor` subcommands and a project's scripts call */
 export const clusterOf = () => {
   const svm = new LiteSVM();
   svm.addProgram(
@@ -139,6 +144,33 @@ export const clusterOf = () => {
     return getSignatureFromTransaction(tx);
   };
 
+  /** Runs a signed transaction without keeping what it changed; a deploy sizes its writes' compute budget from it */
+  const simulateTransaction = (base64: string) => {
+    const tx = getTransactionDecoder().decode(Buffer.from(base64, "base64"));
+    const result = svm.simulateTransaction(tx);
+    const isFailed = result instanceof FailedTransactionMetadata;
+    const meta = result.meta();
+    return {
+      context,
+      value: {
+        err: isFailed ? result.toString() : WIRE_NULL,
+        logs: meta.logs(),
+        accounts: WIRE_NULL,
+        unitsConsumed: Number(meta.computeUnitsConsumed()),
+        returnData: WIRE_NULL,
+      },
+    };
+  };
+
+  /** Pays `amount` lamports to `to` from LiteSVM's own faucet, as a local validator's faucet does */
+  const requestAirdrop = (to: string, amount: number) => {
+    const result = svm.airdrop(address(to), lamports(BigInt(amount)));
+    if (!(result instanceof TransactionMetadata)) {
+      throw new RpcError(-32603, `Airdrop failed: ${String(result)}`);
+    }
+    return getBase58Decoder().decode(result.signature());
+  };
+
   const answer = (method: string, params: unknown[]): unknown => {
     switch (method) {
       case "getAccountInfo":
@@ -160,6 +192,11 @@ export const clusterOf = () => {
         );
       case "sendTransaction":
         return sendTransaction(String(params[0]));
+      case "simulateTransaction":
+        return simulateTransaction(String(params[0]));
+      // A script's own airdrop, which `run` sends from the sandbox
+      case "requestAirdrop":
+        return requestAirdrop(String(params[0]), Number(params[1]));
       case "getSignatureStatuses":
         return {
           context,

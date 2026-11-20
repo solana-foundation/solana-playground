@@ -15,6 +15,13 @@ crate-type = ["cdylib", "rlib"]
 [features]
 default = ["js"]
 js = []
+# The built-in wallet as a CLI signer; pulls in the Solana SDK, so only the CLIs
+# that sign enable it
+wallet = ["js", "js-sys", "solana-client-wasm", "solana-sdk", "wasm-bindgen-futures"]
 
 [dependencies]
+js-sys = { version = "0.3.69", optional = true }
+solana-client-wasm = { path = "../../solana-client", optional = true }
+solana-sdk = { version = "~1.18", optional = true }
 wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { version = "0.4.38", optional = true }

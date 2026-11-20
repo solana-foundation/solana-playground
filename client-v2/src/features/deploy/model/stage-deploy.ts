@@ -64,7 +64,16 @@ const WALLET_TIMEOUT_MS = 15_000;
 const ensurePlaygroundWallet = async (
   PgWallet: typeof import("@/utils").PgWallet
 ) => {
+  // A wallet still loading from the key origin has no accounts yet: wait for
+  // the read before choosing, and before the timer starts
+  const wasLoading = PgWallet.state === "loading";
+  await PgWallet.untilLoaded();
   if (PgWallet.current) return;
+  // A wallet the load brought connected (`pg`, or a standard wallet) derives
+  // its current a moment later: wait for it, and switch nothing over the
+  // user's choice
+  const isLoadedConnected =
+    wasLoading && (PgWallet.state === "pg" || PgWallet.state === "sol");
   let dispose = () => {};
   const connected = new Promise<void>((resolve, reject) => {
     const timer = setTimeout(
@@ -87,8 +96,11 @@ const ensurePlaygroundWallet = async (
     };
   });
   try {
-    if (PgWallet.accounts.length === 0) PgWallet.add();
-    else PgWallet.switch(Math.max(PgWallet.currentIndex, 0));
+    // Shared with the derive that may be making it already: one account
+    if (!isLoadedConnected) {
+      if (PgWallet.accounts.length === 0) await PgWallet.addFirst();
+      else PgWallet.switch(Math.max(PgWallet.currentIndex, 0));
+    }
     await connected;
   } finally {
     dispose();

@@ -160,6 +160,12 @@ Asked to build something in the client, look in `openspec/changes/` first.
   `client-v2/scripts/vercel-install.sh` installs it from what those pins lock
   (`client-v2/docs/deploy-client-vercel.md`, "wasm-bindgen"). A bump changes
   the pin and the lockfile together.
+- **`wasm/` also carries the built-in wallet's CLI signing, which an upstream
+  sync must keep:** the wallet signs the CLIs' transactions at the send step
+  under the key origin (OpenSpec `wallet-cli-signing`). Keep
+  `solana-client/src/deferred_signer.rs` and its call in
+  `send_transaction_with_config`, `utils/solana-playground-utils/src/wallet.rs`
+  with the `wallet` feature, and the CLIs' `wallet_signer()` calls.
 - **`server/` carries fork-owned changes that an upstream sync must keep,**
   so a conflict there is resolved by hand, never by taking upstream's file:
   the share routes and MongoDB are gone (`e5d1cf747`); the stable build runs

@@ -74,17 +74,24 @@ export const ModalHost = () => {
   // `PgView` owns the stack, so a remount of this host shows what is open
   const modals = useSyncExternalStore(subscribe, PgView.getOpenModals);
   useEffect(() => PgView.attachModalHost().dispose, []);
-  // Set by the top dialog's `ModalFrame` while its submit runs
-  const dismissBlocked = useRef(false);
-  const blockDismiss = useCallback((blocked: boolean) => {
-    dismissBlocked.current = blocked;
+  // Holds taken by the top dialog's `ModalFrame` while its submit runs and by
+  // its busy key panels (`ModalDismissContext`)
+  const dismissHolds = useRef(0);
+  const blockDismiss = useCallback(() => {
+    dismissHolds.current += 1;
+    let isHeld = true;
+    return () => {
+      if (!isHeld) return;
+      isHeld = false;
+      dismissHolds.current -= 1;
+    };
   }, []);
 
   return (
     <Modal
       open={modals.length > 0}
       onOpenChange={(open) => {
-        if (!open && !dismissBlocked.current) PgView.closeTopModal();
+        if (!open && dismissHolds.current === 0) PgView.closeTopModal();
       }}
     >
       <ModalDismissContext.Provider value={blockDismiss}>
