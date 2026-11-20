@@ -128,6 +128,7 @@ export const signerMethodsWith =
       },
       signMessage: async (message: Uint8Array) =>
         sign(publicKey)("message")(messageBytesOf(message)),
+      signTransactionBytes: sign(publicKey)("transaction"),
     };
   };
 
@@ -222,6 +223,18 @@ if (import.meta.vitest) {
       })(publicKey);
       return { methods, asked };
     };
+
+    it("signTransactionBytes asks the page to sign the bytes as a transaction", async () => {
+      const asked: string[] = [];
+      const methods = signerMethodsWith(() => (kind) => async (bytes) => {
+        asked.push(`${kind}:${Array.from(bytes).join(",")}`);
+        return new Uint8Array(64);
+      })(publicKey);
+
+      await methods.signTransactionBytes(new Uint8Array([0x81, 1]));
+
+      expect(asked).toEqual(["transaction:129,1"]);
+    });
 
     it("signMessage sends a Uint8Array, a Buffer or a number[] as bytes", async () => {
       const { methods, asked } = recordingMethods();

@@ -136,6 +136,10 @@ export const localSignerProviderWith = (
         async signMessage(message: Uint8Array) {
           return await ed25519.sign(message, keypair.secretKey.slice(0, 32));
         },
+
+        async signTransactionBytes(bytes: Uint8Array) {
+          return await ed25519.sign(bytes, keypair.secretKey.slice(0, 32));
+        },
       };
     },
     secretKeyFor(publicKey) {
@@ -225,6 +229,16 @@ if (import.meta.vitest) {
       const signature = await provider.walletFor(account).signMessage(message);
       expect(
         await ed25519.verify(signature, message, keypair.publicKey.toBytes())
+      ).toBe(true);
+    });
+
+    it("signTransactionBytes signs the message bytes with the account's key", async () => {
+      const bytes = new Uint8Array([0x81, 1, 0, 0]);
+      const signature = await provider
+        .walletFor(account)
+        .signTransactionBytes(bytes);
+      expect(
+        await ed25519.verify(signature, bytes, keypair.publicKey.toBytes())
       ).toBe(true);
     });
 

@@ -14,7 +14,12 @@ import { handlerWith } from "./key-origin/frame/handler";
 import { CLI_KEY_ERROR, keyOriginSignerProvider } from "./key-origin/provider";
 import { KeypairFileError } from "./keypair-file";
 import { localSignerProviderWith, publicKeyOf } from "./signer-provider";
-import type { Wallet, WalletAccount, WalletState } from "./types";
+import type {
+  StandardWallet,
+  Wallet,
+  WalletAccount,
+  WalletState,
+} from "./types";
 import { PgWallet, readWith, refuseKeylessRecord } from "./wallet";
 import { WALLET_LOCAL_KEY, type WalletRead } from "./wallet-storage";
 
@@ -408,7 +413,7 @@ describe("utils/wallet/wallet", () => {
         expect(kept.size).toBe(1);
       });
 
-      it("addFirst keeps a failure for the page load, reported once, until the provider changes", async () => {
+      it("addFirst tries again after a failed attempt, while the derive holds off", async () => {
         const logged = memoryProvider();
         initLogger({ providers: [logged] });
         const { kept, provider } = fakeKeyPage();
@@ -424,22 +429,52 @@ describe("utils/wallet/wallet", () => {
         PgWallet.setSignerProvider(provider);
         const { accounts } = holdState([]);
 
-        const first = PgWallet.addFirst();
-        await expect(first).rejects.toBeInstanceOf(KeyFrameUnavailable);
-        failNext = false;
         await expect(PgWallet.addFirst()).rejects.toBeInstanceOf(
           KeyFrameUnavailable
         );
-        expect(makeKey).toHaveBeenCalledOnce();
         expect(accounts).toHaveLength(0);
         expect(
           logged.entries.filter((entry) => entry.ns === "wallet:account")
         ).toEqual([expect.objectContaining({ level: "error", report: true })]);
-        resetLogger();
+        expect(PgWallet.canDeriveFirst()).toBe(false);
 
-        PgWallet.setSignerProvider(provider);
+        failNext = false;
         expect(await PgWallet.addFirst()).toBe(true);
+        expect(makeKey).toHaveBeenCalledTimes(2);
+        expect(accounts).toHaveLength(1);
         expect(kept.size).toBe(1);
+        expect(PgWallet.canDeriveFirst()).toBe(true);
+      });
+
+      it("addFirst keeps sharing the new provider's attempt when the old one fails after a provider change", async () => {
+        const { provider } = fakeKeyPage();
+        let failOld: (error: Error) => void = () => {};
+        let finishNew: (publicKey: string) => void = () => {};
+        vi.spyOn(provider, "makeKey")
+          .mockImplementationOnce(
+            () =>
+              new Promise<string>((_, reject) => {
+                failOld = reject;
+              })
+          )
+          .mockImplementationOnce(
+            () =>
+              new Promise<string>((resolve) => {
+                finishNew = resolve;
+              })
+          );
+        PgWallet.setSignerProvider(provider);
+        holdState([]);
+
+        const old = PgWallet.addFirst();
+        PgWallet.setSignerProvider(provider);
+        const current = PgWallet.addFirst();
+        failOld(new KeyFrameUnavailable("timeout"));
+        await expect(old).rejects.toBeInstanceOf(KeyFrameUnavailable);
+
+        expect(PgWallet.addFirst()).toBe(current);
+        finishNew(PgWeb3.Keypair.generate().publicKey.toBase58());
+        await current;
       });
 
       it("makeKey stores a key, and forgetKey drops it unless an account holds it", async () => {
@@ -601,6 +636,36 @@ describe("utils/wallet/wallet", () => {
       const read = vi.fn(async () => stored);
       const wallet = await readWith(ORIGIN)(async () => ({} as KeyFrame))(read);
       expect(wallet).toBe(stored);
+    });
+  });
+
+  describe("refresh", () => {
+    it("keeps the standard wallets detected this page load", async () => {
+      // `refresh` assigns every state field on the class: a fresh copy of the
+      // module keeps those fields from the stubs the other tests define
+      vi.resetModules();
+      const { PgWallet: wallet } = await import("./wallet");
+      const phantom = { name: "Phantom" } as unknown as StandardWallet;
+      // Wallets announce themselves once per page load, so the detected list
+      // lives only in memory; `init` would also start the derivables, which
+      // need a connection, so the state is held as it would be after it
+      let detected = [phantom];
+      Object.defineProperty(wallet, "standardWallets", {
+        get: () => detected,
+        set: (value: StandardWallet[]) => {
+          detected = value;
+        },
+        configurable: true,
+      });
+      Object.defineProperty(wallet, "_isInitialized", {
+        value: true,
+        configurable: true,
+      });
+
+      // What `connect` and Get set up's Try again run
+      await wallet.refresh();
+
+      expect(detected).toEqual([phantom]);
     });
   });
 });
