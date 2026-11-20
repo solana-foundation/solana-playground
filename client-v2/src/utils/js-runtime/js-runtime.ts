@@ -91,6 +91,9 @@ export class PgJsRuntime {
         );
       }
 
+      // Under the key-origin provider the wallet may still be loading, and
+      // `pg.wallet` is built from `current`
+      await PgWallet.untilCurrent();
       const run = this._runMessage(prepareCode(code), isTest);
       const { port, reloaded, stopWatching } = await this._openSandbox();
       const ended = serveSandboxWith({

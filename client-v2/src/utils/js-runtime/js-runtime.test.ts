@@ -9,7 +9,9 @@ vi.mock("../common", () => ({ PgCommon: {} }));
 vi.mock("../connection", () => ({ PgConnection: {} }));
 vi.mock("../program-info", () => ({ PgProgramInfo: {} }));
 vi.mock("../terminal", () => ({ PgTerminal: {} }));
-vi.mock("../wallet", () => ({ PgWallet: {} }));
+vi.mock("../wallet", () => ({
+  PgWallet: { untilCurrent: async () => undefined },
+}));
 vi.mock("../wallet/sign-bridge", () => ({ signRequestWith: vi.fn() }));
 
 describe("PgJsRuntime busy refusal", () => {

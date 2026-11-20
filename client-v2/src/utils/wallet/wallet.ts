@@ -237,7 +237,7 @@ export const readWith =
   };
 
 /** Report a failure of the background read by its name only, as `readWith` does */
-const reportBackgroundRead = (what: string) => (error: unknown) => {
+const reportBackgroundReadFor = (what: string) => (error: unknown) => {
   keyOriginLog.error(new Error(`${what}: ${toError(error).name}`), {
     report: true,
     context: { what },
@@ -259,11 +259,13 @@ export const loadingWith =
   (take: (wallet: WalletState) => void) => (reading: Promise<WalletState>) => {
     const taken = reading
       .then(take, (error: unknown) => {
-        reportBackgroundRead("read the wallet in the background failed")(error);
+        reportBackgroundReadFor("read the wallet in the background failed")(
+          error
+        );
         take({ ...defaultState, state: "unavailable" });
       })
       .catch(
-        reportBackgroundRead("take the wallet read in the background failed")
+        reportBackgroundReadFor("take the wallet read in the background failed")
       );
     const wallet: WalletState = { ...defaultState, state: "loading" };
     return { wallet, taken };
@@ -286,6 +288,9 @@ const takeLoaded = (wallet: WalletState) => {
     state: wallet.state,
   });
 };
+
+/** How long `PgWallet.untilCurrent` waits for a connected wallet's `current` */
+const CURRENT_TIMEOUT_MS = 15_000;
 
 /** Whether the next read is the page load's, which `loadingWith` runs */
 let isPageLoadRead = true;
@@ -804,6 +809,32 @@ class _PgWallet {
    */
   static untilLoaded(): Promise<void> {
     return pageLoadTaken;
+  }
+
+  /**
+   * Settles once the page load's read was taken and, for a connected wallet
+   * (`pg` or `sol`), once `current` is derived or `CURRENT_TIMEOUT_MS` has
+   * passed. `current` is derived a tick after the read is taken, so whatever
+   * reads `current` itself, such as a run building `pg.wallet`, waits on
+   * this rather than `untilLoaded`. After the timeout `current` may still be
+   * missing, and the caller says so as it would for no wallet.
+   */
+  static async untilCurrent(): Promise<void> {
+    await PgWallet.untilLoaded();
+    if (PgWallet.current) return;
+    if (PgWallet.state !== "pg" && PgWallet.state !== "sol") return;
+    await new Promise<void>((resolve) => {
+      const settle = () => {
+        clearTimeout(timer);
+        sub.dispose();
+        resolve();
+      };
+      const timer = setTimeout(settle, CURRENT_TIMEOUT_MS);
+      const sub = PgWallet.onDidChangeCurrent((current) => {
+        // The derive answers asynchronously, never inside this call
+        if (current) settle();
+      });
+    });
   }
 
   /**

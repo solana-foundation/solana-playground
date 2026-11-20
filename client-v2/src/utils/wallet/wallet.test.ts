@@ -594,6 +594,77 @@ describe("utils/wallet/wallet", () => {
     });
   });
 
+  describe("untilCurrent, what a run waits on before reading the wallet", () => {
+    /** Stubs the wallet's state and `current`, and captures the change listener */
+    const stubWallet = (state: WalletState["state"]) => {
+      let current: unknown;
+      Object.defineProperty(PgWallet, "state", {
+        get: () => state,
+        configurable: true,
+      });
+      Object.defineProperty(PgWallet, "current", {
+        get: () => current,
+        configurable: true,
+      });
+      const listeners: Array<(value: unknown) => void> = [];
+      // Added by the derivable's init, which these tests do not run
+      const onDidChangeCurrent = vi.fn((cb: (value: unknown) => void) => {
+        listeners.push(cb);
+        return { dispose: () => listeners.splice(listeners.indexOf(cb), 1) };
+      });
+      Object.defineProperty(PgWallet, "onDidChangeCurrent", {
+        value: onDidChangeCurrent,
+        configurable: true,
+      });
+      const derive = (value: unknown) => {
+        current = value;
+        listeners.forEach((listener) => listener(value));
+      };
+      return { derive, listeners, onDidChangeCurrent };
+    };
+
+    afterEach(() => {
+      Reflect.deleteProperty(PgWallet, "state");
+      Reflect.deleteProperty(PgWallet, "current");
+      Reflect.deleteProperty(PgWallet, "onDidChangeCurrent");
+      vi.useRealTimers();
+    });
+
+    it("waits for a loaded connected wallet to derive its current", async () => {
+      const { derive, listeners } = stubWallet("pg");
+      let isSettled = false;
+
+      const waiting = PgWallet.untilCurrent().then(() => {
+        isSettled = true;
+      });
+      await PgCommon.sleep(0);
+      expect(isSettled).toBe(false);
+
+      derive({ publicKey: "built-in" });
+      await waiting;
+      expect(isSettled).toBe(true);
+      expect(listeners).toHaveLength(0);
+    });
+
+    it("settles at once for a wallet that is not connected", async () => {
+      const { onDidChangeCurrent } = stubWallet("disconnected");
+
+      await expect(PgWallet.untilCurrent()).resolves.toBeUndefined();
+      expect(onDidChangeCurrent).not.toHaveBeenCalled();
+    });
+
+    it("settles after the timeout when current never comes", async () => {
+      vi.useFakeTimers();
+      const { listeners } = stubWallet("sol");
+
+      const waiting = PgWallet.untilCurrent();
+      await vi.advanceTimersByTimeAsync(15_000);
+
+      await expect(waiting).resolves.toBeUndefined();
+      expect(listeners).toHaveLength(0);
+    });
+  });
+
   describe("loadingWith, the page load's read under the key-origin provider", () => {
     const stored: WalletState = {
       state: "pg",
