@@ -26,10 +26,10 @@ All tasks belong to HOO-2901 and land in one PR into `master`, as #176 did. Grou
   `utils/terminal/buffers-table.ts`; drop the table detection from `PgTerminal.logWasm` and keep `logWasm` (HOO-2901;
   depends on 2.1). Verify: unit tests match the recorded `show` and `close` cases, and `buffers-table.ts`'s own tests
   still pass.
-- [ ] 2.4 Point `commands/deploy/deploy.ts`'s on-chain-data hint at Settings ("Add a custom RPC in Settings, under
+- [x] 2.4 Point `commands/deploy/deploy.ts`'s on-chain-data hint at Settings ("Add a custom RPC in Settings, under
   Network, and try again.") (HOO-2901). Verify: `deploy.test.ts` asserts the new line and no `config set` text remains
   in `client-v2/src`.
-- [ ] 2.5 Run every scenario of the `client-v2-terminal` delta marked `(manual)` on Devnet, the `stopped.ts` command
+- [x] 2.5 Run every scenario of the `client-v2-terminal` delta marked `(manual)` on Devnet, the `stopped.ts` command
   after a deliberately stopped deploy included (HOO-2901; depends on 2.2, 2.3). Verify: the transcript, with dates and
   signatures, is in the PR description.
 
@@ -57,14 +57,14 @@ All tasks belong to HOO-2901 and land in one PR into `master`, as #176 did. Grou
 
 ## 4. Other open changes
 
-- [ ] 4.1 With `/opsx:update wbdi-flow`, make its Mainnet refusal in `specs/client-v2-program-deploy` name `solana
+- [x] 4.1 With `/opsx:update wbdi-flow`, make its Mainnet refusal in `specs/client-v2-program-deploy` name `solana
   program close --buffers` instead of `program close <program id>` and `set-upgrade-authority`, and its `-um`
   scenario run `solana -um program close --buffers` (HOO-2901). Verify: `yarn spec:validate` passes and
   `git grep "set-upgrade-authority" openspec/changes/wbdi-flow` finds nothing.
 
 ## 5. Integration
 
-- [ ] 5.1 Run `yarn run check` and the e2e specs touched in 2.1, 3.1 and 3.3 on the branch head (HOO-2901; depends on
+- [x] 5.1 Run `yarn run check` and the e2e specs touched in 2.1, 3.1 and 3.3 on the branch head (HOO-2901; depends on
   every task above). Verify: all pass, and the result is in the PR description.
 
 ## Workflow follow-up
