@@ -1,9 +1,6 @@
 [workspace]
 members = [
     "seahorse-compile",
-    "solana-cli",
-    "solana-client",
-    "spl-token-cli",
     "utils/*",
 ]
 exclude = ["rust-analyzer"]

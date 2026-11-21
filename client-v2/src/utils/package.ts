@@ -6,8 +6,6 @@ import { PgTerminal } from "./terminal";
 interface ImportResult {
   rustfmt: typeof import("@solana-playground/rustfmt");
   "seahorse-compile": typeof import("@solana-playground/seahorse-compile");
-  "solana-cli": typeof import("@solana-playground/solana-cli");
-  "spl-token-cli": typeof import("@solana-playground/spl-token-cli");
 }
 
 /** All package names */
@@ -55,10 +53,6 @@ If the problem continues, consider filing a bug report in ${PgTerminal.underline
         return await import("@solana-playground/rustfmt");
       case "seahorse-compile":
         return await import("@solana-playground/seahorse-compile");
-      case "solana-cli":
-        return await import("@solana-playground/solana-cli");
-      case "spl-token-cli":
-        return await import("@solana-playground/spl-token-cli");
       default:
         throw new Error(`Unknown package \`${name}\``);
     }
@@ -75,10 +69,7 @@ If the problem continues, consider filing a bug report in ${PgTerminal.underline
       case "seahorse-compile":
         return "Seahorse";
       default:
-        return name
-          .replace("spl", (m) => m.toUpperCase())
-          .replace("cli", (m) => m.toUpperCase())
-          .replace(/.+/g, PgCommon.toTitleFromKebab);
+        return PgCommon.toTitleFromKebab(name);
     }
   }
 

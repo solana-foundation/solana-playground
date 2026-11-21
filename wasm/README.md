@@ -25,5 +25,5 @@ Build all packages:
 Build a single package:
 
 ```sh
-./build.sh solana-cli
+./build.sh seahorse-compile
 ```

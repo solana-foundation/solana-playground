@@ -55,8 +55,6 @@ fi
 all_packages=(
     "rust-analyzer"
     "seahorse-compile"
-    "solana-cli"
-    "spl-token-cli"
 )
 
 # Get script directory (which is wasm/), and root directory (which is one level higher).
@@ -90,23 +88,7 @@ build() {
     if [ "$package" = "rust-analyzer" ]; then
         wasm-pack build --target web -- --locked
     else
-         wasm-pack build -- --locked
-
-        # Handle a WASM bug from `solana_sdk::instruction::SystemInstruction`
-        package_name=$(
-            awk "/^name/" Cargo.toml |
-                cut -d "\"" -f 2 |
-                sed "s/-/_/g"
-        )
-
-        # Comment out the following line
-        line="wasm.__wbg_systeminstruction_free(ptr);"
-
-        if [[ "$(uname)" == "Darwin" ]]; then
-            sed -i '' "s/$line/\/\/$line/" "pkg/${package_name}_bg.js"
-        else
-            sed -i "s/$line/\/\/$line/" "pkg/${package_name}_bg.js"
-        fi
+        wasm-pack build -- --locked
     fi
 
     popd

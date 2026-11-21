@@ -5294,12 +5294,6 @@
 "@solana-playground/seahorse-compile@../wasm/seahorse-compile/pkg":
   version "0.2.0"
 
-"@solana-playground/solana-cli@../wasm/solana-cli/pkg":
-  version "1.11.0"
-
-"@solana-playground/spl-token-cli@../wasm/spl-token-cli/pkg":
-  version "2.0.15"
-
 "@solana-program/program-metadata@0.11.0":
   version "0.11.0"
   resolved "https://registry.yarnpkg.com/@solana-program/program-metadata/-/program-metadata-0.11.0.tgz#5a66f53e184874c7df4595ed2c3558a3554e3669"

@@ -26,8 +26,6 @@
     "@solana-playground/rust-analyzer": "../wasm/rust-analyzer/pkg",
     "@solana-playground/rustfmt": "../wasm/pkgs/rustfmt",
     "@solana-playground/seahorse-compile": "../wasm/seahorse-compile/pkg",
-    "@solana-playground/solana-cli": "../wasm/solana-cli/pkg",
-    "@solana-playground/spl-token-cli": "../wasm/spl-token-cli/pkg",
     "@solana-program/program-metadata": "0.11.0",
     "@solana-program/system": "0.16.0",
     "@solana-program/token-2022": "0.20.0",
