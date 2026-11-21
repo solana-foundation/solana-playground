@@ -35,7 +35,7 @@ All tasks belong to HOO-2901 and land in one PR into `master`, as #176 did. Grou
 
 ## 3. Delete spl-token and the Rust crates
 
-- [ ] 3.1 Delete `commands/spl-token` and update `commands/needs-connection.test.ts`; add the Playwright test
+- [x] 3.1 Delete `commands/spl-token` and update `commands/needs-connection.test.ts`; add the Playwright test
   `client-v2-terminal: Typing spl-token` beside `Typing sugar` (HOO-2901; depends on 2.1). Verify: both tests pass.
 - [ ] 3.2 Delete `wasm/solana-cli`, `wasm/spl-token-cli`, `wasm/solana-client` and `wasm/utils/` `solana-cli-config`,
   `solana-cli-output`, `solana-clap-v3-utils`, `solana-extra`; update `wasm/Cargo.toml`, `wasm/build.sh`,

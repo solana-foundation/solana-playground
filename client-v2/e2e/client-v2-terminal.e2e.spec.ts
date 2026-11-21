@@ -79,6 +79,15 @@ test.describe("client-v2-terminal", () => {
     );
   });
 
+  test("client-v2-terminal: Typing spl-token", async ({ seededPage: page }) => {
+    await openConsole(page);
+    await runInTerminal(page, "spl-token --help");
+
+    await expect(terminalText(page)).toContainText(
+      "`spl-token` is not a command. Type `help` to see commands."
+    );
+  });
+
   test("client-v2-terminal: An unknown solana subcommand", async ({
     seededPage: page,
   }) => {
