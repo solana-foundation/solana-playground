@@ -1,16 +1,14 @@
-import { VersionedTransaction } from "@solana/web3.js";
-
 import { PgCommon, PgSettings, PgTerminal, PgWallet } from "../../utils";
 import { TerminalLineError } from "../../utils/terminal/line-error";
 import { checkPgWallet } from "../checks";
 import { createArgs, createCmd, createOptions, createSubcmd } from "../create";
 import {
-  type BufferCloser,
   closeBuffersWith,
   fetchBuffersWith,
   formatBuffersTable,
 } from "./buffers";
 import { createClientWith } from "./client";
+import { getCloser } from "./closer";
 import { confirmVerboseWith, confirmWith } from "./confirm";
 import { normalizeToUrlIfMoniker } from "./url";
 
@@ -19,14 +17,18 @@ const URL_DESCRIPTION =
   "RPC URL or cluster (m, t, d, l, or mainnet-beta, testnet, devnet, localhost); defaults to the selected endpoint";
 
 /**
- * The `-u`/`--url` option. `solana` and each subcommand declare it: the
- * parser hands the option to the subcommand that runs (`hoistParentOptionsWith`),
- * so `solana -u d confirm …` and `solana confirm -u d …` both work.
+ * The `-u`/`--url` option, declared by `solana` and by every subcommand that
+ * runs: the parser hands the option to the subcommand that runs
+ * (`hoistParentOptionsWith`), so `solana -u d confirm …` and `solana confirm
+ * -u d …` both work, and a leaf without it fails the first with "Unexpected
+ * option". `solana.test.ts` checks that every leaf declares it.
  */
-const createUrlOptions = () =>
-  createOptions([
-    { name: "url", short: "u", takeValue: true, description: URL_DESCRIPTION },
-  ]);
+const URL_OPTION = {
+  name: "url",
+  short: "u",
+  takeValue: true,
+  description: URL_DESCRIPTION,
+} as const;
 
 /** The client for `-u`'s cluster or URL, or for the endpoint selected in the app when it is not given */
 const getClient = (url: string | undefined) => {
@@ -57,17 +59,6 @@ const getWallet = () => {
   return wallet;
 };
 
-/** The wallet as the signer `program close --buffers` sends its transactions with */
-const getCloser = (wallet: ReturnType<typeof getWallet>): BufferCloser => ({
-  address: wallet.publicKey.toBase58(),
-  sign: async (wireTransaction) => {
-    const signed = await wallet.signTransaction(
-      VersionedTransaction.deserialize(wireTransaction)
-    );
-    return signed.serialize();
-  },
-});
-
 const confirm = createSubcmd({
   name: "confirm",
   description: "Confirm transaction by signature",
@@ -80,7 +71,7 @@ const confirm = createSubcmd({
       short: "v",
       description: "Show the transaction's details",
     },
-    { name: "url", short: "u", takeValue: true, description: URL_DESCRIPTION },
+    URL_OPTION,
   ]),
   handle: async (input) => {
     const client = getClient(input.options.url);
@@ -100,7 +91,7 @@ const show = createSubcmd({
       name: "buffers",
       description: "Show the buffers the wallet is the authority of",
     },
-    { name: "url", short: "u", takeValue: true, description: URL_DESCRIPTION },
+    URL_OPTION,
   ]),
   handle: async (input) => {
     if (!input.options.buffers) throw requireBuffers("show");
@@ -120,7 +111,7 @@ const close = createSubcmd({
       name: "buffers",
       description: "Close the buffers the wallet is the authority of",
     },
-    { name: "url", short: "u", takeValue: true, description: URL_DESCRIPTION },
+    URL_OPTION,
   ]),
   handle: async (input) => {
     if (!input.options.buffers) throw requireBuffers("close");
@@ -134,7 +125,15 @@ const close = createSubcmd({
         PgTerminal.warning(`Could not close ${buffer.address}: ${reason}`)
       );
     }
-    await PgTerminal.printlnBuffersTable(formatBuffersTable(closed));
+    // No table when buffers were found and none closed: "No buffers." would read as nothing left to reclaim
+    if (closed.length || !skipped.length) {
+      await PgTerminal.printlnBuffersTable(formatBuffersTable(closed));
+    }
+    if (skipped.length) {
+      throw new Error(
+        `Closed ${closed.length} of ${closed.length + skipped.length} buffers.`
+      );
+    }
   },
 });
 
@@ -152,7 +151,7 @@ export const solana = createCmd({
   name: "solana",
   description: "Commands for interacting with Solana",
   needsConnection: true,
-  options: createUrlOptions(),
+  options: createOptions([URL_OPTION]),
   subcommands,
   // A bare `solana` lists its subcommands; the parser names an unknown one first
   handle: async () => {

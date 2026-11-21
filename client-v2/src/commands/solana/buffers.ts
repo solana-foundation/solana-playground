@@ -5,6 +5,7 @@ import {
   appendTransactionMessageInstruction,
   type Base58EncodedBytes,
   type Base64EncodedWireTransaction,
+  type Commitment,
   compileTransaction,
   createTransactionMessage,
   getBase58Decoder,
@@ -12,14 +13,19 @@ import {
   getBase64Encoder,
   getTransactionEncoder,
   type Instruction,
+  isSolanaError,
   pipe,
   setTransactionMessageFeePayer,
   setTransactionMessageLifetimeUsingBlockhash,
 } from "@solana/kit";
 
+import { createLogger } from "@/shared/lib/logger";
+
 import { toBytes } from "./bytes";
 import type { SolanaClient } from "./client";
+import { describeError } from "./describe-error";
 import { buildBalanceMessage } from "./lamports";
+import { toSignatureStatus } from "./signature-status";
 import { formatTransactionError } from "./transaction-error";
 
 const UPGRADEABLE_LOADER = toAddress(
@@ -41,10 +47,29 @@ const CLOSE_INSTRUCTION_DATA = new Uint8Array([5, 0, 0, 0]);
 const POLL_INTERVAL_MS = 500;
 
 /** The levels of confirmation, weakest first */
-const COMMITMENTS = ["processed", "confirmed", "finalized"];
+const COMMITMENTS: readonly Commitment[] = [
+  "processed",
+  "confirmed",
+  "finalized",
+];
+
+/** How far a confirmation level is along {@link COMMITMENTS}; -1 for a level it does not hold */
+const rankOf = (level: string) =>
+  COMMITMENTS.findIndex((commitment) => commitment === level);
+
+const log = createLogger("commands:solana");
+
+/** A failure of closing a buffer that this module names: the transaction failed, expired, or could not be followed after it was sent */
+class BufferCloseError extends Error {
+  name = "BufferCloseError";
+}
+
+/** Whether a close failure is one the run skips the buffer for: the cluster refused or failed, or this module said so */
+const isCloseFailure = (e: unknown) =>
+  isSolanaError(e) || e instanceof BufferCloseError;
 
 /** A buffer whose authority is the wallet, as the buffers table lists it */
-export interface Buffer {
+export interface BufferAccount {
   readonly address: string;
   readonly authority: string;
   readonly lamports: bigint;
@@ -58,9 +83,9 @@ export interface BufferCloser {
 
 /** What `program close --buffers` did: the buffers it closed and, for each other, why it did not */
 export interface CloseResult {
-  readonly closed: readonly Buffer[];
+  readonly closed: readonly BufferAccount[];
   readonly skipped: readonly {
-    readonly buffer: Buffer;
+    readonly buffer: BufferAccount;
     readonly reason: string;
   }[];
 }
@@ -77,7 +102,7 @@ const TABLE_HEADER = `\n${"Buffer Address".padEnd(44)} | ${"Authority".padEnd(
  * @param buffers the rows
  * @returns the table's text, ending in a newline
  */
-export const formatBuffersTable = (buffers: readonly Buffer[]) =>
+export const formatBuffersTable = (buffers: readonly BufferAccount[]) =>
   TABLE_HEADER +
   buffers
     .map(
@@ -123,7 +148,7 @@ export const fetchBuffersWith =
       })
       .send();
 
-    return accounts.map(({ pubkey, account }): Buffer => {
+    return accounts.map(({ pubkey, account }): BufferAccount => {
       const data = toBytes(getBase64Encoder().encode(account.data[0]));
       const isBuffer =
         data.length >= VARIANT_SIZE + OPTION_SIZE + ADDRESS_SIZE &&
@@ -161,7 +186,8 @@ const closeInstructionFor =
  * Close a buffer and wait for the cluster to confirm it, as the Solana CLI's
  * `close` did: one transaction, sent without preflight, its status polled.
  *
- * @throws {Error} when the transaction fails or expires, or the cluster cannot be asked
+ * @throws {BufferCloseError} when the transaction fails or expires
+ * @throws {Error} when the cluster cannot be asked before the send
  */
 const closeBufferWith =
   (client: SolanaClient) =>
@@ -199,34 +225,57 @@ const closeBufferWith =
       )
       .send();
 
-    const wanted = COMMITMENTS.indexOf(client.commitment);
-    for (;;) {
+    const wanted = rankOf(client.commitment);
+    const readStatus = async () => {
       const { value } = await client.rpc
         .getSignatureStatuses([signature])
         .send();
-      const status = value[0];
-      if (status?.err) throw new Error(formatTransactionError(status.err));
-      if (
-        status?.confirmationStatus &&
-        COMMITMENTS.indexOf(status.confirmationStatus) >= wanted
-      ) {
-        return;
+      return toSignatureStatus(value[0]);
+    };
+    /** Whether the transaction reached the commitment; throws when it failed */
+    const isConfirmed = (status: Awaited<ReturnType<typeof readStatus>>) => {
+      if (status?.err !== undefined) {
+        throw new BufferCloseError(formatTransactionError(status.err));
       }
+      return (
+        status?.confirmationStatus !== undefined &&
+        rankOf(status.confirmationStatus) >= wanted
+      );
+    };
 
-      const height = await client.rpc
-        .getBlockHeight({ commitment: client.commitment })
-        .send();
-      if (height > lifetime.lastValidBlockHeight) {
-        throw new Error("transaction expired before it was confirmed");
+    try {
+      for (;;) {
+        if (isConfirmed(await readStatus())) return;
+
+        const height = await client.rpc
+          .getBlockHeight({ commitment: client.commitment })
+          .send();
+        if (height > lifetime.lastValidBlockHeight) {
+          // It may have landed between the status read and the height read
+          if (isConfirmed(await readStatus())) return;
+          throw new BufferCloseError(
+            "transaction expired before it was confirmed"
+          );
+        }
+        await wait(POLL_INTERVAL_MS);
       }
-      await wait(POLL_INTERVAL_MS);
+    } catch (e) {
+      // The transaction was sent: the buffer may be closed, so the reason names it
+      if (!isCloseFailure(e)) throw e;
+      throw new BufferCloseError(
+        `${describeError(e)} (signature ${signature})`,
+        {
+          cause: e,
+        }
+      );
     }
   };
 
 /**
  * `program close --buffers`: close every buffer the wallet is the authority
- * of, one transaction each. A buffer whose close fails is skipped with its
- * reason, and the rest still close.
+ * of, one transaction each. A buffer whose close fails on the cluster is
+ * skipped with its reason, and the rest still close; any other failure is a
+ * bug, logged and thrown.
  *
  * @param client the cluster to close them on
  * @returns a function from the wallet to what it did
@@ -239,17 +288,22 @@ export const closeBuffersWith =
     const buffers = await fetchBuffersWith(client)(closer.address);
     const close = closeBufferWith(client)(closer)(wait);
 
-    const closed: Buffer[] = [];
-    const skipped: { buffer: Buffer; reason: string }[] = [];
+    const closed: BufferAccount[] = [];
+    const skipped: { buffer: BufferAccount; reason: string }[] = [];
     for (const buffer of buffers) {
       try {
         await close(buffer.address);
         closed.push(buffer);
       } catch (e) {
-        skipped.push({
-          buffer,
-          reason: e instanceof Error ? e.message : String(e),
-        });
+        // A bug in this code is not a reason to skip: log it and stop
+        if (!isCloseFailure(e)) {
+          log.error(e, {
+            report: true,
+            context: { action: "close a buffer", buffer: buffer.address },
+          });
+          throw e;
+        }
+        skipped.push({ buffer, reason: describeError(e) });
       }
     }
     return { closed, skipped };

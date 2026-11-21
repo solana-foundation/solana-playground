@@ -144,7 +144,9 @@ const toHex = (code: number | bigint) => `0x${code.toString(16)}`;
 /** `InstructionError`'s `Display` (solana-program 1.18) */
 const formatInstructionError = (error: unknown) => {
   if (typeof error === "string") {
-    return INSTRUCTION_ERRORS[error] ?? error;
+    return Object.hasOwn(INSTRUCTION_ERRORS, error)
+      ? INSTRUCTION_ERRORS[error]
+      : error;
   }
 
   const variant = toVariant(error);
@@ -169,14 +171,17 @@ const formatInstructionError = (error: unknown) => {
  * What solana-sdk 1.18's `Display` of a `TransactionError` prints, the text
  * the Rust CLI wrote after "Transaction failed: " and "Status: ", from the
  * error's JSON-RPC form (`err` of `getSignatureStatuses` and `getTransaction`).
- * An error this table does not know is printed as its JSON.
+ * A string variant this table does not know is printed as it is, and any other
+ * error it does not know as its JSON.
  *
  * @param error the `err` value of a failed transaction
  * @returns the error's text
  */
 export const formatTransactionError = (error: unknown): string => {
   if (typeof error === "string") {
-    return TRANSACTION_ERRORS[error] ?? error;
+    return Object.hasOwn(TRANSACTION_ERRORS, error)
+      ? TRANSACTION_ERRORS[error]
+      : error;
   }
 
   const variant = toVariant(error);
@@ -293,6 +298,13 @@ if (import.meta.vitest) {
         '{"Future":{"a":"1"}}'
       );
       expect(formatTransactionError("FutureUnit")).toBe("FutureUnit");
+    });
+
+    it("does not read a variant from the table's prototype", () => {
+      expect(formatTransactionError("toString")).toBe("toString");
+      expect(
+        formatTransactionError({ InstructionError: [0, "constructor"] })
+      ).toBe("Error processing Instruction 0: constructor");
     });
   });
 }

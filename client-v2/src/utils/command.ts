@@ -69,6 +69,13 @@ export type CommandParam<
 /** What a command that needs a connection ends with offline (Spec 13) */
 export const OFFLINE_LINE = "You're offline. This command needs a connection.";
 
+/** Whether a token is a value-taking option the command declares */
+const takesValueOf = (cmd: { options?: Option[] }, token: string) =>
+  cmd.options?.some(
+    (opt) =>
+      opt.takeValue && (token === `--${opt.name}` || token === `-${opt.short}`)
+  ) ?? false;
+
 /** The end of a refused value's line: what it could have been, if anything */
 const possibleValues = (values: string[]) =>
   values.length
@@ -94,9 +101,12 @@ type WithHandle<A, O, S, R> = {
   /** Function to run when the command is called */
   handle: (input: ParsedInput<A, O>) => R;
   /**
-   * Subcommands. A command with a handler and subcommands takes the options
-   * it declares before or among its subcommand's (see `hoistParentOptionsWith`),
-   * and names an unknown subcommand in its error.
+   * Subcommands. A top-level command with a handler and subcommands takes
+   * the options it declares before or among its subcommand's (see
+   * `hoistParentOptionsWith`), skips them when it names an unknown subcommand
+   * in its error, and runs its handler when no subcommand follows them. A
+   * nested command with both gets neither: `execute` hoists for the top-level
+   * command only, and the type does not forbid the nested form.
    */
   subcommands?: S;
 };
@@ -580,17 +590,27 @@ ${PgTerminal.formatList(cmd.subcommands!)}`);
               }
 
               if (!cmd.args && cmd.subcommands) {
-                if (nextToken.startsWith("-")) {
-                  throw new Error(`Unexpected option: \`${nextToken}\``);
+                // The value options the command declares are no subcommand's
+                // problem: name the token behind them, or run the handler
+                // when nothing follows them
+                const behind = tokens.slice(nextIndex);
+                let at = 0;
+                while (at < behind.length && takesValueOf(cmd, behind[at])) {
+                  at += 2;
                 }
-
-                throw new Error(
-                  `Subcommand doesn't exist: \`${nextToken}\`
+                const problem = behind.at(at);
+                if (problem?.startsWith("-")) {
+                  throw new Error(`Unexpected option: \`${problem}\``);
+                }
+                if (problem !== undefined) {
+                  throw new Error(
+                    `Subcommand doesn't exist: \`${problem}\`
 
 Available subcommands: ${cmd.subcommands
-                    .map((subcommand) => subcommand.name)
-                    .join(", ")}`
-                );
+                      .map((subcommand) => subcommand.name)
+                      .join(", ")}`
+                  );
+                }
               }
               if (
                 args.length > (cmd.args?.length ?? 0) &&

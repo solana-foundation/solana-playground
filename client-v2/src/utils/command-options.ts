@@ -5,35 +5,39 @@ import type { Option } from "./command";
  * stand among its subcommand path, to the end of that path, where the
  * subcommand that runs takes them (clap's global arguments: `solana -u d
  * confirm <signature>` is `solana confirm -u d <signature>`). Tokens stay
- * as they are when no subcommand follows the options.
+ * as they are when no subcommand follows the options. An option given twice
+ * before the subcommand keeps its last value, as clap does.
  *
- * @param subcommandNames the names of the subcommands, nested ones as a tree
+ * Called as `hoistParentOptionsWith(options)(subcommands)(tokens)`.
+ *
  * @param options the options the top-level command declares
- * @returns a function from the input tokens (the command's name first) to the tokens with those options moved
+ * @returns a function from the subcommands, nested ones as a tree, to a function from the input tokens (the command's name first) to the tokens with those options moved
  */
 export const hoistParentOptionsWith =
   (options: readonly Option[]) =>
   (subcommands: readonly SubcommandTree[]) =>
   (tokens: string[]) => {
-    const takesValue = (token: string) =>
-      options.some(
+    const valueOptionOf = (token: string) =>
+      options.find(
         (opt) =>
           opt.takeValue &&
           (token === `--${opt.name}` || token === `-${opt.short}`)
       );
 
     const path: string[] = [tokens[0]];
-    const moved: string[] = [];
+    // Each option's token and value, by the option's name: a repeat replaces
+    const moved = new Map<string, [string, string]>();
     let level = subcommands;
     let i = 1;
     for (; i < tokens.length; i++) {
       const token = tokens[i];
       const subcommand = level.find((candidate) => candidate.name === token);
+      const option = valueOptionOf(token);
       if (subcommand) {
         path.push(token);
         level = subcommand.subcommands ?? [];
-      } else if (takesValue(token) && i + 1 < tokens.length) {
-        moved.push(token, tokens[i + 1]);
+      } else if (option && i + 1 < tokens.length) {
+        moved.set(option.name, [token, tokens[i + 1]]);
         i++;
       } else {
         break;
@@ -41,8 +45,8 @@ export const hoistParentOptionsWith =
     }
 
     // Nothing was moved, or no subcommand was reached: leave the input alone
-    if (!moved.length || path.length === 1) return tokens;
-    return [...path, ...moved, ...tokens.slice(i)];
+    if (!moved.size || path.length === 1) return tokens;
+    return [...path, ...[...moved.values()].flat(), ...tokens.slice(i)];
   };
 
 /** A subcommand and the ones under it */
@@ -89,6 +93,12 @@ if (import.meta.vitest) {
       const tokens = ["solana", "-u", "d", "balance"];
 
       expect(hoist(tokens)).toEqual(tokens);
+    });
+
+    it("keeps the last value of an option given twice", () => {
+      expect(
+        hoist(["solana", "-u", "d", "--url", "t", "confirm", "sig"])
+      ).toEqual(["solana", "confirm", "--url", "t", "sig"]);
     });
 
     it("leaves an option without a value where it is", () => {

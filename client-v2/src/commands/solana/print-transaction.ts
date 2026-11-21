@@ -55,32 +55,31 @@ type Integer = number | bigint;
 
 /** What `solana confirm -v` reads of `getTransaction`'s `meta` */
 export interface TransactionMeta {
-  readonly err: unknown;
+  /** The transaction's error; absent when it did not fail */
+  readonly err?: unknown;
   readonly fee: Integer;
   readonly preBalances: readonly Integer[];
   readonly postBalances: readonly Integer[];
-  readonly logMessages?: readonly string[] | null;
+  readonly logMessages?: readonly string[];
   readonly returnData?: {
     readonly programId: string;
     readonly data: readonly [string, string];
-  } | null;
-  readonly rewards?:
-    | readonly {
-        readonly pubkey: string;
-        readonly lamports: Integer;
-        readonly postBalance: Integer;
-        readonly rewardType?: string | null;
-      }[]
-    | null;
+  };
+  readonly rewards?: readonly {
+    readonly pubkey: string;
+    readonly lamports: Integer;
+    readonly postBalance: Integer;
+    readonly rewardType?: string;
+  }[];
 }
 
 /** What `solana confirm -v` reads of a `getTransaction` response (`encoding: "base64"`) */
 export interface TransactionDetails {
   readonly slot: Integer;
-  readonly blockTime?: Integer | null;
+  readonly blockTime?: Integer;
   /** The wire transaction, base64 */
   readonly transaction: string;
-  readonly meta?: TransactionMeta | null;
+  readonly meta?: TransactionMeta;
 }
 
 /** Rust's `{:?}` of a `Vec<u8>` */
@@ -185,7 +184,7 @@ export const printTransactionWith =
     const line = (text: string) => lines.push(PREFIX + text);
 
     lines.push(`\nTransaction executed in slot ${details.slot}:`);
-    if (details.blockTime !== undefined && details.blockTime !== null) {
+    if (details.blockTime !== undefined) {
       line(`Block Time: ${formatBlockTime(details.blockTime)}`);
     }
     line(
@@ -287,7 +286,9 @@ export const printTransactionWith =
       line("Status: Unavailable");
     } else {
       line(
-        `Status: ${meta.err === null ? "Ok" : formatTransactionError(meta.err)}`
+        `Status: ${
+          meta.err === undefined ? "Ok" : formatTransactionError(meta.err)
+        }`
       );
       line(`  Fee: ◎${displaySol(BigInt(meta.fee))}`);
       meta.preBalances.forEach((pre, index) => {
