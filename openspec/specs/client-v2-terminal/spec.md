@@ -353,9 +353,12 @@ SHALL end with an error that names `--buffers`.
 `solana program close --buffers` SHALL close every buffer whose authority is
 the Playground Wallet, sending each buffer's SOL to that wallet. It SHALL
 then list the buffers it closed as `program show --buffers` lists them, or
-print "No buffers." when it closed none. A buffer whose close fails SHALL be
-left out of the list and the others SHALL still close. `solana program close`
-without `--buffers` SHALL end with an error that names `--buffers`.
+print "No buffers." when the wallet held none. A buffer whose close fails
+SHALL be left out of the list, the terminal SHALL print "Could not close
+<address>: <reason>" for it, and the others SHALL still close; when any close
+failed, the command SHALL end with the error "Closed <n> of <m> buffers.",
+and when none closed it SHALL print no list. `solana program close` without
+`--buffers` SHALL end with an error that names `--buffers`.
 
 #### Scenario: Reclaiming a stopped deploy's buffer (manual)
 
