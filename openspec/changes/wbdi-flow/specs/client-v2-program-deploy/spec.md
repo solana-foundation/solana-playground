@@ -101,9 +101,9 @@ gives.
 
 The terminal SHALL NOT send a program deploy, an IDL write or a program
 management transaction to Mainnet Beta. `solana program deploy` and `solana
-program write-buffer` SHALL stay unavailable. `solana program close` and
-`set-upgrade-authority` SHALL refuse on Mainnet Beta, print that mainnet runs
-from the user's machine with the deploy scripts, and send nothing. The
+program write-buffer` SHALL stay unavailable. `solana program close
+--buffers` SHALL refuse on Mainnet Beta, print that mainnet runs from the
+user's machine with the deploy scripts, and send nothing. The
 refusal of `anchor idl` SHALL be the one the requirement "Anchor IDL writes
 to mainnet are refused" of the `mainnet-deploy-warning` capability
 describes, with the subcommands, the terminal line, and the scenarios that
@@ -123,7 +123,7 @@ cluster selected in the settings.
 
 #### Scenario: A URL flag cannot reach mainnet
 
-- **WHEN** the user runs `solana -um program close <program id>` with Devnet
+- **WHEN** the user runs `solana -um program close --buffers` with Devnet
   selected
 - **THEN** the terminal refuses and no transaction is sent
 

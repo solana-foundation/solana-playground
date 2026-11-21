@@ -151,15 +151,15 @@ change describe. The IDL upload script in the export publishes a mainnet IDL
 from the user's machine. Sending an instruction from Interact stays allowed
 on Mainnet Beta: it calls a program, it does not deploy one.
 
-The terminal is a second way in. The WASM `solana` CLI already lacks
-`program deploy` and `write-buffer` (commented out in
-`wasm/solana-cli/src/commands/program.rs`), but `program close` and
-`set-upgrade-authority` are live. `solana` also takes `-u` on every
-command, so the selected cluster is not the cluster a command reaches. The
-refusal therefore lives in the `commands/solana` wrapper and checks the
-cluster each command resolves to. `program close` and
-`set-upgrade-authority` deploy nothing, but on mainnet they destroy a program
-or hand it to another key with the browser key, so they are refused too.
+The terminal is a second way in. Since `trim-terminal-solana-cli`, the
+`solana` command is TypeScript in `commands/solana` and offers only
+`confirm`, `program show --buffers` and `program close --buffers`; `program
+deploy` and `write-buffer` are unknown subcommands. `solana` takes `-u` on
+every command, so the selected cluster is not the cluster a command reaches.
+The refusal therefore lives in `commands/solana` and checks the cluster each
+command resolves to. `program close --buffers` deploys nothing, but on
+mainnet it spends the browser key's authority over real buffers, so it is
+refused too.
 
 The `anchor` command is TypeScript in `commands/anchor`. It offers the
 `anchor idl` subcommands of Anchor 1.1.2's CLI, and the ones that send a
@@ -280,9 +280,9 @@ from the user's IDL.
   and a `-u` flag. The scenarios of "Deploys to mainnet are refused" and
   "Anchor IDL writes to mainnet are refused" in `mainnet-deploy-warning`
   cover the `deploy` command and `anchor idl`.
-- [A later WASM CLI build enables `solana program deploy`] → the "Solana
-  program deploy is unavailable" scenario fails, so the change cannot land
-  silently.
+- [A later change adds `solana program deploy` to the terminal] → the
+  "Solana program deploy is unavailable" scenario fails, so the change cannot
+  land silently.
 - [A user who wants mainnet finds the playground less convenient] → the
   Deploy stage opens the "Deploy from your machine" dialog with Mainnet
   picked, and the scripts in the export keep the program id.
