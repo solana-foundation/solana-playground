@@ -108,6 +108,14 @@ export class PgTerminal {
     await PgTerminal._runIfMounted({ println: [msg, opts] });
   }
 
+  /**
+   * Print the buffers table `solana program show --buffers` produces, laid
+   * out for the terminal's width; dropped while none is mounted.
+   */
+  static async printlnBuffersTable(table: string) {
+    await PgTerminal._runIfMounted({ printlnBuffersTable: [table] });
+  }
+
   /** Dispatch focus terminal custom event; dropped while none is mounted. */
   static async focus() {
     await PgTerminal._runIfMounted({ focus: [] });
@@ -489,13 +497,18 @@ export class PgTerm {
     this.print(msg, { ...opts, newLine: true });
   }
 
-  /**
-   * Print what a WASM package logs; the buffers table solana-cli prints is
-   * first laid out for the terminal's width (see {@link fitBuffersTableWith}).
-   * Called through `PgTerminal.logWasm`, not directly.
-   */
+  /** Print what a WASM package logs. Called through `PgTerminal.logWasm`, not directly. */
   printlnWasm(msg: any) {
-    this.println(fitBuffersTableWith(this._tty.size.cols)(msg));
+    this.println(msg);
+  }
+
+  /**
+   * Print the buffers table laid out for the terminal's width (see
+   * {@link fitBuffersTableWith}). Called through
+   * `PgTerminal.printlnBuffersTable`, not directly.
+   */
+  printlnBuffersTable(table: string) {
+    this.println(fitBuffersTableWith(this._tty.size.cols)(table));
   }
 
   /**

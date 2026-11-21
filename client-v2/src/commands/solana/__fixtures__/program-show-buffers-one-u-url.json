@@ -1,0 +1,72 @@
+{
+  "command": "solana -u https://api.devnet.solana.com program show --buffers",
+  "settings": {
+    "endpoint": "https://api.testnet.solana.com",
+    "commitment": "confirmed"
+  },
+  "rpc": [
+    {
+      "url": "https://api.devnet.solana.com/",
+      "request": {
+        "id": 0,
+        "jsonrpc": "2.0",
+        "method": "getProgramAccounts",
+        "params": [
+          "BPFLoaderUpgradeab1e11111111111111111111111",
+          {
+            "commitment": "confirmed",
+            "dataSlice": {
+              "length": 37,
+              "offset": 0
+            },
+            "encoding": "base64",
+            "filters": [
+              {
+                "memcmp": {
+                  "bytes": "2UzHM",
+                  "offset": 0
+                }
+              },
+              {
+                "memcmp": {
+                  "bytes": "2",
+                  "offset": 4
+                }
+              },
+              {
+                "memcmp": {
+                  "bytes": "399rcrEWr3hVAhVy3moRPm5UKy8RmZpAFTZDDu3kksfT",
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "result": [
+          {
+            "pubkey": "Cx3crVAn66xvzQ3jnxgKeunW1RovPUZMUg93HbNCcpVC",
+            "account": {
+              "lamports": 244149880,
+              "data": [
+                "AQAAAAEfzgiDSEt+b7ED/BloUir27si8ycf9wSbtr4llYytyZg==",
+                "base64"
+              ],
+              "owner": "BPFLoaderUpgradeab1e11111111111111111111111",
+              "executable": false,
+              "rentEpoch": 18446744073709552000,
+              "space": 47925
+            }
+          }
+        ],
+        "id": 0
+      }
+    }
+  ],
+  "output": "\nBuffer Address                               | Authority                                    | Balance\nCx3crVAn66xvzQ3jnxgKeunW1RovPUZMUg93HbNCcpVC | 399rcrEWr3hVAhVy3moRPm5UKy8RmZpAFTZDDu3kksfT | 0.24414988 SOL\n",
+  "outputParts": [
+    "\nBuffer Address                               | Authority                                    | Balance\nCx3crVAn66xvzQ3jnxgKeunW1RovPUZMUg93HbNCcpVC | 399rcrEWr3hVAhVy3moRPm5UKy8RmZpAFTZDDu3kksfT | 0.24414988 SOL\n"
+  ]
+}

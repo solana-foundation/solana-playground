@@ -1,0 +1,182 @@
+{
+  "command": "solana -u d program close --buffers",
+  "settings": {
+    "endpoint": "https://api.testnet.solana.com",
+    "commitment": "confirmed"
+  },
+  "rpc": [
+    {
+      "url": "https://api.devnet.solana.com/",
+      "request": {
+        "id": 0,
+        "jsonrpc": "2.0",
+        "method": "getProgramAccounts",
+        "params": [
+          "BPFLoaderUpgradeab1e11111111111111111111111",
+          {
+            "commitment": "confirmed",
+            "dataSlice": {
+              "length": 37,
+              "offset": 0
+            },
+            "encoding": "base64",
+            "filters": [
+              {
+                "memcmp": {
+                  "bytes": "2UzHM",
+                  "offset": 0
+                }
+              },
+              {
+                "memcmp": {
+                  "bytes": "2",
+                  "offset": 4
+                }
+              },
+              {
+                "memcmp": {
+                  "bytes": "399rcrEWr3hVAhVy3moRPm5UKy8RmZpAFTZDDu3kksfT",
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "result": [
+          {
+            "pubkey": "8xU7dn2Y4vmRYSD6pmt7PzuZ5RMXhZoMX7UMHtUxdxvy",
+            "account": {
+              "lamports": 244149880,
+              "data": [
+                "AQAAAAEfzgiDSEt+b7ED/BloUir27si8ycf9wSbtr4llYytyZg==",
+                "base64"
+              ],
+              "owner": "BPFLoaderUpgradeab1e11111111111111111111111",
+              "executable": false,
+              "rentEpoch": 18446744073709552000,
+              "space": 47925
+            }
+          }
+        ],
+        "id": 0
+      }
+    },
+    {
+      "url": "https://api.devnet.solana.com/",
+      "request": {
+        "id": 0,
+        "jsonrpc": "2.0",
+        "method": "getLatestBlockhash",
+        "params": [
+          {
+            "commitment": "confirmed"
+          }
+        ]
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "result": {
+          "context": {
+            "apiVersion": "4.5.0-beta.0",
+            "slot": 524608001
+          },
+          "value": {
+            "blockhash": "7GLWQ8snwV717SFw3ZD3E1d2B3qRHGYQ6ZXXZZttxAqv",
+            "lastValidBlockHeight": 511712423
+          }
+        },
+        "id": 0
+      }
+    },
+    {
+      "url": "https://api.devnet.solana.com/",
+      "request": {
+        "id": 0,
+        "jsonrpc": "2.0",
+        "method": "sendTransaction",
+        "params": [
+          "AdsA/GrpDH3GNNmuVd8QFrgzz9UPtFq6fDZqbkSH4S7pZSrHwM52ZfaYlee0eLgUxr3Sd+TyELJT1Ek2E3VjgQEBAAEDH84Ig0hLfm+xA/wZaFIq9u7IvMnH/cEm7a+JZWMrcmZ2N2lLtWimmaR72l3nX4WwoKfuffU+cLHJJ6sMa/ojpgKo9pFOiKGw4hAVPvdjrisAwrk9FsEk0sBTehAEgAAAXRPj440aT/QQbF+lCRcPyfWhS0LkdhBQnqHo1o4wgwEBAgMBAAAEBQAAAA==",
+          {
+            "encoding": "base64",
+            "maxRetries": null,
+            "minContextSlot": null,
+            "preflightCommitment": "confirmed",
+            "skipPreflight": true
+          }
+        ]
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "result": "5Nxa9iZ56YecMUBbBaqkfTTqpCySk3DmaZZQZzMMZnJqsW5P4kEkUoEFv8Fsf6g6KVDoJfnbcyH8NDASYArbUfDz",
+        "id": 0
+      }
+    },
+    {
+      "url": "https://api.devnet.solana.com/",
+      "request": {
+        "id": 0,
+        "jsonrpc": "2.0",
+        "method": "getSignatureStatuses",
+        "params": [
+          [
+            "5Nxa9iZ56YecMUBbBaqkfTTqpCySk3DmaZZQZzMMZnJqsW5P4kEkUoEFv8Fsf6g6KVDoJfnbcyH8NDASYArbUfDz"
+          ]
+        ]
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "result": {
+          "context": {
+            "apiVersion": "4.5.0-beta.0",
+            "slot": 524608004
+          },
+          "value": [
+            null
+          ]
+        },
+        "id": 0
+      }
+    },
+    {
+      "url": "https://api.devnet.solana.com/",
+      "request": {
+        "id": 0,
+        "jsonrpc": "2.0",
+        "method": "getSignatureStatuses",
+        "params": [
+          [
+            "5Nxa9iZ56YecMUBbBaqkfTTqpCySk3DmaZZQZzMMZnJqsW5P4kEkUoEFv8Fsf6g6KVDoJfnbcyH8NDASYArbUfDz"
+          ]
+        ]
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "result": {
+          "context": {
+            "apiVersion": "4.5.0-beta.0",
+            "slot": 524608013
+          },
+          "value": [
+            {
+              "confirmationStatus": "finalized",
+              "confirmations": null,
+              "err": null,
+              "slot": 524608006,
+              "status": {
+                "Ok": null
+              }
+            }
+          ]
+        },
+        "id": 0
+      }
+    }
+  ],
+  "output": "\nBuffer Address                               | Authority                                    | Balance\n8xU7dn2Y4vmRYSD6pmt7PzuZ5RMXhZoMX7UMHtUxdxvy | 399rcrEWr3hVAhVy3moRPm5UKy8RmZpAFTZDDu3kksfT | 0.24414988 SOL\n",
+  "outputParts": [
+    "\nBuffer Address                               | Authority                                    | Balance\n8xU7dn2Y4vmRYSD6pmt7PzuZ5RMXhZoMX7UMHtUxdxvy | 399rcrEWr3hVAhVy3moRPm5UKy8RmZpAFTZDDu3kksfT | 0.24414988 SOL\n"
+  ]
+}

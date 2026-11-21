@@ -4,6 +4,7 @@ import {
 } from "@/features/unknown-command";
 import { createLogger } from "@/shared/lib/logger";
 
+import { hoistParentOptionsWith } from "./command-options";
 import { PgCommon } from "./common";
 import {
   PgTerminal,
@@ -63,7 +64,7 @@ export type CommandParam<
   needsConnection?: true;
   /** The line `<name> --version` and `<name> -V` print, offline too. Read on the top-level command only */
   version?: string;
-} & (WithSubcommands<S> | WithHandle<A, O, R>);
+} & (WithSubcommands<S> | WithHandle<A, O, S, R>);
 
 /** What a command that needs a connection ends with offline (Spec 13) */
 export const OFFLINE_LINE = "You're offline. This command needs a connection.";
@@ -85,15 +86,19 @@ type WithSubcommands<S> = {
   subcommands?: S;
 };
 
-type WithHandle<A, O, R> = {
+type WithHandle<A, O, S, R> = {
   /** Command arguments */
   args?: A;
   /** Command options */
   options?: O;
   /** Function to run when the command is called */
   handle: (input: ParsedInput<A, O>) => R;
-  /** Subcommands */
-  subcommands?: never;
+  /**
+   * Subcommands. A command with a handler and subcommands takes the options
+   * it declares before or among its subcommand's (see `hoistParentOptionsWith`),
+   * and names an unknown subcommand in its error.
+   */
+  subcommands?: S;
 };
 
 type ParsedInput<A, O> = {
@@ -365,12 +370,12 @@ export class PgCommandManager {
    *
    * All command processing logic happens in this method.
    *
-   * @param tokens parsed input tokens
+   * @param rawTokens parsed input tokens
    * @returns the return value of the command
    */
-  static async execute(tokens: string[]) {
+  static async execute(rawTokens: string[]) {
     return await PgTerminal.process(async () => {
-      const inputCmdName = tokens.at(0);
+      const inputCmdName = rawTokens.at(0);
       if (!inputCmdName) return;
 
       const topCmd = Object.values(PgCommandManager.all).find(
@@ -397,6 +402,15 @@ export class PgCommandManager {
         }
         throw new TerminalLineError(answer.line);
       }
+
+      // A command with options of its own and subcommands takes those options
+      // before its subcommand too, as clap's global arguments
+      const tokens =
+        topCmd.subcommands && topCmd.options
+          ? hoistParentOptionsWith(topCmd.options)(topCmd.subcommands)(
+              rawTokens
+            )
+          : rawTokens;
 
       // As clap answers it: only directly after the command's name, and nothing runs
       const [, flag, ...rest] = tokens;

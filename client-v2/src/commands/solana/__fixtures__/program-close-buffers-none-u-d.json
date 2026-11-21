@@ -1,0 +1,57 @@
+{
+  "command": "solana -u d program close --buffers",
+  "settings": {
+    "endpoint": "https://api.testnet.solana.com",
+    "commitment": "confirmed"
+  },
+  "rpc": [
+    {
+      "url": "https://api.devnet.solana.com/",
+      "request": {
+        "id": 0,
+        "jsonrpc": "2.0",
+        "method": "getProgramAccounts",
+        "params": [
+          "BPFLoaderUpgradeab1e11111111111111111111111",
+          {
+            "commitment": "confirmed",
+            "dataSlice": {
+              "length": 37,
+              "offset": 0
+            },
+            "encoding": "base64",
+            "filters": [
+              {
+                "memcmp": {
+                  "bytes": "2UzHM",
+                  "offset": 0
+                }
+              },
+              {
+                "memcmp": {
+                  "bytes": "2",
+                  "offset": 4
+                }
+              },
+              {
+                "memcmp": {
+                  "bytes": "399rcrEWr3hVAhVy3moRPm5UKy8RmZpAFTZDDu3kksfT",
+                  "offset": 5
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "result": [],
+        "id": 0
+      }
+    }
+  ],
+  "output": "\nBuffer Address                               | Authority                                    | Balance\n",
+  "outputParts": [
+    "\nBuffer Address                               | Authority                                    | Balance\n"
+  ]
+}

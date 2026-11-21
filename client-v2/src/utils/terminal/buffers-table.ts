@@ -40,8 +40,9 @@ const bold = (text: string) => `${ESC}[1m${text}${ESC}[0m`;
  * `solana program close`. A table with no rows reads "No buffers." at any
  * width.
  *
- * solana-cli hands the whole table over as one message (`runSolana` logs its
- * output once), which is what lets the rows be found after the header.
+ * `solana program show --buffers` hands the whole table over as one message
+ * (`PgTerminal.printlnBuffersTable`), which is what lets the rows be found
+ * after the header.
  *
  * @param cols the terminal's width in columns
  * @returns a function from what solana-cli printed to the table laid out for
