@@ -7,7 +7,7 @@ import {
   fetchBuffersWith,
   formatBuffersTable,
 } from "./buffers";
-import { createClientWith } from "./client";
+import { clientWith } from "./client";
 import { getCloser } from "./closer";
 import { confirmVerboseWith, confirmWith } from "./confirm";
 import { normalizeToUrlIfMoniker } from "./url";
@@ -21,7 +21,7 @@ const URL_DESCRIPTION =
  * runs: the parser hands the option to the subcommand that runs
  * (`hoistParentOptionsWith`), so `solana -u d confirm …` and `solana confirm
  * -u d …` both work, and a leaf without it fails the first with "Unexpected
- * option". `solana.test.ts` checks that every leaf declares it.
+ * option". `solana-command.test.ts` checks that every leaf declares it.
  */
 const URL_OPTION = {
   name: "url",
@@ -33,7 +33,7 @@ const URL_OPTION = {
 /** The client for `-u`'s cluster or URL, or for the endpoint selected in the app when it is not given */
 const getClient = (url: string | undefined) => {
   const { endpoint, commitment } = PgSettings.connection;
-  return createClientWith(commitment)(
+  return clientWith(commitment)(
     url === undefined ? endpoint : normalizeToUrlIfMoniker(url)
   );
 };

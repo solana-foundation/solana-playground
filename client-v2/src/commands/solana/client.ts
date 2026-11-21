@@ -22,7 +22,7 @@ const isCommitment = (value: string): value is Commitment =>
  * @param commitment the app's commitment setting
  * @returns a function from the RPC URL to its client
  */
-export const createClientWith = (commitment: string) => (url: string) => ({
+export const clientWith = (commitment: string) => (url: string) => ({
   url,
   commitment: isCommitment(commitment) ? commitment : "confirmed",
   rpc: createSolanaRpc(url),

@@ -4,7 +4,7 @@ import {
 } from "@/features/unknown-command";
 import { createLogger } from "@/shared/lib/logger";
 
-import { hoistParentOptionsWith } from "./command-options";
+import { hoistParentOptionsWith, valueOptionOf } from "./command-options";
 import { PgCommon } from "./common";
 import {
   PgTerminal,
@@ -71,10 +71,7 @@ export const OFFLINE_LINE = "You're offline. This command needs a connection.";
 
 /** Whether a token is a value-taking option the command declares */
 const takesValueOf = (cmd: { options?: Option[] }, token: string) =>
-  cmd.options?.some(
-    (opt) =>
-      opt.takeValue && (token === `--${opt.name}` || token === `-${opt.short}`)
-  ) ?? false;
+  valueOptionOf(cmd.options ?? [])(token) !== undefined;
 
 /** The end of a refused value's line: what it could have been, if anything */
 const possibleValues = (values: string[]) =>

@@ -1,5 +1,12 @@
 import type { Option } from "./command";
 
+/** The value-taking option among `options` that a token spells, long or short */
+export const valueOptionOf = (options: readonly Option[]) => (token: string) =>
+  options.find(
+    (opt) =>
+      opt.takeValue && (token === `--${opt.name}` || token === `-${opt.short}`)
+  );
+
 /**
  * Move the value-taking options a command declares for itself, wherever they
  * stand among its subcommand path, to the end of that path, where the
@@ -17,13 +24,6 @@ export const hoistParentOptionsWith =
   (options: readonly Option[]) =>
   (subcommands: readonly SubcommandTree[]) =>
   (tokens: string[]) => {
-    const valueOptionOf = (token: string) =>
-      options.find(
-        (opt) =>
-          opt.takeValue &&
-          (token === `--${opt.name}` || token === `-${opt.short}`)
-      );
-
     const path: string[] = [tokens[0]];
     // Each option's token and value, by the option's name: a repeat replaces
     const moved = new Map<string, [string, string]>();
@@ -32,7 +32,7 @@ export const hoistParentOptionsWith =
     for (; i < tokens.length; i++) {
       const token = tokens[i];
       const subcommand = level.find((candidate) => candidate.name === token);
-      const option = valueOptionOf(token);
+      const option = valueOptionOf(options)(token);
       if (subcommand) {
         path.push(token);
         level = subcommand.subcommands ?? [];

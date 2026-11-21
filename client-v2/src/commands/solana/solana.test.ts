@@ -19,7 +19,7 @@ import {
   formatBuffersTable,
 } from "./buffers";
 import { toBytes } from "./bytes";
-import { createClientWith } from "./client";
+import { clientWith } from "./client";
 import { confirmVerboseWith, confirmWith } from "./confirm";
 import { describeError } from "./describe-error";
 import { normalizeToUrlIfMoniker } from "./url";
@@ -147,9 +147,7 @@ describe("commands/solana", () => {
         const fixture = readFixture(name);
         const words = wordsOf(fixture);
         const signature = words.find((word) => word.length > 60) ?? "";
-        const client = createClientWith(fixture.settings.commitment)(
-          urlOf(fixture)
-        );
+        const client = clientWith(fixture.settings.commitment)(urlOf(fixture));
         const { remaining } = replay(fixture.rpc);
 
         const confirm = words.includes("-v")
@@ -171,9 +169,7 @@ describe("commands/solana", () => {
       async (name) => {
         const fixture = readFixture(name);
         const { fetchMock } = replay(fixture.rpc);
-        const client = createClientWith(fixture.settings.commitment)(
-          urlOf(fixture)
-        );
+        const client = clientWith(fixture.settings.commitment)(urlOf(fixture));
         const signature =
           wordsOf(fixture).find((word) => word.length > 60) ?? "";
 
@@ -201,9 +197,7 @@ describe("commands/solana", () => {
       const { fetchMock } = replay(fixture.rpc);
 
       await confirmVerboseWith(
-        createClientWith(fixture.settings.commitment)(
-          normalizeToUrlIfMoniker("d")
-        )
+        clientWith(fixture.settings.commitment)(normalizeToUrlIfMoniker("d"))
       )(wordsOf(fixture).at(-1) ?? "");
 
       expect(fixture.settings.endpoint).toContain("testnet");
@@ -214,7 +208,7 @@ describe("commands/solana", () => {
 
     it("refuses a signature that is not one without asking the cluster", async () => {
       const { fetchMock } = replay([]);
-      const client = createClientWith("confirmed")(URL_OF_RECORDING);
+      const client = clientWith("confirmed")(URL_OF_RECORDING);
 
       await expect(confirmWith(client)("not-a-signature")).rejects.toThrow(
         new TerminalLineError("Parse error: Bad parameter: Invalid signature")
@@ -228,7 +222,7 @@ describe("commands/solana", () => {
       const signature = wordsOf(fixture).at(-1) ?? "";
 
       const parts = await confirmVerboseWith(
-        createClientWith("confirmed")(URL_OF_RECORDING)
+        clientWith("confirmed")(URL_OF_RECORDING)
       )(signature);
 
       expect(parts).toEqual([
@@ -256,7 +250,7 @@ describe("commands/solana", () => {
       ]);
 
       const parts = await confirmVerboseWith(
-        createClientWith("confirmed")(URL_OF_RECORDING)
+        clientWith("confirmed")(URL_OF_RECORDING)
       )(signature);
 
       expect(parts[1]).toBe(
@@ -282,7 +276,7 @@ describe("commands/solana", () => {
       });
 
       const parts = await confirmVerboseWith(
-        createClientWith("confirmed")(URL_OF_RECORDING)
+        clientWith("confirmed")(URL_OF_RECORDING)
       )(signature);
 
       expect(parts[1]).toMatch(
@@ -298,7 +292,7 @@ describe("commands/solana", () => {
       const signature = wordsOf(readFixture("confirm-success")).at(-1) ?? "";
 
       await expect(
-        confirmWith(createClientWith("confirmed")(URL_OF_RECORDING))(signature)
+        confirmWith(clientWith("confirmed")(URL_OF_RECORDING))(signature)
       ).rejects.toThrow(/^Unable to confirm: /);
     });
   });
@@ -356,9 +350,7 @@ describe("commands/solana", () => {
             filters: { memcmp: { bytes: string } }[];
           }
         ).filters[2].memcmp.bytes;
-        const client = createClientWith(fixture.settings.commitment)(
-          urlOf(fixture)
-        );
+        const client = clientWith(fixture.settings.commitment)(urlOf(fixture));
         const { remaining } = replay(fixture.rpc);
 
         const buffers = await fetchBuffersWith(client)(authority);
@@ -375,7 +367,7 @@ describe("commands/solana", () => {
         filters: { memcmp: { bytes: string; offset: number } }[];
       };
 
-      await fetchBuffersWith(createClientWith("confirmed")(URL_OF_RECORDING))(
+      await fetchBuffersWith(clientWith("confirmed")(URL_OF_RECORDING))(
         recorded.filters[2].memcmp.bytes
       );
 
@@ -404,7 +396,7 @@ describe("commands/solana", () => {
       );
 
       await expect(
-        fetchBuffersWith(createClientWith("confirmed")(URL_OF_RECORDING))(
+        fetchBuffersWith(clientWith("confirmed")(URL_OF_RECORDING))(
           "399rcrEWr3hVAhVy3moRPm5UKy8RmZpAFTZDDu3kksfT"
         )
       ).rejects.toThrow();
@@ -451,9 +443,7 @@ describe("commands/solana", () => {
       "prints what the Rust CLI printed: %s",
       async (name) => {
         const fixture = readFixture(name);
-        const client = createClientWith(fixture.settings.commitment)(
-          urlOf(fixture)
-        );
+        const client = clientWith(fixture.settings.commitment)(urlOf(fixture));
         const wait = vi.fn(async () => {});
         const { remaining } = replay(fixture.rpc);
 
@@ -473,7 +463,7 @@ describe("commands/solana", () => {
       replay(fixture.rpc);
 
       await closeBuffersWith(
-        createClientWith(fixture.settings.commitment)(URL_OF_RECORDING)
+        clientWith(fixture.settings.commitment)(URL_OF_RECORDING)
       )(wait)(closerReplaying(fixture));
 
       // The recording has the status unknown once, then finalized
@@ -498,7 +488,7 @@ describe("commands/solana", () => {
       replay([fixture.rpc[0], fixture.rpc[1], failedSend]);
 
       const { closed, skipped } = await closeBuffersWith(
-        createClientWith(fixture.settings.commitment)(URL_OF_RECORDING)
+        clientWith(fixture.settings.commitment)(URL_OF_RECORDING)
       )(vi.fn(async () => {}))(closerReplaying(fixture));
 
       expect(closed).toEqual([]);
@@ -538,7 +528,7 @@ describe("commands/solana", () => {
       replay([fixture.rpc[0], fixture.rpc[1], fixture.rpc[2], failedStatus]);
 
       const { closed, skipped } = await closeBuffersWith(
-        createClientWith(fixture.settings.commitment)(URL_OF_RECORDING)
+        clientWith(fixture.settings.commitment)(URL_OF_RECORDING)
       )(vi.fn(async () => {}))(closerReplaying(fixture));
 
       expect(closed).toEqual([]);
@@ -625,7 +615,7 @@ describe("commands/solana", () => {
       ]);
 
       const { closed, skipped } = await closeBuffersWith(
-        createClientWith("confirmed")(URL_OF_RECORDING)
+        clientWith("confirmed")(URL_OF_RECORDING)
       )(vi.fn(async () => {}))(closerSigningNothing(fixture));
 
       expect(closed.map(({ address }) => address)).toEqual([second.pubkey]);
@@ -680,7 +670,7 @@ describe("commands/solana", () => {
         });
 
         const { closed, skipped } = await closeBuffersWith(
-          createClientWith("confirmed")(URL_OF_RECORDING)
+          clientWith("confirmed")(URL_OF_RECORDING)
         )(wait)(closerSigningNothing(fixture));
 
         expect(closed).toEqual([]);
@@ -704,7 +694,7 @@ describe("commands/solana", () => {
         });
 
         const { closed } = await closeBuffersWith(
-          createClientWith("confirmed")(URL_OF_RECORDING)
+          clientWith("confirmed")(URL_OF_RECORDING)
         )(wait)(closerSigningNothing(fixture));
 
         expect(closed).toHaveLength(1);
@@ -722,7 +712,7 @@ describe("commands/solana", () => {
         });
 
         const { closed, skipped } = await closeBuffersWith(
-          createClientWith("confirmed")(URL_OF_RECORDING)
+          clientWith("confirmed")(URL_OF_RECORDING)
         )(vi.fn(async () => {}))(closerSigningNothing(fixture));
 
         expect(closed).toHaveLength(1);
@@ -735,7 +725,7 @@ describe("commands/solana", () => {
       replay(fixture.rpc.slice(0, 2));
 
       await expect(
-        closeBuffersWith(createClientWith("confirmed")(URL_OF_RECORDING))(
+        closeBuffersWith(clientWith("confirmed")(URL_OF_RECORDING))(
           vi.fn(async () => {})
         )({
           address: closerReplaying(fixture).address,
@@ -752,7 +742,7 @@ describe("commands/solana", () => {
       );
 
       await expect(
-        closeBuffersWith(createClientWith("confirmed")(URL_OF_RECORDING))(
+        closeBuffersWith(clientWith("confirmed")(URL_OF_RECORDING))(
           vi.fn(async () => {})
         )({
           address: "399rcrEWr3hVAhVy3moRPm5UKy8RmZpAFTZDDu3kksfT",
