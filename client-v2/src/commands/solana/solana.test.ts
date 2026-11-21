@@ -138,6 +138,39 @@ describe("commands/solana", () => {
       }
     );
 
+    // The wasm CLI asked without history, so a signature older than the
+    // status cache (about two minutes) read "Not found"; the native CLI asks
+    // with it
+    it.each(["confirm-success", "confirm-verbose-success-legacy"])(
+      "asks for the status with the transaction history: %s",
+      async (name) => {
+        const fixture = readFixture(name);
+        const { fetchMock } = replay(fixture.rpc);
+        const client = createClientWith(fixture.settings.commitment)(
+          urlOf(fixture)
+        );
+        const signature =
+          wordsOf(fixture).find((word) => word.length > 60) ?? "";
+
+        await (name.includes("verbose")
+          ? confirmVerboseWith(client)
+          : confirmWith(client))(signature);
+
+        const statusCall = fetchMock.mock.calls
+          .map(
+            ([, init]) =>
+              JSON.parse(String(init?.body)) as {
+                method: string;
+                params: unknown[];
+              }
+          )
+          .find(({ method }) => method === "getSignatureStatuses");
+        expect(statusCall?.params[1]).toEqual({
+          searchTransactionHistory: true,
+        });
+      }
+    );
+
     it("reads the cluster -u names, not the selected endpoint", async () => {
       const fixture = readFixture("confirm-verbose-success-legacy-u-d");
       const { fetchMock } = replay(fixture.rpc);

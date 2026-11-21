@@ -32,7 +32,9 @@ const bannerOf = (client: SolanaClient) =>
   `RPC URL: ${client.url}\nDefault Signer: Playground Wallet\nCommitment: ${client.commitment}`;
 
 /**
- * Ask the cluster for a signature's status.
+ * Ask the cluster for a signature's status, searching its transaction history:
+ * without it a signature older than the status cache (about two minutes) reads
+ * "Not found". The wasm CLI asked without it; the native CLI asks with it.
  *
  * @throws {Error} when the cluster cannot be asked
  */
@@ -41,7 +43,9 @@ const fetchStatus = async (client: SolanaClient, signature: string) => {
 
   try {
     const { value } = await client.rpc
-      .getSignatureStatuses([toSignature(signature)])
+      .getSignatureStatuses([toSignature(signature)], {
+        searchTransactionHistory: true,
+      })
       .send();
     return value[0];
   } catch (e) {

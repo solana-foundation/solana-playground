@@ -55,7 +55,9 @@ What the app needs from `solana` today:
   `solana-cli-output`) is a fixed layout of slot, block time, version, recent blockhash, signatures, accounts with
   their flags, instructions, status, fee, balances and log messages. A module next to the command formats a
   `getTransaction` response (`encoding: "base64"`, as the recorded Rust requests used, decoded with Kit;
-  `maxSupportedTransactionVersion: 0`) into that layout. The default
+  `maxSupportedTransactionVersion: 0`) into that layout. One departure from the recordings: the status is asked
+  with `searchTransactionHistory: true`, as the native CLI asks it; the wasm CLI asked without it, so a signature
+  older than the RPC status cache (about two minutes) read "Not found" (found on Devnet, 2026-11-21). The default
   commitment is the app's commitment setting, as the Rust CLI's was.
 - **Where the wallet check sits.** `checkPgWallet` moves from `solana` to its `program` subcommand, so `confirm`
   and an unknown subcommand ask nothing. `needsConnection` stays on `solana`, so the offline line comes first for
