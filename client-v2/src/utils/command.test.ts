@@ -504,3 +504,115 @@ describe("PgCommandManager.execute, an argument's values", () => {
     );
   });
 });
+
+describe("PgCommandManager.execute, a command with options and subcommands", () => {
+  const help = { name: "help", short: "h" };
+  const url = {
+    name: "url",
+    short: "u",
+    takeValue: true,
+    description: "RPC URL",
+  };
+
+  /** `probe` takes `-u` itself; `leaf` and `nest sub` run, and only `nest` has a pre-check */
+  const installTree = () => {
+    const calls = {
+      top: vi.fn(),
+      leaf: vi.fn(),
+      sub: vi.fn(),
+      nestCheck: vi.fn(),
+    };
+    PgCommandManager.all = {
+      probe: {
+        name: "probe",
+        description: "",
+        options: [url, help],
+        handle: calls.top,
+        subcommands: [
+          {
+            name: "leaf",
+            description: "",
+            args: [{ name: "signature" }],
+            options: [url, help],
+            handle: calls.leaf,
+          },
+          {
+            name: "nest",
+            description: "",
+            options: [],
+            preChecks: calls.nestCheck,
+            subcommands: [
+              {
+                name: "sub",
+                description: "",
+                options: [url, help],
+                handle: calls.sub,
+              },
+            ],
+          },
+        ],
+      },
+    } as never;
+    return calls;
+  };
+
+  it("hands an option before the subcommand to the subcommand that runs", async () => {
+    const { leaf } = installTree();
+
+    await PgCommandManager.execute(["probe", "-u", "d", "leaf", "abc"]);
+
+    expect(leaf).toHaveBeenCalledTimes(1);
+    expect(leaf.mock.calls[0][0].options).toEqual({ url: "d" });
+    expect(leaf.mock.calls[0][0].args).toEqual({ signature: "abc" });
+  });
+
+  it("hands an option between two levels of subcommand to the one that runs", async () => {
+    const { sub } = installTree();
+
+    await PgCommandManager.execute(["probe", "nest", "-u", "d", "sub"]);
+
+    expect(sub.mock.calls[0][0].options).toEqual({ url: "d" });
+  });
+
+  it("names a mistyped subcommand behind a declared option, not the option", async () => {
+    const { leaf, top } = installTree();
+
+    await expect(
+      PgCommandManager.execute(["probe", "-u", "d", "lief", "abc"])
+    ).rejects.toThrow("Subcommand doesn't exist: `lief`");
+    expect(leaf).not.toHaveBeenCalled();
+    expect(top).not.toHaveBeenCalled();
+  });
+
+  it("still refuses an option the command does not declare", async () => {
+    installTree();
+
+    await expect(
+      PgCommandManager.execute(["probe", "-u", "d", "-x", "leaf"])
+    ).rejects.toThrow("Unexpected option: `-x`");
+    await expect(PgCommandManager.execute(["probe", "-x"])).rejects.toThrow(
+      "Unexpected option: `-x`"
+    );
+  });
+
+  it("runs the handler when only declared options and no subcommand are given", async () => {
+    const { top } = installTree();
+
+    await PgCommandManager.execute(["probe", "-u", "d"]);
+
+    expect(top).toHaveBeenCalledTimes(1);
+    expect(top.mock.calls[0][0].options).toEqual({ url: "d" });
+  });
+
+  it("runs a pre-check of a nested subcommand only on the path through it", async () => {
+    const { leaf, sub, nestCheck } = installTree();
+
+    await PgCommandManager.execute(["probe", "-u", "d", "leaf", "abc"]);
+    expect(leaf).toHaveBeenCalledTimes(1);
+    expect(nestCheck).not.toHaveBeenCalled();
+
+    await PgCommandManager.execute(["probe", "nest", "sub"]);
+    expect(nestCheck).toHaveBeenCalledTimes(1);
+    expect(sub).toHaveBeenCalledTimes(1);
+  });
+});

@@ -3,7 +3,12 @@
 // through a stubbed `fetch` (AGENTS.md).
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { getBase64Encoder } from "@solana/kit";
+import {
+  getBase64Encoder,
+  SOLANA_ERROR__JSON_RPC__SERVER_ERROR_NODE_UNHEALTHY,
+  SOLANA_ERROR__RPC__TRANSPORT_HTTP_ERROR,
+  SolanaError,
+} from "@solana/kit";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { TerminalLineError } from "../../utils/terminal/line-error";
@@ -16,6 +21,7 @@ import {
 import { toBytes } from "./bytes";
 import { createClientWith } from "./client";
 import { confirmVerboseWith, confirmWith } from "./confirm";
+import { describeError } from "./describe-error";
 import { normalizeToUrlIfMoniker } from "./url";
 
 interface RecordedCall {
@@ -77,6 +83,25 @@ const replay = (calls: readonly RecordedCall[]) => {
     });
 
   return { fetchMock, remaining: () => queue.length };
+};
+
+/**
+ * Answer every `fetch` with the next scripted result of its method, the last
+ * one again when a method runs out, failing for a method nobody scripted.
+ */
+const scripted = (results: Record<string, unknown[]>) => {
+  const queues = new Map(
+    Object.entries(results).map(([method, list]) => [method, list.slice()])
+  );
+  return vi
+    .spyOn(globalThis, "fetch")
+    .mockImplementation(async (_input, init) => {
+      const { method } = JSON.parse(String(init?.body)) as { method: string };
+      const queue = queues.get(method);
+      if (!queue?.length) throw new Error(`Unscripted call: ${method}`);
+      const result = queue.length > 1 ? queue.shift() : queue[0];
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 0, result }));
+    });
 };
 
 /** The cluster URL a recording was made against, as the CLI printed it in its banner */
@@ -239,6 +264,33 @@ describe("commands/solana", () => {
       );
     });
 
+    it("prints the real reason when the transaction cannot be fetched, whatever the status", async () => {
+      const fixture = readFixture("confirm-success");
+      const signature = wordsOf(fixture).at(-1) ?? "";
+      const status = fixture.rpc[0].response as {
+        result: { value: { confirmationStatus: string }[] };
+      };
+      status.result.value[0].confirmationStatus = "confirmed";
+      const statusResponse = JSON.stringify(fixture.rpc[0].response);
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+        const { method } = JSON.parse(String(init?.body)) as {
+          method: string;
+        };
+        return method === "getSignatureStatuses"
+          ? new Response(statusResponse)
+          : new Response("slow down", { status: 429 });
+      });
+
+      const parts = await confirmVerboseWith(
+        createClientWith("confirmed")(URL_OF_RECORDING)
+      )(signature);
+
+      expect(parts[1]).toMatch(
+        /^\nUnable to get finalized transaction details: HTTP error \(429\)/
+      );
+      expect(parts[1]).toMatch(/\n\nConfirmed$/);
+    });
+
     it("reports a cluster that cannot be asked", async () => {
       vi.spyOn(globalThis, "fetch").mockResolvedValue(
         new Response("slow down", { status: 429 })
@@ -248,6 +300,44 @@ describe("commands/solana", () => {
       await expect(
         confirmWith(createClientWith("confirmed")(URL_OF_RECORDING))(signature)
       ).rejects.toThrow(/^Unable to confirm: /);
+    });
+  });
+
+  describe("describeError", () => {
+    it("names the HTTP status and the server's text", () => {
+      const error = new SolanaError(SOLANA_ERROR__RPC__TRANSPORT_HTTP_ERROR, {
+        headers: new Headers(),
+        message: "Too Many Requests",
+        statusCode: 429,
+      });
+
+      expect(describeError(error)).toBe("HTTP error (429): Too Many Requests");
+    });
+
+    it("names the HTTP status alone when the server sent no text", () => {
+      const error = new SolanaError(SOLANA_ERROR__RPC__TRANSPORT_HTTP_ERROR, {
+        headers: new Headers(),
+        message: "",
+        statusCode: 503,
+      });
+
+      expect(describeError(error)).toBe("HTTP error (503)");
+    });
+
+    it("says how far behind an unhealthy node is", () => {
+      const error = new SolanaError(
+        SOLANA_ERROR__JSON_RPC__SERVER_ERROR_NODE_UNHEALTHY,
+        { numSlotsBehind: 100 }
+      );
+
+      expect(describeError(error)).toBe(
+        "Node is unhealthy; behind by 100 slots"
+      );
+    });
+
+    it("gives the message of an error that is not kit's", () => {
+      expect(describeError(new Error("boom"))).toBe("boom");
+      expect(describeError("plain")).toBe("plain");
     });
   });
 
@@ -452,9 +542,208 @@ describe("commands/solana", () => {
       )(vi.fn(async () => {}))(closerReplaying(fixture));
 
       expect(closed).toEqual([]);
+      // The send went through, so the reason names the signature the buffer may have closed under
       expect(skipped[0].reason).toBe(
-        "Error processing Instruction 0: Incorrect authority provided"
+        `Error processing Instruction 0: Incorrect authority provided (signature ${
+          (fixture.rpc[2].response as { result: string }).result
+        })`
       );
+    });
+
+    /** A `getProgramAccounts` answer listing the recorded buffer under each of two addresses */
+    const twoBuffers = (fixture: Fixture) => {
+      const listing = fixture.rpc[0].response as {
+        result: { pubkey: string }[];
+      };
+      const first = JSON.parse(JSON.stringify(listing.result[0])) as {
+        pubkey: string;
+      };
+      const second = JSON.parse(JSON.stringify(listing.result[0])) as {
+        pubkey: string;
+      };
+      second.pubkey = "11111111111111111111111111111111";
+      return [first, second];
+    };
+
+    const closerSigningNothing = (fixture: Fixture): BufferCloser => ({
+      address: closerReplaying(fixture).address,
+      sign: async (wire) => wire,
+    });
+
+    it("closes the next buffer after one fails", async () => {
+      const fixture = readFixture("program-close-buffers-one");
+      const [first, second] = twoBuffers(fixture);
+      const blockhash = (fixture.rpc[1].response as { result: unknown }).result;
+      const signature = (fixture.rpc[2].response as { result: string }).result;
+      const finalized = {
+        context: { slot: 1 },
+        value: [
+          {
+            confirmationStatus: "finalized",
+            confirmations: undefined,
+            err: undefined,
+            slot: 1,
+            status: { Ok: undefined },
+          },
+        ],
+      };
+      replay([
+        {
+          url: URL_OF_RECORDING,
+          request: { method: "getProgramAccounts", params: [] },
+          response: { jsonrpc: "2.0", id: 0, result: [first, second] },
+        },
+        fixture.rpc[1],
+        {
+          url: URL_OF_RECORDING,
+          request: { method: "sendTransaction", params: [] },
+          response: {
+            jsonrpc: "2.0",
+            id: 0,
+            error: {
+              code: -32005,
+              message: "Node is behind",
+              data: { numSlotsBehind: 5 },
+            },
+          },
+        },
+        {
+          url: URL_OF_RECORDING,
+          request: { method: "getLatestBlockhash", params: [] },
+          response: { jsonrpc: "2.0", id: 0, result: blockhash },
+        },
+        {
+          url: URL_OF_RECORDING,
+          request: { method: "sendTransaction", params: [] },
+          response: { jsonrpc: "2.0", id: 0, result: signature },
+        },
+        {
+          url: URL_OF_RECORDING,
+          request: { method: "getSignatureStatuses", params: [] },
+          response: { jsonrpc: "2.0", id: 0, result: finalized },
+        },
+      ]);
+
+      const { closed, skipped } = await closeBuffersWith(
+        createClientWith("confirmed")(URL_OF_RECORDING)
+      )(vi.fn(async () => {}))(closerSigningNothing(fixture));
+
+      expect(closed.map(({ address }) => address)).toEqual([second.pubkey]);
+      expect(skipped.map(({ buffer }) => buffer.address)).toEqual([
+        first.pubkey,
+      ]);
+    });
+
+    describe("a transaction that does not confirm in time", () => {
+      const lastValid = 100;
+      const base = (fixture: Fixture) => ({
+        getProgramAccounts: [
+          (fixture.rpc[0].response as { result: unknown }).result,
+        ],
+        getLatestBlockhash: [
+          {
+            context: { slot: 1 },
+            value: {
+              blockhash: "63UDxww7u4xxzCYo3CgLyBEqXYNkwJ6n9RSdVCDm7b98",
+              lastValidBlockHeight: lastValid,
+            },
+          },
+        ],
+        sendTransaction: [
+          (fixture.rpc[2].response as { result: string }).result,
+        ],
+        getBlockHeight: [lastValid + 1],
+      });
+      const unknown = { context: { slot: 1 }, value: [undefined] };
+      const landed = {
+        context: { slot: 1 },
+        value: [
+          {
+            confirmationStatus: "finalized",
+            confirmations: undefined,
+            err: undefined,
+            slot: 1,
+            status: { Ok: undefined },
+          },
+        ],
+      };
+
+      it("skips the buffer once the blockhash has expired, naming the signature", async () => {
+        const fixture = readFixture("program-close-buffers-one");
+        const wait = vi.fn(async () => {});
+        scripted({
+          getProgramAccounts: base(fixture).getProgramAccounts,
+          getLatestBlockhash: base(fixture).getLatestBlockhash,
+          sendTransaction: base(fixture).sendTransaction,
+          getBlockHeight: base(fixture).getBlockHeight,
+          getSignatureStatuses: [unknown],
+        });
+
+        const { closed, skipped } = await closeBuffersWith(
+          createClientWith("confirmed")(URL_OF_RECORDING)
+        )(wait)(closerSigningNothing(fixture));
+
+        expect(closed).toEqual([]);
+        expect(skipped[0].reason).toBe(
+          `transaction expired before it was confirmed (signature ${
+            (fixture.rpc[2].response as { result: string }).result
+          })`
+        );
+        expect(wait).not.toHaveBeenCalled();
+      });
+
+      it("polls on while the blockhash is still valid", async () => {
+        const fixture = readFixture("program-close-buffers-one");
+        const wait = vi.fn(async () => {});
+        scripted({
+          getProgramAccounts: base(fixture).getProgramAccounts,
+          getLatestBlockhash: base(fixture).getLatestBlockhash,
+          sendTransaction: base(fixture).sendTransaction,
+          getBlockHeight: [lastValid - 1],
+          getSignatureStatuses: [unknown, landed],
+        });
+
+        const { closed } = await closeBuffersWith(
+          createClientWith("confirmed")(URL_OF_RECORDING)
+        )(wait)(closerSigningNothing(fixture));
+
+        expect(closed).toHaveLength(1);
+        expect(wait).toHaveBeenCalledTimes(1);
+      });
+
+      it("counts a transaction that landed just before the expiry as closed", async () => {
+        const fixture = readFixture("program-close-buffers-one");
+        scripted({
+          getProgramAccounts: base(fixture).getProgramAccounts,
+          getLatestBlockhash: base(fixture).getLatestBlockhash,
+          sendTransaction: base(fixture).sendTransaction,
+          getBlockHeight: base(fixture).getBlockHeight,
+          getSignatureStatuses: [unknown, landed],
+        });
+
+        const { closed, skipped } = await closeBuffersWith(
+          createClientWith("confirmed")(URL_OF_RECORDING)
+        )(vi.fn(async () => {}))(closerSigningNothing(fixture));
+
+        expect(closed).toHaveLength(1);
+        expect(skipped).toEqual([]);
+      });
+    });
+
+    it("rethrows a failure that is not the cluster's instead of skipping the buffer", async () => {
+      const fixture = readFixture("program-close-buffers-one");
+      replay(fixture.rpc.slice(0, 2));
+
+      await expect(
+        closeBuffersWith(createClientWith("confirmed")(URL_OF_RECORDING))(
+          vi.fn(async () => {})
+        )({
+          address: closerReplaying(fixture).address,
+          sign: async () => {
+            throw new TypeError("bug in signing");
+          },
+        })
+      ).rejects.toThrow(TypeError);
     });
 
     it("fails when the buffers cannot be listed, instead of closing none", async () => {
