@@ -109,8 +109,8 @@ export class PgTerminal {
   }
 
   /**
-   * Print the buffers table `solana program show --buffers` produces, laid
-   * out for the terminal's width; dropped while none is mounted.
+   * Print the buffers table `solana program show --buffers` and
+   * `solana program close --buffers` produce, laid out for the terminal's width; dropped while none is mounted.
    */
   static async printlnBuffersTable(table: string) {
     await PgTerminal._runIfMounted({ printlnBuffersTable: [table] });

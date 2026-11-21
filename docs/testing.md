@@ -162,7 +162,7 @@ Mirrors the `checks` and `build` jobs in [reusable-client-v2.yml](../.github/wor
 
 Precondition: B-7. `yarn --cwd client-v2 setup:with-stubs` (`USE_WASM_STUBS=true`) mirrors
 [client-v2-with-stubs.yml](../.github/workflows/client-v2-with-stubs.yml) instead: the stubs skip the Rust build but
-disable Rust intellisense and Seahorse builds, so S-3, C-6, and the
+leave Rust intellisense empty and make Seahorse builds throw, so S-3, C-6, and the
 `check-build` line need B-7.
 
 ```sh
@@ -374,7 +374,6 @@ Steps: open the seeded project's `lib.rs`, type `fn probe() { Vec::with_cap` and
 Expect:
 
 - [ ] the completion list offers `with_capacity` (rust-analyzer; a stub answers with an empty list).
-- [ ] no output contains `local dev stub`, the error every stub throws.
 
 ## 3. Full suite with Docker Compose
 
@@ -417,8 +416,7 @@ Precondition: D-2 session; a wallet connected and funded on the selected cluster
 
 Steps: click Deploy.
 
-Expect: `GET http://localhost:8080/deploy/{uuid}` returns 200; the terminal prints the program ID; `solana program show
-<program ID>` in the playground terminal shows the program on the selected cluster.
+Expect: `GET http://localhost:8080/deploy/{uuid}` returns 200; the terminal prints the program ID; the program ID's page in the Solana Explorer, on the selected cluster, shows the program.
 
 ### D-5. CORS
 

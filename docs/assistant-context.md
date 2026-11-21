@@ -353,8 +353,8 @@ Honesty rule for the demo — never present a mocked step as working.
   offers nothing to the next turn, and the choice survives a reload.
 - **Real, stubbed only on request:** Rust intellisense and Seahorse builds. A deployment always ships
   the real packages. Local UI work may stub them with `USE_WASM_STUBS=true` to
-  skip the WASM build; a stub throws a message pointing at
-  `yarn --cwd client-v2 setup`.
+  skip the WASM build; under the stubs Rust intellisense stays empty and a
+  Seahorse build throws a message pointing at `yarn --cwd client-v2 setup`.
 - **Prototype-grade:** the default backend's spend: sign-in decides who can
   spend the configured key, but nothing yet caps how much one signed-in user
   spends.

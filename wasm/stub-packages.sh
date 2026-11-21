@@ -45,13 +45,13 @@ write_pkg() { # write_pkg <dir> <npm-name>
 JSON
 }
 
-stub_cli() { # stub_cli <dir> <exported-fn>
+stub_throwing() { # stub_throwing <dir> <exported-fn>
   write_pkg "$1" "@solana-playground/$1-stub"
   cat > "$wasm_dir/$1/pkg/index.js" <<JS
 const notBuilt = () => {
   throw new Error(
     "\`$1\` is a $WASM_STUB_MARKER. Run \`yarn --cwd client-v2 setup\` to build and " +
-      "install the real WASM packages if you need this command."
+      "install the real WASM packages if you need it."
   );
 };
 
@@ -63,7 +63,7 @@ JS
   echo "  stubbed $1"
 }
 
-stub_cli seahorse-compile compileSeahorse
+stub_throwing seahorse-compile compileSeahorse
 
 # Rust Analyzer needs to resolve successfully: initRustAnalyzer retries worker
 # creation forever if it fails. Return empty-but-well-shaped results so the

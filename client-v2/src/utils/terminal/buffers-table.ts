@@ -1,13 +1,13 @@
 /** The escape character that starts an ANSI style */
 const ESC = "\u001b";
 
-/** Matches the SGR styling (`ESC[…m`) the `solana` command puts on the table's header */
+/** Matches SGR styling (`ESC[…m`); the `solana` command prints none, so stripping it is defensive */
 const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "g");
 
 /** `text` without its SGR styling, so its length is the columns it takes */
 const stripAnsi = (text: string) => text.replace(ANSI, "");
 
-/** The header the `solana` command prints over `solana program show --buffers` */
+/** The header `solana program show --buffers` prints over its rows */
 const HEADER = /^Buffer Address\s+\|\s+Authority\s+\|\s+Balance\s*$/;
 
 /**
@@ -23,7 +23,7 @@ const LABELS = ["Buffer Address", "Authority", "Balance"] as const;
 const LABEL_WIDTH = LABELS[0].length + 2;
 
 /**
- * Bold, as the `solana` command prints the table's header; not `PgTerminal.bold`, since
+ * Bold, for the header of the labelled layout; not `PgTerminal.bold`, since
  * `terminal.ts` imports this module
  */
 const bold = (text: string) => `${ESC}[1m${text}${ESC}[0m`;
@@ -36,8 +36,8 @@ const bold = (text: string) => `${ESC}[1m${text}${ESC}[0m`;
  * header and rows breaking apart. When a row would wrap, the header is
  * dropped and each buffer is printed as labelled lines; for the whole table
  * the label goes beside its value when the longest value fits beside it, and
- * above it when not. Addresses are never cut: a learner copies one into
- * `solana program close`. A table with no rows reads "No buffers." at any
+ * above it when not. Addresses are never cut: the explorer takes a whole address, and a
+ * cut one looks like another. A table with no rows reads "No buffers." at any
  * width.
  *
  * `solana program show --buffers` hands the whole table over as one message
@@ -96,7 +96,7 @@ if (import.meta.vitest) {
   const ADDRESS = "7Kp4X1bQmS9yWn3VhJd2RcLzT8uFgE5aNqB6oYiP4sMx";
   const AUTHORITY = "9fHcE2tWq7LmZx4KvR1sNbD8yPjU3gAoT6iQ5eYwC2nB";
 
-  /** What the `solana` command prints for `solana program show --buffers`, header bold */
+  /** The table of `solana program show --buffers`, with the bold header the stripping tolerates */
   const table = (rows: string[][]) => {
     const header = `${"Buffer Address".padEnd(44)} | ${"Authority".padEnd(
       44
