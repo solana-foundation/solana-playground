@@ -1,13 +1,13 @@
 /** The escape character that starts an ANSI style */
 const ESC = "\u001b";
 
-/** Matches the SGR styling (`ESC[…m`) solana-cli puts on the table's header */
+/** Matches the SGR styling (`ESC[…m`) the `solana` command puts on the table's header */
 const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "g");
 
 /** `text` without its SGR styling, so its length is the columns it takes */
 const stripAnsi = (text: string) => text.replace(ANSI, "");
 
-/** The header solana-cli prints over `solana program show --buffers` */
+/** The header the `solana` command prints over `solana program show --buffers` */
 const HEADER = /^Buffer Address\s+\|\s+Authority\s+\|\s+Balance\s*$/;
 
 /**
@@ -23,7 +23,7 @@ const LABELS = ["Buffer Address", "Authority", "Balance"] as const;
 const LABEL_WIDTH = LABELS[0].length + 2;
 
 /**
- * Bold, as solana-cli prints the table's header; not `PgTerminal.bold`, since
+ * Bold, as the `solana` command prints the table's header; not `PgTerminal.bold`, since
  * `terminal.ts` imports this module
  */
 const bold = (text: string) => `${ESC}[1m${text}${ESC}[0m`;
@@ -31,7 +31,7 @@ const bold = (text: string) => `${ESC}[1m${text}${ESC}[0m`;
 /**
  * Fit the table `solana program show --buffers` prints to the terminal.
  *
- * solana-cli pads both addresses to 44 characters, so a row takes 94 columns
+ * The `solana` command pads both addresses to 44 characters, so a row takes 94 columns
  * plus its balance, about 105, and wraps in a console narrower than that,
  * header and rows breaking apart. When a row would wrap, the header is
  * dropped and each buffer is printed as labelled lines; for the whole table
@@ -45,7 +45,7 @@ const bold = (text: string) => `${ESC}[1m${text}${ESC}[0m`;
  * after the header.
  *
  * @param cols the terminal's width in columns
- * @returns a function from what solana-cli printed to the table laid out for
+ * @returns a function from what the `solana` command printed to the table laid out for
  * `cols`, or to that output untouched when it is not the buffers table or its
  * rows already fit
  */
@@ -96,7 +96,7 @@ if (import.meta.vitest) {
   const ADDRESS = "7Kp4X1bQmS9yWn3VhJd2RcLzT8uFgE5aNqB6oYiP4sMx";
   const AUTHORITY = "9fHcE2tWq7LmZx4KvR1sNbD8yPjU3gAoT6iQ5eYwC2nB";
 
-  /** What solana-cli prints for `solana program show --buffers`, header bold */
+  /** What the `solana` command prints for `solana program show --buffers`, header bold */
   const table = (rows: string[][]) => {
     const header = `${"Buffer Address".padEnd(44)} | ${"Authority".padEnd(
       44
@@ -184,7 +184,7 @@ if (import.meta.vitest) {
       );
     });
 
-    it("keeps what solana-cli prints before and after the table", () => {
+    it("keeps what the solana command prints before and after the table", () => {
       const output = `Note: before${table([
         [ADDRESS, AUTHORITY, "1 SOL"],
       ])}Note: after`;
