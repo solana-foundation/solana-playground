@@ -162,7 +162,7 @@ Mirrors the `checks` and `build` jobs in [reusable-client-v2.yml](../.github/wor
 
 Precondition: B-7. `yarn --cwd client-v2 setup:with-stubs` (`USE_WASM_STUBS=true`) mirrors
 [client-v2-with-stubs.yml](../.github/workflows/client-v2-with-stubs.yml) instead: the stubs skip the Rust build but
-disable Rust intellisense and the `solana` and `spl-token` terminal commands, so S-3, C-6, and the
+disable Rust intellisense and Seahorse builds, so S-3, C-6, and the
 `check-build` line need B-7.
 
 ```sh
@@ -273,12 +273,12 @@ Expect: `setup` exits 0; both `grep` lines print nothing. On a warm target folde
 recompiles its own crates, is unmeasured. A cold one takes about an hour.
 
 In a linked worktree with no target folder of its own, whose sources of one package differ from the main checkout's,
-run `setup` and compare that package's `.wasm` with the main checkout's, here for `solana-cli`:
+run `setup` and compare that package's `.wasm` with the main checkout's, here for `seahorse-compile`:
 
 ```sh
 main=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")
-git diff --quiet "$(git -C "$main" rev-parse HEAD)" -- wasm/solana-cli || echo sources differ
-cmp wasm/solana-cli/pkg/solana_cli_wasm_bg.wasm "$main/wasm/solana-cli/pkg/solana_cli_wasm_bg.wasm"
+git diff --quiet "$(git -C "$main" rev-parse HEAD)" -- wasm/seahorse-compile || echo sources differ
+cmp wasm/seahorse-compile/pkg/seahorse_compile_wasm_bg.wasm "$main/wasm/seahorse-compile/pkg/seahorse_compile_wasm_bg.wasm"
 ```
 
 Expect: `sources differ`, then `cmp` reports a difference. Identical files mean the seeded target folder's output
@@ -361,7 +361,7 @@ Expect:
 
 Same steps and expectations as C-2, run against the C-4 session.
 
-### C-6. the CLIs run in the client
+### C-6. the wasm packages run in the client
 
 Precondition: a C-1 or C-4 session on the real packages. For client-v2,
 [wasm-clis.e2e.spec.ts](../client-v2/e2e/wasm-clis.e2e.spec.ts) runs these steps:
@@ -369,12 +369,11 @@ Precondition: a C-1 or C-4 session on the real packages. For client-v2,
 [reusable-client-v2.yml](../.github/workflows/reusable-client-v2.yml) runs it when `client-v2.yml` calls that workflow;
 `client-v2-with-stubs.yml` excludes the tag.
 
-Steps: connect the Playground Wallet, then run in the terminal `solana config get` and `spl-token --help`.
+Steps: open the seeded project's `lib.rs`, type `fn probe() { Vec::with_cap` and press Control+Space.
 
 Expect:
 
-- [ ] `solana config get` prints an `RPC URL:` line.
-- [ ] `spl-token --help` prints its usage and subcommands.
+- [ ] the completion list offers `with_capacity` (rust-analyzer; a stub answers with an empty list).
 - [ ] no output contains `local dev stub`, the error every stub throws.
 
 ## 3. Full suite with Docker Compose
@@ -786,10 +785,9 @@ Expect: `404` for `/unstable/build`; anything but `404` for `/build`, which prov
 
 ### R-4. the deployment carries no stub
 
-A stub in production makes the `solana` and `spl-token` commands throw, and leaves Rust
-intellisense empty. The requirement is "A deployment never carries a wasm stub" in
+A stub in production leaves Rust intellisense empty and makes Seahorse builds throw. The requirement is "A deployment never carries a wasm stub" in
 `openspec/specs/client-v2-build/spec.md`. The Vercel build already fails on a bundle that carries a stub or lacks the wasm-bindgen module of
-any of the four packages (`REAL_WASM_MARKERS` in `client-v2/scripts/wasm-stubs.mjs`; `node scripts/wasm-stubs.mjs check-build build` in the `buildCommand` of
+any of the two packages (`REAL_WASM_MARKERS` in `client-v2/scripts/wasm-stubs.mjs`; `node scripts/wasm-stubs.mjs check-build build` in the `buildCommand` of
 [vercel.json](../client-v2/vercel.json)), and CI runs the same check after its production build, in
 [reusable-client-v2.yml](../.github/workflows/reusable-client-v2.yml); this case checks what was deployed. For a protected preview, add
 `-H "x-vercel-protection-bypass: $VERCEL_BYPASS"` to each `curl` (S-6).
@@ -799,8 +797,8 @@ base=<deployment URL>
 curl -s "$base/asset-manifest.json" | jq -r '.files[] | select(endswith(".js"))' > <run folder>/chunks.txt
 while read -r f; do curl -s -o "<run folder>/$(basename "$f")" "$base$f"; done < <run folder>/chunks.txt
 grep -l 'local dev stub' <run folder>/*.js
-grep -o -h -e rust_analyzer_wasm_bg -e seahorse_compile_wasm_bg -e solana_cli_wasm_bg -e spl_token_cli_wasm_bg <run folder>/*.js | sort -u
-grep -l 'solana_cli_wasm_bg' <run folder>/*.js
+grep -o -h -e rust_analyzer_wasm_bg -e seahorse_compile_wasm_bg <run folder>/*.js | sort -u
+grep -l 'seahorse_compile_wasm_bg' <run folder>/*.js
 grep -o '"[0-9a-f]\{20\}"' <run folder>/<the chunk the previous grep listed>
 curl -s -o /dev/null -w '%{http_code} %{content_type} %{size_download}\n' "$base/<that hash>.module.wasm"
 ```

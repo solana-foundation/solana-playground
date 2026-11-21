@@ -351,8 +351,7 @@ Honesty rule for the demo — never present a mocked step as working.
   through the same gateway and is listed for everyone, signed in or not. Each
   server and each skill has a checkbox in the Sources tab; one switched off
   offers nothing to the next turn, and the choice survives a reload.
-- **Real, stubbed only on request:** Rust intellisense and the `solana` and
-  `spl-token` terminal commands. A deployment always ships
+- **Real, stubbed only on request:** Rust intellisense and Seahorse builds. A deployment always ships
   the real packages. Local UI work may stub them with `USE_WASM_STUBS=true` to
   skip the WASM build; a stub throws a message pointing at
   `yarn --cwd client-v2 setup`.

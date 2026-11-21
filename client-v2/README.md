@@ -42,12 +42,11 @@ yarn dev:with-stubs
 yarn test-e2e:with-stubs
 ```
 
-The stubs lose Rust intellisense, the `solana` and `spl-token`
-terminal commands, and Seahorse builds. `yarn start`, `yarn dev`,
+The stubs lose Rust intellisense and Seahorse builds. `yarn start`, `yarn dev`,
 `yarn dev-cra` (and so `yarn dev-vercel`), and `yarn test-e2e` stop with the
 names of the stubbed packages when they find stubs in `node_modules` and
 `USE_WASM_STUBS=true` is not set. `yarn test-e2e:with-stubs` leaves out the
-`@real-wasm` specs, which run the CLIs. A deployment refuses the
+`@real-wasm` specs, which run the wasm packages. A deployment refuses the
 variable, and the Vercel build fails on a bundle built from a stub
 (`node scripts/wasm-stubs.mjs check-build build`). `yarn setup` replaces the
 stubs with the real packages.
