@@ -41,7 +41,5 @@
     }
   ],
   "output": "Finalized",
-  "outputParts": [
-    "Finalized"
-  ]
+  "outputParts": ["Finalized"]
 }

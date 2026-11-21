@@ -295,7 +295,7 @@ const WHERE_ACTIONS_ARE =
  */
 const WHAT_THE_TERMINAL_RUNS =
   "The terminal runs Playground's own commands (build, deploy, run, test, " +
-  "airdrop, solana, anchor, spl-token, help and a few more), not a shell: " +
+  "airdrop, solana, anchor, help and a few more), not a shell: " +
   "there is no yarn, npm or npx. In a tutorial a command typed there " +
   "passes no step, except where this context says so.";
 

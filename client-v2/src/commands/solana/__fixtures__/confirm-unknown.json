@@ -24,16 +24,12 @@
             "apiVersion": "4.5.0-beta.0",
             "slot": 524605108
           },
-          "value": [
-            null
-          ]
+          "value": [null]
         },
         "id": 0
       }
     }
   ],
   "output": "Not found",
-  "outputParts": [
-    "Not found"
-  ]
+  "outputParts": ["Not found"]
 }
