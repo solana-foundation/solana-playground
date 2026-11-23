@@ -791,5 +791,47 @@ describe("PgClientRun", () => {
 
       await expect(PgClientRun.askFirst()).resolves.toBe("run");
     });
+
+    it("runs nothing twice when a run from elsewhere ends while Run sets the wallet up, for a link with no SOL", async () => {
+      const { PgClientRun, PgDocsLink } = await load();
+      PgDocsLink.open({
+        name: "hello.ts",
+        code: "console.log(1)",
+        title: "hello",
+        from: undefined,
+        sol: undefined,
+      });
+      const untilCurrent = utils.PgWallet.untilCurrent;
+      utils.PgWallet.untilCurrent = async () => {
+        startRun();
+        finishRun({ ok: { ok: true } });
+        return undefined;
+      };
+      try {
+        await PgClientRun.start();
+      } finally {
+        utils.PgWallet.untilCurrent = untilCurrent;
+      }
+
+      expect(utils.PgCommand.run.execute).not.toHaveBeenCalled();
+      expect(PgClientRun.state.kind).toBe("done");
+    });
+
+    it("runs nothing twice when a run from elsewhere ends while Check again reads the balance", async () => {
+      const { PgClientRun, PgDocsLink } = await load();
+      PgDocsLink.open(QUICKSTART);
+      await PgClientRun.start();
+      expect(PgClientRun.state.kind).toBe("funding");
+      utils.lamports = 0.5e9;
+      utils.duringBalance = () => {
+        startRun();
+        finishRun({ ok: { ok: true } });
+      };
+
+      await PgClientRun.checkAgain();
+
+      expect(utils.PgCommand.run.execute).not.toHaveBeenCalled();
+      expect(PgClientRun.state.kind).toBe("done");
+    });
   });
 });

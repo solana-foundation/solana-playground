@@ -311,6 +311,22 @@ test.describe("client-run", () => {
     );
   });
 
+  test("client-run: Hidden characters", async ({ page }) => {
+    await page.goto(
+      docsLink({
+        name: "admin.ts",
+        code: "const isAdmin = false; /* \u202E } */",
+      })
+    );
+    await page.locator("#flow-run").click(LONG);
+
+    const dialog = confirmDialog(page);
+    await expect(dialog).toContainText("U+202E", LONG);
+    await expect(dialog.getByRole("alert")).toContainText(
+      "1 hidden or direction-changing character"
+    );
+  });
+
   test("client-run: Cancel", async ({ page }) => {
     await page.goto(docsLink({ name: "hello.ts", code: 'console.log("hi")' }));
     await page.locator("#flow-run").click(LONG);

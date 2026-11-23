@@ -22,7 +22,7 @@ import {
   ModalTitle,
 } from "@/shared/ui/modal";
 
-import { countHidden, partsOf } from "../lib/hidden-chars";
+import { countHidden, linesOf, partsOf } from "../lib/hidden-chars";
 import type { DocsLink } from "../lib/link";
 
 export interface BaseRunConfirmProps {
@@ -104,7 +104,7 @@ const BaseRunConfirm: FC<BaseRunConfirmProps> = ({
                 <CodeBlockTitle>{link.name}</CodeBlockTitle>
               </CodeBlockHeader>
               <CodeBlockContent className="max-h-[50dvh] overflow-y-auto">
-                {link.code.split("\n").map((line, index) => (
+                {linesOf(link.code).map((line, index) => (
                   // Wrapped, so a crafted line cannot hide its end past the
                   // right edge: at spaces first, inside a word only when it
                   // cannot fit, continuing under the code, not the gutter

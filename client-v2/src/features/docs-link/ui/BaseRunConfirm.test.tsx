@@ -113,4 +113,17 @@ describe("BaseRunConfirm", () => {
     confirm();
     expect(screen.queryByRole("alert")).toBeNull();
   });
+
+  it.each([
+    ["a lone CR", "CR"],
+    ["a line separator", "u2028"],
+    ["a paragraph separator", "u2029"],
+  ])("breaks the line at %s, as JavaScript does", (_, kind) => {
+    const brk = { CR: "\r", u2028: "\u2028", u2029: "\u2029" }[kind];
+    // Shown on one line, the call would read as part of the comment
+    confirmFor({ name: LINK.name, code: `// note${brk}transfer();` });
+    const lines = document.querySelectorAll("[data-slot=code-block-line]");
+    expect(lines).toHaveLength(2);
+    expect(lines[1]?.textContent).toBe("transfer();");
+  });
 });

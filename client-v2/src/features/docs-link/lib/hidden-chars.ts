@@ -34,6 +34,16 @@ export const partsOf = (line: string): LinePart[] => {
   return parts;
 };
 
+/**
+ * The code's lines, cut where JavaScript ends a line: a lone CR and the
+ * Unicode line and paragraph separators too, not only LF. Cut at LF alone, a
+ * call after a lone CR would show inside the comment before it, yet run.
+ *
+ * @param code the file's text
+ * @returns its lines, as the script runtime reads them
+ */
+export const linesOf = (code: string) => code.split(/\r\n|[\n\r\u2028\u2029]/);
+
 /** @returns how many hidden characters the code holds */
 export const countHidden = (code: string) => code.match(HIDDEN)?.length ?? 0;
 
@@ -52,6 +62,17 @@ if (import.meta.vitest) {
     it("keeps a plain line whole, an empty one included", () => {
       expect(partsOf("const a = 1;")).toEqual([{ text: "const a = 1;" }]);
       expect(partsOf("")).toEqual([{ text: "" }]);
+    });
+
+    it("cuts lines wherever JavaScript does", () => {
+      expect(linesOf("a\r\nb\rc\nd\u2028e\u2029f")).toEqual([
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f",
+      ]);
     });
 
     it("counts every hidden character, bidi and zero-width alike", () => {
