@@ -410,13 +410,12 @@ interface HeldProvider {
 const heldProviders = new Set<{ current: HeldProvider | undefined }>();
 
 /**
- * The connections mounted hooks still hold a provider for. Delete my key must
- * leave none: the connection carries the key.
+ * How many providers mounted hooks still hold. Each holds its connection, key
+ * included, so Delete my key must leave none. A turn still running keeps its
+ * own copy until it ends, which this does not count.
  */
-export const heldTurnConnections = (): Connection[] =>
-  [...heldProviders].flatMap((held) =>
-    held.current ? [held.current.connection] : []
-  );
+export const heldTurnProviders = (): number =>
+  [...heldProviders].filter((held) => held.current).length;
 
 export const useTurn = ({ open, draftKey }: TurnOptions): Turn => {
   const [, render] = useReducer((n: number) => n + 1, 0);
@@ -481,7 +480,7 @@ export const useTurn = ({ open, draftKey }: TurnOptions): Turn => {
   // A provider for a connection the store no longer holds is never sent on
   // again (a send rebuilds on any other connection), so it is dropped at once:
   // otherwise Delete my key leaves the key here until the next send. A turn
-  // still running keeps its own copy until it ends (`runTurn`)
+  // still running keeps its own copy until it ends (this hook's `runTurn`)
   useEffect(() => {
     heldProviders.add(provider);
     const changes = PgAssistant.onDidChange(() => {
