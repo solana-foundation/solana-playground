@@ -233,7 +233,7 @@ const balanceOf = async (address: PgWeb3.PublicKey) =>
   PgWeb3.lamportsToSol(await PgConnection.current.getBalance(address));
 
 /** What the SOL check found */
-type Funds = "enough" | "short" | "project-left";
+type Funds = "enough" | "short" | "project-left" | "running";
 
 /**
  * The SOL check a docs link asks for: the funding card when the Playground
@@ -260,6 +260,9 @@ const fundsFor =
 
     const balance = await balanceOf(current.publicKey);
     if (switches !== since) return "project-left";
+    // A run started elsewhere while the balance was read (the menu, the
+    // terminal): it shows, and the card would cover it
+    if (state.kind === "running") return "running";
     if (balance >= needed) return "enough";
 
     docsLinkTelemetry.track("docs_link_run_funding_shown", {
@@ -386,9 +389,12 @@ export const PgClientRun = {
    */
   askFirst() {
     listen();
-    // A run is going: the command would refuse this one anyway, and the
-    // question would replace the running state the stage row shows
-    if (state.kind === "running") return Promise.resolve(false);
+    const link = PgDocsLink.opened;
+    // A question is owed only for a link's code not agreed to yet. Then a
+    // run going refuses it: the question would replace the running state
+    // the stage row shows. Otherwise the command answers, as it always did
+    const isOwed = link !== undefined && link !== confirmedLink;
+    if (isOwed && state.kind === "running") return Promise.resolve(false);
     return isAgreed(switches);
   },
 

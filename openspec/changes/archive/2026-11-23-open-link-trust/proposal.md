@@ -30,7 +30,9 @@ off as an official docs example.
 
 - `client-v2/src/features/docs-link`: `lib/link.ts` (cap), `model/run.ts`
   (confirm step), `ui/BaseRunCallout.tsx` (claim), a new
-  `ui/BaseRunConfirm.tsx` built from `shared/ui/modal`, mounted by
-  `ui/RunButton.tsx`.
+  `ui/BaseRunConfirm.tsx` built from `shared/ui/modal`, connected as
+  `ui/RunConfirm.tsx` and mounted once in `views/flow/Flow.tsx`.
+- `client-v2/src/views/sidebar/explorer`: the menu's Run asks through
+  `PgClientRun.askFirst()`.
 - `client-v2/e2e/docs-open-link.e2e.spec.ts`: Run now confirms first.
 - `docs/open-in-playground-link.md`: the cap.

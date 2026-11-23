@@ -18,7 +18,7 @@ Goal: the three tasks of `tasks.md`, test first. Run from `client-v2/`.
    - a new link asks again; no link never asks.
    Then add `confirm` to `RunState`, `confirmRun`, `cancelRun`.
 4. **Dialog** (`ui/BaseRunConfirm.tsx` + test): renders name, code, claimed
-   host; Run and Cancel call back. Mount from `RunButton` on state `confirm`.
+   host; Run and Cancel call back. Mount the connected `RunConfirm` once in `views/flow/Flow.tsx`, beside the other dialog hosts.
    `BaseRunCallout` and `hasRun` treat `confirm` like `funding` (show
    `previous`).
 5. **e2e** (`e2e/docs-open-link.e2e.spec.ts`): every Run press on a link's

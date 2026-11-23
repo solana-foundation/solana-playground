@@ -36,5 +36,7 @@ that is no longer open.
 
 The dialog is `BaseRunConfirm`, built from `shared/ui/modal` and
 `shared/ui/code-block`, since a feature may not import the `ModalFrame`
-widget (the same reason `BaseFundDialog` gives). `RunButton` mounts it; only
-one `RunButton` is mounted at a time (`StageBar` renders one or the other).
+widget (the same reason `BaseFundDialog` gives). Its connected `RunConfirm`
+is mounted once in `views/flow/Flow.tsx`, beside the other dialog hosts: the
+question can come from the explorer's menu too (`PgClientRun.askFirst()`),
+and the stage row's Run is not mounted once the project has a program.

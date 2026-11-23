@@ -730,5 +730,24 @@ describe("PgClientRun", () => {
       await expect(PgClientRun.askFirst()).resolves.toBe(false);
       expect(PgClientRun.state.kind).toBe("running");
     });
+
+    it("lets a run from elsewhere through in a project no link opened, even mid-run", async () => {
+      const { PgClientRun } = await loadAsking();
+      startRun();
+
+      // The command then answers that a run is going, as it always did
+      await expect(PgClientRun.askFirst()).resolves.toBe(true);
+    });
+
+    it("keeps a run from the menu showing when Run's balance read ends", async () => {
+      const { PgClientRun, PgDocsLink } = await load();
+      PgDocsLink.open(QUICKSTART);
+      utils.duringBalance = startRun;
+
+      await PgClientRun.start();
+
+      expect(PgClientRun.state.kind).toBe("running");
+      expect(utils.PgCommand.run.execute).not.toHaveBeenCalled();
+    });
   });
 });
