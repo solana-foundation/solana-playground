@@ -88,5 +88,8 @@ describe("BaseRunConfirm", () => {
     confirmFor({ name: LINK.name, code: "x".repeat(400) });
     const line = document.querySelector("[data-slot=code-block-line]");
     expect(line?.className).toContain("whitespace-pre-wrap");
+    // Breaks inside a word only when the word cannot fit on a line
+    expect(line?.className).toContain("[overflow-wrap:anywhere]");
+    expect(line?.className).not.toContain("break-all");
   });
 });
