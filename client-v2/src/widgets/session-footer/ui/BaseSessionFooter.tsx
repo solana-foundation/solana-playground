@@ -55,6 +55,7 @@ const BaseSessionFooter = ({
   accountRef,
 }: BaseSessionFooterProps) => {
   const { primary, line } = accountLines(account);
+  const pending = account.session.status === "pending";
   return (
     // The status row sits where the prototype draws "● Devnet"
     <div className="flex w-full flex-col gap-1">
@@ -70,7 +71,15 @@ const BaseSessionFooter = ({
                 // 22 px avatar centred on the status dots and Get set up's
                 // circles (23 px), the name at 40 px with their words; on a
                 // phone a fingertip tall in the body type, its avatar at 32
-                className="h-10 gap-1.5 pl-1 text-[0.8125rem] [&_[data-slot=avatar]]:size-5.5 max-md:h-12 max-md:gap-3 max-md:pl-2 max-md:text-body max-md:[&_[data-slot=avatar]]:size-8"
+                // While signing in, Cancel sits on the row's right edge: the
+                // default menu-action room (pr-8) is narrower than its word, so
+                // the room is Cancel's width and a little air, and the line
+                // truncates before it
+                className={cn(
+                  "h-10 gap-1.5 pl-1 text-[0.8125rem] [&_[data-slot=avatar]]:size-5.5 max-md:h-12 max-md:gap-3 max-md:pl-2 max-md:text-body max-md:[&_[data-slot=avatar]]:size-8",
+                  pending &&
+                    "group-has-data-[sidebar=menu-action]/menu-item:pr-15"
+                )}
                 aria-label={accountLabel(account)}
                 aria-busy={account.sending || undefined}
               >
@@ -98,25 +107,33 @@ const BaseSessionFooter = ({
                     </span>
                   )}
                 </span>
-                {account.sending ? (
-                  <Spinner aria-label="Sending feedback" className="ml-auto" />
-                ) : (
-                  <ChevronsUpDown
-                    aria-hidden
-                    className="ml-auto text-muted-foreground"
-                  />
-                )}
+                {/* While signing in, Cancel is the row's only trailing item:
+                    the menu still opens on the row, and a send in flight
+                    still shows on the avatar */}
+                {!pending &&
+                  (account.sending ? (
+                    <Spinner
+                      aria-label="Sending feedback"
+                      className="ml-auto"
+                    />
+                  ) : (
+                    <ChevronsUpDown
+                      aria-hidden
+                      className="ml-auto text-muted-foreground"
+                    />
+                  ))}
               </SidebarMenuButton>
             </DropdownMenuTrigger>
             {menu}
           </DropdownMenu>
-          {account.session.status === "pending" && (
+          {pending && (
             // The popup cannot be asked whether it is still open once GitHub has
             // taken it over, so this is the way out short of the ten-minute
             // timeout -- see `popup-channel.ts`
             <SidebarMenuAction
               onClick={onCancelSignIn}
-              className="aspect-auto w-auto px-1.5 text-xs"
+              // Centred on the row at either height (40 px, 48 px on a phone)
+              className="aspect-auto w-auto px-1.5 text-xs peer-data-[size=lg]/menu-button:top-1/2 peer-data-[size=lg]/menu-button:-translate-y-1/2"
             >
               Cancel
             </SidebarMenuAction>
