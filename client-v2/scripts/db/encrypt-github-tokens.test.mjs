@@ -20,7 +20,7 @@ const TOKEN = "gho_plaintext";
  * The two statements the script sends, over rows in memory. `beforeUpdate`
  * runs between the read and the write, as a sign-in would.
  */
-const fakeDb = (rows, beforeUpdate = () => {}) => {
+const fakeDbWith = (beforeUpdate) => (rows) => {
   const query = async (text, params) => {
     if (text.startsWith("select")) {
       return {
@@ -48,6 +48,9 @@ const fakeDb = (rows, beforeUpdate = () => {}) => {
   };
   return query;
 };
+
+/** A database no sign-in writes to between the read and the write */
+const fakeDb = fakeDbWith(() => {});
 
 describe("encrypt-github-tokens", () => {
   it("encrypts a plaintext token and leaves no plaintext row", async () => {
@@ -100,9 +103,9 @@ describe("encrypt-github-tokens", () => {
 
   it("keeps what a sign-in wrote between the read and the write", async () => {
     const rows = [{ id: "a1", accessToken: TOKEN, refreshToken: null }];
-    const query = fakeDb(rows, () => {
+    const query = fakeDbWith(() => {
       rows[0].accessToken = "ab12";
-    });
+    })(rows);
 
     const result = await encryptPlaintextTokensWith(SECRET)(query);
 
