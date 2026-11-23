@@ -1,5 +1,6 @@
 import { ArrowRight, Check, FileJson } from "lucide-react";
 import type { ReactNode } from "react";
+import { useId } from "react";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { cn } from "@/shared/lib/utils";
@@ -71,7 +72,7 @@ const METHODS: { value: IdlBuildMethod; label: string; needs: string }[] = [
   },
 ];
 
-/** Under the picker, so it reads for either method: the build compiles and runs the project, imported ones included */
+/** For either method, since `anchor idl build` compiles and runs the project's code, whoever wrote it */
 const TRUST_NOTE =
   "The build runs this project's code: build only code you trust, and use Docker for someone else's project.";
 
@@ -256,7 +257,13 @@ const ComingSoonTrigger = () => (
  * download, the method's steps, and the IDL's upload at the foot. Only the
  * steps scroll, so the picker and the upload stay in view.
  */
-const Guide = ({ p }: { p: BaseIdlBuildGuideProps }) => (
+const Guide = ({
+  p,
+  noteId,
+}: {
+  p: BaseIdlBuildGuideProps;
+  noteId: string;
+}) => (
   <Dialog open={p.open} onOpenChange={p.onOpenChange}>
     <DialogTrigger asChild>
       <Button variant="outline" aria-label={TRIGGER}>
@@ -274,6 +281,7 @@ const Guide = ({ p }: { p: BaseIdlBuildGuideProps }) => (
         </DialogHeader>
         <RadioGroup
           aria-label="IDL build method"
+          aria-describedby={noteId}
           value={p.method}
           onValueChange={(value) => {
             if (isIdlBuildMethod(value)) p.onMethod(value);
@@ -297,7 +305,9 @@ const Guide = ({ p }: { p: BaseIdlBuildGuideProps }) => (
             </label>
           ))}
         </RadioGroup>
-        <p className="text-xs text-muted-foreground">{TRUST_NOTE}</p>
+        <p id={noteId} className="text-xs text-muted-foreground">
+          {TRUST_NOTE}
+        </p>
       </div>
       <ol
         aria-label="Steps"
@@ -327,8 +337,9 @@ const Guide = ({ p }: { p: BaseIdlBuildGuideProps }) => (
 );
 
 const BaseIdlBuildGuide = (p: BaseIdlBuildGuideProps) => {
+  const noteId = useId();
   if (p.availability === "coming-soon") return <ComingSoonTrigger />;
-  return <Guide p={p} />;
+  return <Guide p={p} noteId={noteId} />;
 };
 
 export default BaseIdlBuildGuide;

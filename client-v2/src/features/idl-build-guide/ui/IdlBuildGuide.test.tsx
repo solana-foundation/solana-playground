@@ -173,11 +173,15 @@ describe("features/idl-build-guide", () => {
     (method) => {
       const dialog = openFrom("build");
       pick(dialog, method);
-      expect(
-        within(dialog).getByText(
-          "The build runs this project's code: build only code you trust, and use Docker for someone else's project."
-        )
-      ).toBeTruthy();
+      const note = within(dialog).getByText(
+        "The build runs this project's code: build only code you trust, and use Docker for someone else's project."
+      );
+      // Read with the choice it guards, not only when someone browses the dialog
+      const picker = within(dialog).getByRole("radiogroup", {
+        name: "IDL build method",
+      });
+      expect(note.id).not.toBe("");
+      expect(picker.getAttribute("aria-describedby")).toBe(note.id);
     }
   );
 
