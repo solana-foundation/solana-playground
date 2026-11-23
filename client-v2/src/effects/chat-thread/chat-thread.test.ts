@@ -97,6 +97,23 @@ describe("the chat-thread effect", () => {
     expect(push).toHaveBeenCalledWith("t2");
   });
 
+  it("forgets the cap and the wait of a thread the index drops", async () => {
+    // A deleted project takes its thread with it, and no later push of that
+    // thread would clear the panel's warning
+    let dropped: (threadId: string) => void = () => {};
+    vi.spyOn(PgThreadIndex, "onDidDropThread").mockImplementation((cb) => {
+      dropped = cb;
+      return { dispose: () => {} };
+    });
+    const forget = vi.spyOn(PgChatSync, "forgetThread");
+    effect = chatThread();
+    await settle();
+
+    dropped("t2");
+
+    expect(forget).toHaveBeenCalledExactlyOnceWith("t2");
+  });
+
   it("waits for the last write to land before pushing", async () => {
     // `push` reads the thread from storage, and the store's writes are fired
     // and forgotten: pushing straight away could upload the copy from one

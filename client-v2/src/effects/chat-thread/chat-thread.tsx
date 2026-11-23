@@ -219,6 +219,11 @@ export const chatThread = (): Disposable => {
         pushThread(threadId).catch((e) => report("push awaiting thread", e));
       }
     }),
+    // A thread removed or moved to a fresh id is never pushed again under
+    // its old one, so nothing else would clear its cap or its wait
+    PgThreadIndex.onDidDropThread((threadId) =>
+      PgChatSync.forgetThread(threadId)
+    ),
     // A cap or a wait is one account's: the next account's pushes say their own
     PgSession.onDidChange(() => {
       const userId = PgSession.get()?.id;

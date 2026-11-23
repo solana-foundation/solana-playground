@@ -30,6 +30,9 @@ counts only rows that hold files.
 - The assistant panel shows the cap refusal: which cap, its figure, that new
   messages stay in this browser, and how to make room (delete a synced project
   you no longer need, which deletes its conversations).
+- No telemetry event is added, renamed or removed. The refusals go to the
+  persistence diagnostics, as every other sync failure does; the panel's cap
+  line and the `no-project` wait emit nothing.
 
 The figures sit in line with the project caps: an account syncs at most
 10 projects and 32 tutorials of at most 512 KiB each, about 21 MiB of code.

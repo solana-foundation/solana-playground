@@ -258,8 +258,8 @@ export class PgChatSync {
     }
 
     for (const body of bodies) {
-      const outcome = await PgChatSync._post(threadId, body);
-      if (outcome === "no-project")
+      const outcome = await PgChatSync._post({ threadId, userId }, body);
+      if (outcome === "no-project" && PgChatSync._stillSignedIn(userId))
         PgChatSync._awaiting.set(threadId, projectId);
       if (outcome !== "pushed") return outcome;
     }
@@ -322,6 +322,24 @@ export class PgChatSync {
     PgChatSync._emitLimit();
   }
 
+  /**
+   * Forget the cap and the wait of one thread: `PgThreadIndex` has removed
+   * it or moved it to a fresh id, so no push under this id will clear them.
+   */
+  static forgetThread(threadId: string) {
+    PgChatSync._awaiting.delete(threadId);
+    PgChatSync._setLimit(threadId, undefined);
+  }
+
+  /**
+   * Whether the account a push was sent for is still the signed-in one. A
+   * session change mid-request has already forgotten that account's caps and
+   * waits, and its answer must not put them back for the next account.
+   */
+  private static _stillSignedIn(userId: string) {
+    return PgSession.get()?.id === userId;
+  }
+
   /** Record a thread refused for a cap, or `undefined` once it is taken */
   private static _setLimit(
     threadId: string,
@@ -354,7 +372,7 @@ export class PgChatSync {
 
   /** One batch of a push. @returns how it ended -- see `PushOutcome` */
   private static async _post(
-    threadId: string,
+    { threadId, userId }: { threadId: string; userId: string },
     body: string
   ): Promise<PushOutcome> {
     try {
@@ -391,7 +409,8 @@ export class PgChatSync {
       if (response.status === 413) {
         const limit = readChatLimitExceeded(await PgChatSync._body(response));
         if (limit) {
-          PgChatSync._setLimit(threadId, limit);
+          if (PgChatSync._stillSignedIn(userId))
+            PgChatSync._setLimit(threadId, limit);
           PgChatSync._reportRefusal(`account cap: ${limit.reason}`);
           return "over-limit";
         }
@@ -410,8 +429,10 @@ export class PgChatSync {
   ): Promise<{ reason?: unknown } | undefined> {
     try {
       return await response.json();
-    } catch {
-      // The caller reads a missing body as "not ours"
+    } catch (e) {
+      // The caller reads a missing body as "not ours" and reports the status;
+      // this says why the body did not read, without its contents
+      report("read conversation refusal body", e);
       return undefined;
     }
   }
@@ -1065,6 +1086,62 @@ if (import.meta.vitest) {
             expect(PgChatSync.awaiting("w1")).toEqual([]);
             expect(changed).toHaveBeenCalledTimes(1);
             sub.dispose();
+          });
+
+          it("does not take a refusal for an account that has signed out meanwhile", async () => {
+            await signedIn();
+            await PgChatStorage.write(threadId, [item(1)]);
+            const switchedAnd = (status: number, body: unknown) =>
+              respondingWith(async () => {
+                // The session changes while the POST is out, as a refresh can
+                await PgSession.refreshWith({
+                  id: "u2",
+                  name: undefined,
+                  image: undefined,
+                  login: undefined,
+                });
+                PgChatSync.forgetAccountState();
+                return { ok: false, status, json: async () => body };
+              });
+
+            switchedAnd(413, {
+              error: "over",
+              reason: capped.reason,
+              limit: capped.limit,
+              count: capped.count,
+            });
+            expect(await PgChatSync.push(threadId)).toBe("over-limit");
+            expect(PgChatSync.limit()).toBeUndefined();
+
+            await signedIn();
+            switchedAnd(409, {
+              error: "No such project",
+              reason: "no-project",
+            });
+            expect(await PgChatSync.push(threadId)).toBe("no-project");
+            expect(PgChatSync.awaiting("w1")).toEqual([]);
+          });
+
+          it("forgets the cap and the wait of a thread that is dropped", async () => {
+            await signedIn();
+            await PgChatStorage.write(threadId, [item(1)]);
+            answering(413, {
+              error: "over",
+              reason: capped.reason,
+              limit: capped.limit,
+              count: capped.count,
+            });
+            await PgChatSync.push(threadId);
+            const other = await PgThreadIndex.ensure("w2");
+            await PgChatStorage.write(other, [item(2)]);
+            answering(409, { error: "No such project", reason: "no-project" });
+            await PgChatSync.push(other);
+
+            PgChatSync.forgetThread(threadId);
+            PgChatSync.forgetThread(other);
+
+            expect(PgChatSync.limit()).toBeUndefined();
+            expect(PgChatSync.awaiting("w2")).toEqual([]);
           });
 
           it("keeps the body cap's 413 an ordinary failure", async () => {

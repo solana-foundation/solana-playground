@@ -131,7 +131,7 @@ const measure = async (client, userId) => {
  * push that grows none, such as a re-push of stored messages, goes through
  * even when the account already holds more than a cap (one lowered since).
  */
-const refuseOverLimit = (limits) => (before, after) => {
+const refuseOverLimitWith = (limits) => (before, after) => {
   for (const [reason, key] of CHAT_LIMIT_ORDER) {
     if (after[key] > limits[key] && after[key] > before[key]) {
       throw new OverChatLimit({
@@ -392,7 +392,7 @@ export const appendMessagesWith = (limits) => async (userId, thread, items) => {
       "update conversations set updated_at = now() where id = $1",
       [conversationId]
     );
-    refuseOverLimit(limits)(before, await measure(client, userId));
+    refuseOverLimitWith(limits)(before, await measure(client, userId));
     await client.query("commit");
     return rowCount;
   } catch (e) {
