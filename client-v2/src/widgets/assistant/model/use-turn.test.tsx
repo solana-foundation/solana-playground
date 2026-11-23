@@ -40,7 +40,7 @@ import {
 } from "../../../views/sidebar/assistant/store";
 import { resetDefaultBackendProbe } from "./default-backend";
 import type { ConnectOpener } from "./use-turn";
-import { heldTurnProviders, useTurn } from "./use-turn";
+import { useTurn } from "./use-turn";
 
 // The real providers stream from the network; a turn here is whatever the
 // stub's `send` does
@@ -840,47 +840,6 @@ describe("useTurn", () => {
     // Seeded from what is rendered: the first exchange is on screen
     const seed = vi.mocked(createProvider).mock.calls[1][1];
     expect(seed?.length).toBeGreaterThan(0);
-  });
-
-  describe("the key the provider holds", () => {
-    const connectWith = (apiKey: string) =>
-      PgAssistant.connect({
-        id: "anthropic",
-        apiKey,
-        settings: { model: "claude-sonnet-5-5", effort: "high" },
-      });
-
-    const sentOnce = async () => {
-      connectWith("k");
-      const hook = renderHook(() => useTestTurn());
-      await act(() => hook.result.current.send("one"));
-      expect(heldTurnProviders()).toBe(1);
-      return hook;
-    };
-
-    it("is let go on Delete my key, not at the next send", async () => {
-      await sentOnce();
-
-      act(() => PgAssistant.disconnect());
-
-      expect(heldTurnProviders()).toBe(0);
-    });
-
-    it("is let go when another key replaces it, before any send", async () => {
-      await sentOnce();
-
-      act(() => connectWith("k2"));
-
-      expect(heldTurnProviders()).toBe(0);
-    });
-
-    it("is let go when the chat unmounts", async () => {
-      const { unmount } = await sentOnce();
-
-      unmount();
-
-      expect(heldTurnProviders()).toBe(0);
-    });
   });
 
   it("rebuilds the provider once what is rendered is dropped, with no thread open", async () => {

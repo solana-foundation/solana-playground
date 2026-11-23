@@ -28,7 +28,6 @@ import {
   rememberedChoice,
 } from "../../../views/sidebar/assistant/model/remembered-backend";
 import { threadBackend } from "../../../views/sidebar/assistant/model/thread-backend";
-import type { Provider } from "../../../views/sidebar/assistant/model/types";
 import {
   isDefaultBackend,
   TurnFailure,
@@ -46,6 +45,8 @@ import {
 import { DEFAULT_CONNECTION } from "./connection";
 import { probeDefaultBackend } from "./default-backend";
 import { KEY_OWNER } from "./head-label";
+import type { HeldProvider } from "./held-provider";
+import { releaseOnConnectionChange } from "./held-provider";
 import type { AssistantEvents } from "./telemetry";
 import { assistantTelemetry } from "./telemetry";
 
@@ -391,32 +392,6 @@ const unconnectedPreset = (): ConnectPreset | undefined => {
  */
 const restored = new WeakSet<Connection>();
 
-/** What a mounted hook keeps to send on: one provider per connection and conversation */
-interface HeldProvider {
-  connection: Connection;
-  /** The conversation its history was seeded from */
-  threadId: string | null;
-  /** `PgAssistant.conversation` when it was seeded */
-  conversation: number;
-  /**
-   * Every file in the context at a send since it was seeded: what its
-   * history may hold the content of
-   */
-  context: ReadonlySet<string>;
-  instance: Provider;
-}
-
-/** Every mounted hook's provider, so a test can see what still holds a key */
-const heldProviders = new Set<{ current: HeldProvider | undefined }>();
-
-/**
- * How many providers mounted hooks still hold. Each holds its connection, key
- * included, so Delete my key must leave none. A turn still running keeps its
- * own copy until it ends, which this does not count.
- */
-export const heldTurnProviders = (): number =>
-  [...heldProviders].filter((held) => held.current).length;
-
 export const useTurn = ({ open, draftKey }: TurnOptions): Turn => {
   const [, render] = useReducer((n: number) => n + 1, 0);
   useEffect(() => PgAssistant.onDidChange(render).dispose, []);
@@ -477,22 +452,9 @@ export const useTurn = ({ open, draftKey }: TurnOptions): Turn => {
   const [promptWaiting, setPromptWaiting] = useState(false);
 
   const provider = useRef<HeldProvider | undefined>(undefined);
-  // A provider for a connection the store no longer holds is never sent on
-  // again (a send rebuilds on any other connection), so it is dropped at once:
-  // otherwise Delete my key leaves the key here until the next send. A turn
-  // still running keeps its own copy until it ends (this hook's `runTurn`, not `shared/lib/ai`'s)
-  useEffect(() => {
-    heldProviders.add(provider);
-    const changes = PgAssistant.onDidChange(() => {
-      if (provider.current?.connection !== PgAssistant.connection) {
-        provider.current = undefined;
-      }
-    });
-    return () => {
-      changes.dispose();
-      heldProviders.delete(provider);
-    };
-  }, []);
+  // A turn still running keeps its own copy until it ends (this hook's
+  // `runTurn`, not `shared/lib/ai`'s)
+  useEffect(() => releaseOnConnectionChange(provider).dispose, []);
   const turn = liveTurn;
   // Set from the first `send` until its turn starts, so a second send in the
   // meantime (a double Enter, a suggestion clicked twice) cannot start another
