@@ -146,7 +146,12 @@ export const fetchBuffersWith =
           memcmp(BigInt(VARIANT_SIZE + OPTION_SIZE), authority),
         ],
       })
-      .send();
+      .send()
+      .catch((e: unknown) => {
+        throw new Error(`Unable to list buffers: ${describeError(e)}`, {
+          cause: e,
+        });
+      });
 
     return accounts.map(({ pubkey, account }): BufferAccount => {
       const data = toBytes(getBase64Encoder().encode(account.data[0]));

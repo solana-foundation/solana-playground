@@ -399,7 +399,7 @@ describe("commands/solana", () => {
         fetchBuffersWith(clientWith("confirmed")(URL_OF_RECORDING))(
           "399rcrEWr3hVAhVy3moRPm5UKy8RmZpAFTZDDu3kksfT"
         )
-      ).rejects.toThrow();
+      ).rejects.toThrow(/^Unable to list buffers: HTTP error \(429\)/);
     });
   });
 
@@ -748,7 +748,7 @@ describe("commands/solana", () => {
           address: "399rcrEWr3hVAhVy3moRPm5UKy8RmZpAFTZDDu3kksfT",
           sign: async (wire) => wire,
         })
-      ).rejects.toThrow();
+      ).rejects.toThrow(/^Unable to list buffers: HTTP error \(429\)/);
     });
   });
 });
