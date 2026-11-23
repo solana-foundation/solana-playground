@@ -39,7 +39,13 @@ export {
 
 export { DELETED_REASON, isDeletedScope } from "./model/deleted.mjs";
 
-export { getPool, isConfigured, isEnabled, query } from "./model/db.mjs";
+export {
+  getPool,
+  isConfigured,
+  isEnabled,
+  query,
+  transaction,
+} from "./model/db.mjs";
 
 export { missingDatabaseEnv } from "./config.mjs";
 
@@ -50,6 +56,7 @@ export {
 } from "./model/project-write.mjs";
 
 export {
+  clearDeletedProjectNames,
   deleteProject,
   getProject,
   listProjects,

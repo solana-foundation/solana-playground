@@ -1183,6 +1183,35 @@ describe("projects", { skip: !DB && "DATABASE_URL not set" }, () => {
     assert.deepEqual(await versions(), {});
   });
 
+  it("clears the name of a deleted project and names a restarted tutorial again", async () => {
+    const name = (id) =>
+      query("select name from projects where id = $1 and user_id = $2", [
+        id,
+        userId,
+      ]).then(({ rows }) => rows[0].name);
+    await put({ files });
+    await saveProject(userId, {
+      id: "tut:named",
+      name: "Named tutorial",
+      kind: "tutorial",
+      files,
+    });
+
+    await deleteProject(userId, "p1");
+    await deleteProject(userId, "tut:named");
+
+    assert.equal(await name("p1"), "");
+    assert.equal(await name("tut:named"), "");
+
+    await saveProject(userId, {
+      id: "tut:named",
+      name: "Named tutorial",
+      kind: "tutorial",
+      files,
+    });
+    assert.equal(await name("tut:named"), "Named tutorial");
+  });
+
   it("omits tombstoned projects from the list", async () => {
     await put({ files });
     await saveProject(userId, {

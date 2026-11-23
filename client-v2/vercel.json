@@ -15,6 +15,7 @@
       "maxDuration": 300
     }
   },
+  "crons": [{ "path": "/api/retention", "schedule": "0 3 * * *" }],
   "headers": [
     {
       "source": "/(.*)",

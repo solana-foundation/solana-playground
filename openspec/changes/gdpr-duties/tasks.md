@@ -7,7 +7,7 @@ after 1.1 is merged and before the release.
 
 ## 1. Server
 
-- [ ] 1.1 Retention job and project names (HOO-2955). `deleteProject` sets
+- [x] 1.1 Retention job and project names (HOO-2955). `deleteProject` sets
   `name = ''` in its transaction. `api/retention.mjs` answers `GET` with
   `Authorization: Bearer $CRON_SECRET`, runs the three steps of the
   `data-retention` spec, each in its own `try`, and answers with their counts.
@@ -18,7 +18,7 @@ after 1.1 is merged and before the release.
   `data-retention` scenario, a `projects.test.mjs` case that a deleted
   project's row holds an empty name and a restarted tutorial its new name,
   and `yarn test-api` passing.
-- [ ] 1.2 `DELETE /api/account` (HOO-2955). `features/build-server` exports
+- [x] 1.2 `DELETE /api/account` (HOO-2955). `features/build-server` exports
   `scrubIdentity(query, userId)`; `persistence/server.mjs` exports
   `transaction`; `features/auth/server.mjs` exports the token read and the
   grant revocation. `api/account.mjs` reads the token, runs the scrub and the

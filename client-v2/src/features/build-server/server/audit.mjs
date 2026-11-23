@@ -105,3 +105,38 @@ export const finishAuditWithin =
 
 /** `finishAuditWithin` with the production deadline */
 export const finishAuditWith = finishAuditWithin(FINISH_DEADLINE_MS);
+
+/** How long a `build_audit` row is kept, in days */
+export const AUDIT_RETENTION_DAYS = 90;
+
+/**
+ * Delete the rows older than {@link AUDIT_RETENTION_DAYS}. Run daily by the
+ * retention job.
+ *
+ * @param {(text: string, params?: unknown[]) => Promise<{ rowCount: number | null }>} query
+ * @returns {Promise<number>} how many rows were deleted
+ */
+export const deleteExpiredAudit = async (query) => {
+  const { rowCount } = await query(
+    `delete from build_audit
+      where at < now() - make_interval(days => $1)`,
+    [AUDIT_RETENTION_DAYS]
+  );
+  return rowCount ?? 0;
+};
+
+/**
+ * Remove the GitHub identity from a user's rows, keeping the rest. The table
+ * has no foreign key on purpose, so deleting the account does not reach it;
+ * account deletion runs this in the same transaction as the `user` delete.
+ *
+ * @param {Query} query the transaction's, so the update rolls back with it
+ * @param {string} userId
+ */
+export const scrubIdentity = async (query, userId) => {
+  await query(
+    `update build_audit set login = null, github_id = null
+      where user_id = $1`,
+    [userId]
+  );
+};
