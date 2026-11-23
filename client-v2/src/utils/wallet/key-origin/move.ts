@@ -587,7 +587,8 @@ if (import.meta.vitest) {
         async (_, result) => {
           const text = "{not json";
           const local = memoryLocal(text);
-          const store = memoryStore(walletOf(accountsOf(1)));
+          const record = walletOf(accountsOf(1));
+          const store = memoryStore(record);
           const { frame } = fakeKeyPage();
           const unconfirmed: KeyFrame = {
             request: <T>(body: Parameters<KeyFrame["request"]>[0]) =>
@@ -597,10 +598,15 @@ if (import.meta.vitest) {
             close: () => {},
           };
 
-          await walletStorageWith(store)(local).readMovingKeys(
+          const read = await walletStorageWith(store)(local).readMovingKeys(
             keyMoveWith(async () => unconfirmed)
           );
 
+          expect(read).toEqual({
+            kind: "wallet",
+            wallet: keyless(record),
+            setAside: 0,
+          });
           expect(local.items.get(WALLET_LOCAL_KEY)).toBe(text);
           expect(local.items.get("wallet.unreadable")).toBe(text);
         }

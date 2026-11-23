@@ -743,9 +743,9 @@ if (import.meta.vitest) {
 
     it.each([
       ["a later build", KEY_PROTOCOL_VERSION + 1],
-      // Version 1 predates `keep`: its key page would drop the request and
+      // Some version-1 key pages lack `keep`: one would drop the request and
       // leave the read waiting out the request timeout
-      ["a build without keep", 1],
+      ["version 1", 1],
     ])("rejects a key page of %s at the handshake", async (_, version) => {
       const { connected, target, handed } = start();
       readyWith(version)(target, ORIGIN);
