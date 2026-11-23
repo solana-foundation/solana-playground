@@ -67,6 +67,7 @@ vi.mock("@/utils", () => ({
       { name: "Phantom", icon: "data:," },
       { name: "Solflare", icon: "data:," },
     ],
+    accounts: [{}],
   },
   PgConnection: {
     get cluster() {

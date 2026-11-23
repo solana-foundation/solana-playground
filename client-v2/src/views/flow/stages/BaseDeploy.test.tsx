@@ -639,7 +639,7 @@ describe("BaseDeploy", () => {
     expect(screen.getByLabelText("Who pays").textContent).toBe(
       `From Phantom · ${shortKey(
         WALLET
-      )} · 4.20 SOLPhantom asks twice: to send SOL for the deploy, then to deploy.`
+      )} · 4.2 SOLPhantom asks twice: to send SOL for the deploy, then to deploy.`
     );
     // The note is a line of its own, so the payer stays one line
     expect(
@@ -654,7 +654,7 @@ describe("BaseDeploy", () => {
       <BaseDeploy {...props({ built: true, history: [] })} />
     );
     expect(screen.getByLabelText("Who pays").textContent).toBe(
-      `From your Playground wallet · ${shortKey(WALLET)} · 4.20 SOL`
+      `From your Playground wallet · ${shortKey(WALLET)} · 4.2 SOL`
     );
     expect(screen.getByText(/^Deploying sends/).textContent).toBe(
       "Deploying sends the compiled program to devnet."
@@ -670,7 +670,7 @@ describe("BaseDeploy", () => {
       />
     );
     expect(screen.getByLabelText("Who pays").textContent).toBe(
-      `From your wallet · ${shortKey(WALLET)} · 4.20 SOL`
+      `From your wallet · ${shortKey(WALLET)} · 4.2 SOL`
     );
 
     rerender(

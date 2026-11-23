@@ -11,7 +11,12 @@ import { shortKey } from "@/shared/lib/short-key";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import { CopyButton } from "@/shared/ui/copy-button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/popover";
+import {
+  Popover,
+  PopoverClose,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/shared/ui/popover";
 import { Separator } from "@/shared/ui/separator";
 import { Spinner } from "@/shared/ui/spinner";
 import { Tag } from "@/shared/ui/tag";
@@ -87,6 +92,11 @@ export interface BaseWalletChipProps {
   onDisconnect?: () => void;
   /** A deploy from the connected wallet runs: it cannot be disconnected yet */
   isDisconnectHeld?: boolean;
+  /** Opens the Playground wallet's own window, where its accounts are added
+   * and switched; an extension's accounts live in the extension */
+  onManage?: () => void;
+  /** The Playground account that pays, named once there are two or more */
+  account?: string;
 }
 
 const fmt = (sol: number) => `${Number(sol.toFixed(4))} SOL`;
@@ -127,6 +137,8 @@ const BaseWalletChip = ({
   onConnect,
   onDisconnect,
   isDisconnectHeld = false,
+  onManage,
+  account,
 }: BaseWalletChipProps) => {
   const short = shortAddress(address);
   const shown = balance === undefined ? "…" : fmt(balance);
@@ -172,6 +184,9 @@ const BaseWalletChip = ({
                 />
               )}
               {owner ? owner.name : "Playground wallet"}
+              {!owner && account && (
+                <span className="text-muted-foreground">· {account}</span>
+              )}
             </span>
             {cluster && (
               <Tag variant={cluster === "mainnet" ? "warning" : "neutral"}>
@@ -211,12 +226,19 @@ const BaseWalletChip = ({
               )}
             </>
           )}
+          {/* Mid-deploy there is nothing to connect, the accounts stay */}
+          {!owner && onManage && !(onConnect && onConnectOpen) && (
+            <div className="mt-3">
+              <AccountsButton onManage={onManage} />
+            </div>
+          )}
           {!owner && onConnect && onConnectOpen && (
             <ConnectBlock
               wallets={wallets}
               connect={connect}
               onConnectOpen={onConnectOpen}
               onConnect={onConnect}
+              onManage={onManage}
             />
           )}
         </div>
@@ -345,6 +367,19 @@ const BaseWalletChip = ({
 };
 
 /**
+ * The Playground wallet's own window, where its accounts are added and
+ * switched. The chip and the account menu opened two different wallets, and
+ * only one of them could switch (Sergey, 23 Nov)
+ */
+const AccountsButton = ({ onManage }: { onManage: () => void }) => (
+  <PopoverClose asChild>
+    <Button variant="secondary" size="sm" onClick={onManage}>
+      Accounts
+    </Button>
+  </PopoverClose>
+);
+
+/**
  * Connecting an extension, under the Playground wallet: one button, then the
  * installed wallets, a wait for the one picked, or its decline. There is no
  * Cancel while waiting: an extension's request cannot be withdrawn, and a late
@@ -355,22 +390,24 @@ const ConnectBlock = ({
   connect,
   onConnectOpen,
   onConnect,
+  onManage,
 }: {
   wallets: ChipWallet[];
   connect: ConnectState;
   onConnectOpen: () => void;
   onConnect: (name: string) => void;
+  onManage?: () => void;
 }) => {
   if (connect.kind === "idle") {
+    // Which wallet pays is this block's question, so the Playground
+    // accounts sit beside the extensions, not under the top-up (Almaz, 23 Nov)
     return (
-      <Button
-        variant="secondary"
-        size="sm"
-        className="mt-3 w-full"
-        onClick={onConnectOpen}
-      >
-        Connect a wallet
-      </Button>
+      <div className={cn("mt-3 grid gap-2", onManage && "grid-cols-2")}>
+        {onManage && <AccountsButton onManage={onManage} />}
+        <Button variant="secondary" size="sm" onClick={onConnectOpen}>
+          Connect a wallet
+        </Button>
+      </div>
     );
   }
   return (

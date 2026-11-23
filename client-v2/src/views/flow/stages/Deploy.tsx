@@ -134,6 +134,8 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
         balance: typeof balance === "number" ? balance : undefined,
         playground: wallet.isPg === true,
         name: wallet.isPg ? undefined : wallet.name,
+        account:
+          wallet.isPg && PgWallet.accounts.length > 1 ? wallet.name : undefined,
       }
     : undefined;
 

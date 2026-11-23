@@ -286,6 +286,10 @@ const WalletChip = ({ isSignedOut, isSignInFailure }: WalletChipProps) => {
         }
         onConnect={isDeploying ? undefined : (name) => void handleConnect(name)}
         isDisconnectHeld={isDeploying}
+        onManage={() => (PgWallet.show = true)}
+        account={
+          !owner && PgWallet.accounts.length > 1 ? wallet.name : undefined
+        }
         onDisconnect={() => {
           if (!owner) return;
           disconnectStandard(owner.name)

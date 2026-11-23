@@ -254,7 +254,7 @@ it("keeps a large balance and the address on one line each", async () => {
       wallet: { address: WALLET.address, balance: 940000, name: WALLET.name },
     })
   );
-  const balance = screen.getByText("940000.00 SOL");
+  const balance = screen.getByText("940000 SOL");
   expect(balance.classList).toContain("whitespace-nowrap");
   expect(balance.classList).toContain("shrink-0");
   const address = screen.getByText("7Hq5…Xk2P");

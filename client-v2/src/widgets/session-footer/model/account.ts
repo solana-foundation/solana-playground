@@ -118,7 +118,7 @@ export const githubProfileUrl = (login: string) =>
   `https://github.com/${login}`;
 
 export const formatBalance = (balance: number | null) =>
-  `${balance === null ? "…" : balance.toFixed(2)} SOL`;
+  `${balance === null ? "…" : Number(balance.toFixed(4))} SOL`;
 
 export const accountUser = ({ session }: AccountView) =>
   session.status === "signed-in" ? session.user : undefined;
@@ -545,7 +545,7 @@ if (import.meta.vitest) {
     describe("formatBalance", () => {
       it("waits with an ellipsis rather than claiming zero, unit kept", () => {
         expect(formatBalance(null)).toBe("… SOL");
-        expect(formatBalance(0)).toBe("0.00 SOL");
+        expect(formatBalance(0)).toBe("0 SOL");
       });
     });
 

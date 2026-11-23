@@ -62,6 +62,8 @@ export interface DeployPayer {
   playground: boolean;
   /** A connected wallet's own name, as "Phantom"; absent for the Playground wallet */
   name?: string;
+  /** The Playground account that pays, named once there are two or more */
+  account?: string;
 }
 
 export interface BaseDeployProps {
@@ -173,11 +175,15 @@ const payerLine = (p: BaseDeployProps) => {
       : "From your Playground wallet";
   }
   const balance =
-    payer.balance === undefined ? "" : ` · ${payer.balance.toFixed(2)} SOL`;
+    payer.balance === undefined
+      ? ""
+      : ` · ${Number(payer.balance.toFixed(4))} SOL`;
   if (!payer.playground && payer.name) {
     return `From ${payer.name} · ${shortKey(payer.address)}${balance}`;
   }
-  const which = payer.playground ? "your Playground wallet" : "your wallet";
+  const which = payer.playground
+    ? `your Playground wallet${payer.account ? ` · ${payer.account}` : ""}`
+    : "your wallet";
   return `From ${which} · ${shortKey(payer.address)}${balance}`;
 };
 
