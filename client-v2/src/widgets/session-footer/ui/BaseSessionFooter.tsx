@@ -55,7 +55,7 @@ const BaseSessionFooter = ({
   accountRef,
 }: BaseSessionFooterProps) => {
   const { primary, line } = accountLines(account);
-  const pending = account.session.status === "pending";
+  const isPending = account.session.status === "pending";
   return (
     // The status row sits where the prototype draws "● Devnet"
     <div className="flex w-full flex-col gap-1">
@@ -77,7 +77,7 @@ const BaseSessionFooter = ({
                 // truncates before it
                 className={cn(
                   "h-10 gap-1.5 pl-1 text-[0.8125rem] [&_[data-slot=avatar]]:size-5.5 max-md:h-12 max-md:gap-3 max-md:pl-2 max-md:text-body max-md:[&_[data-slot=avatar]]:size-8",
-                  pending &&
+                  isPending &&
                     "group-has-data-[sidebar=menu-action]/menu-item:pr-15"
                 )}
                 aria-label={accountLabel(account)}
@@ -113,7 +113,7 @@ const BaseSessionFooter = ({
                 {account.sending ? (
                   <Spinner aria-label="Sending feedback" className="ml-auto" />
                 ) : (
-                  !pending && (
+                  !isPending && (
                     <ChevronsUpDown
                       aria-hidden
                       className="ml-auto text-muted-foreground"
@@ -124,7 +124,7 @@ const BaseSessionFooter = ({
             </DropdownMenuTrigger>
             {menu}
           </DropdownMenu>
-          {pending && (
+          {isPending && (
             // The popup cannot be asked whether it is still open once GitHub has
             // taken it over, so this is the way out short of the ten-minute
             // timeout -- see `popup-channel.ts`
