@@ -168,7 +168,10 @@ Asked to build something in the client, look in `openspec/changes/` first.
   with the `wallet` feature, and the CLIs' `wallet_signer()` calls.
 - **`server/` carries fork-owned changes that an upstream sync must keep,**
   so a conflict there is resolved by hand, never by taking upstream's file:
-  the share routes and MongoDB are gone (`e5d1cf747`); the stable build runs
+  the share routes and MongoDB are gone (`e5d1cf747`); so is the `unstable`
+  feature's `/bundle` route, with `server/packages/`, `images/Dockerfile.bundle`
+  and the npm files of `templates/legacy`, which nothing deployed and which
+  held Dependabot alerts no release fixes (HOO-2901); the stable build runs
   Anchor 1.1.2 without IDL generation (`c45a8dcd9`); `routes/build.rs` gives
   each request `REQUEST_TIME_LIMIT`, wait included, holds the slot until the
   build process ends and sweeps old build directories (HOO-2874, #174); and

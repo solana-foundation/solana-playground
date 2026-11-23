@@ -18,7 +18,6 @@ unstable = []
 [dependencies]
 anyhow = "1.0.102"
 axum = "0.8.9"
-blake3 = "1.8.7"
 dotenv = "0.15.0"
 libc = "0.2.186"
 regex = "1.12.3"
@@ -35,10 +34,5 @@ uuid = { version = "1.23.1", features = ["v4", "fast-rng"] }
 [[bin]]
 name = "build-program"
 path = "src/processes/build.rs"
-required-features = ["unstable"]
-
-[[bin]]
-name = "bundle"
-path = "src/processes/bundle.rs"
 required-features = ["unstable"]
 

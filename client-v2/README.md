@@ -175,8 +175,7 @@ kept out of the image.
 
 The `v2-unstable` profile runs the same services with `server-unstable` in
 place of `server-standalone`: the build server compiled with
-`--features unstable`, which serves `/unstable/build` and `/unstable/bundle`
-and runs each build in a sandbox container. It is for local use only: the
+`--features unstable`, which serves `/unstable/build` and runs each build in a sandbox container. It is for local use only: the
 service mounts `/var/run/docker.sock`, which gives the container control of
 the host's Docker daemon.
 
