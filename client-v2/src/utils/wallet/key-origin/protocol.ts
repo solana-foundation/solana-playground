@@ -1,5 +1,12 @@
-/** Version of the protocol between the app page and the key page */
-export const KEY_PROTOCOL_VERSION = 1;
+/**
+ * Version of the protocol between the app page and the key page. Bumped
+ * whenever a request is added: a key page of an older build drops a request
+ * it does not know, and the app would wait out the request timeout; with the
+ * version bumped, the handshake fails at once instead.
+ *
+ * 2: `keep`
+ */
+export const KEY_PROTOCOL_VERSION = 2;
 
 /** `Omit` that keeps each member of a union apart */
 export type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
@@ -138,6 +145,15 @@ export const signatureOf = resultFor(isSignature)("sign");
 
 /** An `accounts` or `adopt` reply's result: every public key the key page holds */
 export const publicKeysOf = resultFor(isPublicKeys)("adopt");
+
+// eslint-disable-next-line unicorn/no-null -- the wire's "nothing"
+const isNothing = (x: unknown): x is null => x === null;
+
+/**
+ * A `keep` reply's result: `null` once the key page stored the text. Anything
+ * else, a missing result included, is no confirmation.
+ */
+export const keptOf = resultFor(isNothing)("keep");
 
 /**
  * @param x a message received from another window
