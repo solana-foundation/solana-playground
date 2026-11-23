@@ -63,9 +63,9 @@ export const readChatLimitExceeded = (body) => {
   // eslint-disable-next-line unicorn/no-null -- the contract: `null` is "none"
   if (!body || typeof body !== "object") return null;
   const b = /** @type {Record<string, unknown>} */ (body);
-  const known = CHAT_LIMIT_ORDER.some(([reason]) => reason === b.reason);
+  const isKnown = CHAT_LIMIT_ORDER.some(([reason]) => reason === b.reason);
   // eslint-disable-next-line unicorn/no-null -- the contract: `null` is "none"
-  if (!known || !isCount(b.limit) || !isCount(b.count)) return null;
+  if (!isKnown || !isCount(b.limit) || !isCount(b.count)) return null;
   return {
     reason: /** @type {ChatLimitReason} */ (b.reason),
     limit: /** @type {number} */ (b.limit),
