@@ -69,7 +69,10 @@ const BaseRunConfirm: FC<BaseRunConfirmProps> = ({
         >
           <ModalHeader className="md:pb-4">
             <ModalTitle>Run code from a link?</ModalTitle>
-            <ModalDescription>
+          </ModalHeader>
+          {/* The header holds the title alone: on a phone it is a 60 px bar */}
+          <ModalBody className="md:pt-5">
+            <ModalDescription className="mb-4">
               {link.from
                 ? `The link says this code comes from ${hostOf(
                     link.from
@@ -78,8 +81,6 @@ const BaseRunConfirm: FC<BaseRunConfirmProps> = ({
               It runs with your Playground wallet and can sign transactions with
               it. Read it before you run it.
             </ModalDescription>
-          </ModalHeader>
-          <ModalBody className="md:pt-5">
             <CodeBlock>
               <CodeBlockHeader>
                 <CodeBlockTitle>{link.name}</CodeBlockTitle>
