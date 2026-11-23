@@ -5,6 +5,7 @@ import { PgCommand, PgConnection, PgExplorer, PgWallet, PgWeb3 } from "@/utils";
 import type { RunResult } from "@/utils/js-runtime";
 import { missingPackageOf } from "@/utils/js-runtime";
 
+import type { DocsLink } from "../lib/link";
 import { PgDocsLink } from "./opened";
 import type { RunOutcome, WalletOrigin } from "./telemetry";
 import { docsLinkTelemetry } from "./telemetry";
@@ -35,6 +36,16 @@ export type RunState =
       previous: RestingState;
     }
   | {
+      /**
+       * The first Run of a link's code waits for the user to read it: the
+       * dialog shows the link's file and the source it claims
+       */
+      kind: "confirm";
+      link: DocsLink;
+      /** What Cancel goes back to */
+      previous: RestingState;
+    }
+  | {
       kind: "funding";
       address: string;
       balance: number;
@@ -61,8 +72,25 @@ let started = 0;
 let switches = 0;
 let isListening = false;
 const listeners = new Set<Listener>();
+/**
+ * The link whose code the user agreed to run. Compared by identity: a new
+ * link is a new object, so its code is asked about again.
+ */
+let confirmedLink: DocsLink | undefined;
+/** Answers the open question before the first Run, if one is open */
+let answer: ((isYes: boolean) => void) | undefined;
+
+/** Answer the open question, if any, once */
+const settle = (isYes: boolean) => {
+  const pending = answer;
+  answer = undefined;
+  pending?.(isYes);
+};
 
 const set = (next: RunState) => {
+  // Any state but the question closes it: a project that switched, a run
+  // typed in the terminal. Run and Cancel answer before they set
+  if (next.kind !== "confirm") settle(false);
   state = next;
   listeners.forEach((listener) => listener(next));
 };
@@ -74,7 +102,11 @@ const reset = () => {
 
 /** @returns what Not now should return to from the current state */
 const restingOf = (current: RunState): RestingState => {
-  if (current.kind === "funding" || current.kind === "running") {
+  if (
+    current.kind === "funding" ||
+    current.kind === "running" ||
+    current.kind === "confirm"
+  ) {
     return current.previous;
   }
   return current;
@@ -168,6 +200,27 @@ const listen = () => {
   });
 
   isListening = true;
+};
+
+/**
+ * Ask before the first Run of code a docs link opened: the link is anyone's
+ * to write, and its code runs with the Playground wallet. Asked before the
+ * wallet setup, so Cancel leaves nothing behind.
+ *
+ * @param since `switches` when the press began
+ * @returns whether to go on: no link, a link already agreed to, or Run
+ */
+const isAgreed = async (since: number): Promise<boolean> => {
+  const link = PgDocsLink.opened;
+  if (!link || link === confirmedLink) return true;
+  const isYes = await new Promise<boolean>((resolve) => {
+    answer = resolve;
+    set({ kind: "confirm", link, previous: restingOf(state) });
+  });
+  // An answer for a project that is no longer open runs nothing
+  if (!isYes || switches !== since || PgDocsLink.opened !== link) return false;
+  confirmedLink = link;
+  return true;
 };
 
 /** The wallet's balance now, read from the chain rather than the cached one */
@@ -310,6 +363,7 @@ export const PgClientRun = {
     isStarting = true;
     const since = switches;
     try {
+      if (!(await isAgreed(since))) return;
       const wallet = await walletForRun();
       if (!wallet || switches !== since) return;
       if ((await fundsFor(since)(wallet)) !== "enough") return;
@@ -317,6 +371,20 @@ export const PgClientRun = {
       isStarting = false;
     }
     await runScripts();
+  },
+
+  /** The question's Run: the user read the link's code and runs it */
+  confirmRun() {
+    if (state.kind !== "confirm") return;
+    const { previous } = state;
+    settle(true);
+    set(previous);
+  },
+
+  /** The question's Cancel, or its dialog closed: nothing runs */
+  cancelRun() {
+    if (state.kind !== "confirm") return;
+    set(state.previous);
   },
 
   /** The funding card's Check again */

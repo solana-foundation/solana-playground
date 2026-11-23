@@ -107,12 +107,16 @@ const stubDevnet = async (page: Page) => {
   await page.routeWebSocket(DEVNET_WS, () => {});
 };
 
+const confirmDialog = (page: Page) => page.locator("#client-run-confirm");
+
 /**
- * Presses Run. A fresh browser has no Playground wallet yet, so Run first
+ * Presses Run. The first Run of a link's code asks first, which the test
+ * answers Run; a fresh browser has no Playground wallet yet, so Run then
  * opens its setup, which the test completes.
  */
 const run = async (page: Page) => {
   await page.locator("#flow-run").click();
+  await confirmDialog(page).getByRole("button", { name: "Run" }).click(LONG);
   await page.getByRole("button", { name: "Continue" }).click(LONG);
 };
 
@@ -135,7 +139,10 @@ test.describe("docs-open-link", () => {
     await expect(page.locator("#flow-run")).toHaveText("Run");
     await expect(page.locator("#flow-stage-tab-build")).toHaveCount(0);
     await expect(callout(page)).toHaveAttribute("data-state", "source");
-    await expect(callout(page)).toContainText("From solana.com: Quickstart");
+    await expect(callout(page)).toContainText("Opened from a link: Quickstart");
+    await expect(callout(page)).toContainText(
+      "The link says it comes from solana.com"
+    );
     await expect(
       callout(page).getByRole("link", { name: "View the docs page" })
     ).toHaveAttribute("href", DOCS_PAGE);
@@ -143,7 +150,40 @@ test.describe("docs-open-link", () => {
 
   test("docs-open-link: No title", async ({ page }) => {
     await page.goto(docsLink({ name: "hello.ts", code: "console.log(1)" }));
-    await expect(callout(page)).toContainText("From a docs link: hello", LONG);
+    await expect(callout(page)).toContainText(
+      "Opened from a link: hello",
+      LONG
+    );
+  });
+
+  test("docs-open-link: A crafted link with a solana.com source", async ({
+    page,
+  }) => {
+    await page.goto(
+      docsLink({
+        name: "airdrop.ts",
+        code: 'console.log("not from the docs")',
+        title: "Official Quickstart",
+        from: DOCS_PAGE,
+      })
+    );
+
+    await expect(callout(page)).toHaveAttribute("data-state", "source", LONG);
+    await expect(callout(page)).not.toContainText("From solana.com");
+    await expect(callout(page)).toContainText(
+      "Playground can't check that, so read the code before you run it"
+    );
+  });
+
+  test("docs-open-link: Above the cap", async ({ page }) => {
+    await page.goto(
+      docsLink({ name: "quickstart.ts", code: QUICKSTART, sol: 2 })
+    );
+    await expect(page.locator("#docs-link-broken")).toContainText(
+      "This link is broken",
+      LONG
+    );
+    await expect(page.locator("#flow-run")).toHaveCount(0);
   });
 
   test("docs-open-link: A truncated link", async ({ page }) => {
@@ -186,6 +226,41 @@ test.describe("client-run", () => {
     await expect(callout(page)).toHaveAttribute("data-state", "done");
     await expect(callout(page)).toContainText(/Ran in \d+ s/);
     await expect(page.locator(".xterm-rows")).toContainText("Running client");
+  });
+
+  test("client-run: The Quickstart after one confirmation", async ({
+    page,
+  }) => {
+    await page.goto(
+      docsLink({ name: "hello.ts", code: 'console.log("hi")', from: DOCS_PAGE })
+    );
+    await page.locator("#flow-run").click(LONG);
+
+    const dialog = confirmDialog(page);
+    await expect(dialog).toContainText("hello.ts");
+    await expect(dialog).toContainText('console.log("hi")');
+    await expect(dialog).toContainText(
+      "The link says this code comes from solana.com"
+    );
+    await dialog.getByRole("button", { name: "Run" }).click();
+    await page.getByRole("button", { name: "Continue" }).click(LONG);
+    await expect(callout(page)).toHaveAttribute("data-state", "done", LONG);
+
+    await page.locator("#flow-run").click();
+    await expect(callout(page)).toHaveAttribute("data-state", "done", LONG);
+    await expect(confirmDialog(page)).toHaveCount(0);
+    await expect(page.locator(".xterm-rows")).toContainText(/hi[\s\S]*hi/);
+  });
+
+  test("client-run: Cancel", async ({ page }) => {
+    await page.goto(docsLink({ name: "hello.ts", code: 'console.log("hi")' }));
+    await page.locator("#flow-run").click(LONG);
+    await confirmDialog(page).getByRole("button", { name: "Cancel" }).click();
+
+    await expect(confirmDialog(page)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Continue" })).toHaveCount(0);
+    await expect(callout(page)).toHaveAttribute("data-state", "source");
+    await expect(page.locator("#flow-run")).toHaveText("Run");
   });
 
   test("client-run: The Quickstart's client", async ({ page }) => {

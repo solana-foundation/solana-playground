@@ -16,7 +16,7 @@ Everything after `#` is the URL fragment, so the code never reaches a server.
 | `code` | yes | The file's UTF-8 text, raw-DEFLATE compressed (RFC 1951), base64url without padding. Not empty, and at most 100 KiB before compression |
 | `title` | no | Shown above the code, as "From {host}: {title}". Defaults to `name` without its extension |
 | `from` | no | The docs page, an `https:` URL on `solana.com` or one of its subdomains. Playground links back to it ("View the docs page", "Back to the docs"). Any other URL is ignored |
-| `sol` | no | Devnet SOL the script needs, a number above 0 such as `0.02`. When the Playground wallet holds less, Run asks the user to fund it first. Any other value breaks the link |
+| `sol` | no | Devnet SOL the script needs, a number above 0 and at most `1`, such as `0.02`. When the Playground wallet holds less, Run asks the user to fund it first. Any other value breaks the link |
 
 Encode every value with `encodeURIComponent` (or `URLSearchParams`).
 

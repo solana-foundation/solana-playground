@@ -81,9 +81,11 @@ let resetTelemetry = () => {};
 
 /**
  * A fresh store and link, as on a page load. Telemetry is loaded after the
- * reset too, so the store and the test share one collector.
+ * reset too, so the store and the test share one collector. The dialog
+ * before a link's first Run is answered Run at once, unless `confirm` is
+ * false: the tests of that dialog answer it themselves.
  */
-const load = async () => {
+const loadAnswering = (confirm: boolean) => async () => {
   vi.resetModules();
   utils.handlers.start.length = 0;
   utils.handlers.finish.length = 0;
@@ -96,9 +98,15 @@ const load = async () => {
   const { PgClientRun } = await import("./run");
   const { PgDocsLink } = await import("./opened");
   const states: string[] = [];
-  PgClientRun.onDidChange((state) => states.push(state.kind));
+  PgClientRun.onDidChange((state) => {
+    states.push(state.kind);
+    if (confirm && state.kind === "confirm") PgClientRun.confirmRun();
+  });
   return { PgClientRun, PgDocsLink, states };
 };
+const load = loadAnswering(true);
+/** A store whose question before a link's first Run the test answers */
+const loadAsking = loadAnswering(false);
 
 const startRun = () => utils.handlers.start.forEach((cb) => cb("run"));
 const finishRun = (result: Parameters<Finish>[0]) =>
@@ -542,5 +550,127 @@ describe("PgClientRun", () => {
     finishRun({ ok: { ok: true } });
     PgDocsLink.open(QUICKSTART);
     expect(PgClientRun.state.kind).toBe("idle");
+  });
+
+  describe("before the first Run of a link's code", () => {
+    it("asks before setting a wallet up or running anything", async () => {
+      const { PgClientRun, PgDocsLink } = await loadAsking();
+      PgDocsLink.open(QUICKSTART);
+      utils.PgWallet.state = "setup";
+
+      void PgClientRun.start();
+      await Promise.resolve();
+
+      expect(PgClientRun.state).toEqual({
+        kind: "confirm",
+        link: QUICKSTART,
+        previous: { kind: "idle" },
+      });
+      expect(utils.PgCommand.connect.execute).not.toHaveBeenCalled();
+      expect(utils.PgCommand.run.execute).not.toHaveBeenCalled();
+    });
+
+    it("runs on Run, and does not ask again for the same link", async () => {
+      const { PgClientRun, PgDocsLink } = await loadAsking();
+      PgDocsLink.open(QUICKSTART);
+      utils.lamports = 0.5e9;
+
+      const first = PgClientRun.start();
+      await Promise.resolve();
+      PgClientRun.confirmRun();
+      await first;
+      expect(utils.PgCommand.run.execute).toHaveBeenCalledTimes(1);
+
+      await PgClientRun.start();
+      expect(utils.PgCommand.run.execute).toHaveBeenCalledTimes(2);
+    });
+
+    it("runs nothing on Cancel and goes back to what showed", async () => {
+      const { PgClientRun, PgDocsLink } = await loadAsking();
+      PgDocsLink.open(QUICKSTART);
+
+      const started = PgClientRun.start();
+      await Promise.resolve();
+      PgClientRun.cancelRun();
+      await started;
+
+      expect(PgClientRun.state).toEqual({ kind: "idle" });
+      expect(utils.PgCommand.connect.execute).not.toHaveBeenCalled();
+      expect(utils.PgCommand.run.execute).not.toHaveBeenCalled();
+    });
+
+    it("lets Run be pressed again after Cancel", async () => {
+      const { PgClientRun, PgDocsLink } = await loadAsking();
+      PgDocsLink.open(QUICKSTART);
+      const cancelled = PgClientRun.start();
+      await Promise.resolve();
+      PgClientRun.cancelRun();
+      await cancelled;
+
+      void PgClientRun.start();
+      await Promise.resolve();
+
+      expect(PgClientRun.state.kind).toBe("confirm");
+    });
+
+    it("runs nothing when another project opens while it asks", async () => {
+      const { PgClientRun, PgDocsLink } = await loadAsking();
+      PgDocsLink.open(QUICKSTART);
+      const started = PgClientRun.start();
+      await Promise.resolve();
+
+      switchWorkspace();
+      PgClientRun.confirmRun();
+      await started;
+
+      expect(PgClientRun.state.kind).toBe("idle");
+      expect(utils.PgCommand.run.execute).not.toHaveBeenCalled();
+    });
+
+    it("asks again for a new link", async () => {
+      const { PgClientRun, PgDocsLink } = await loadAsking();
+      PgDocsLink.open(QUICKSTART);
+      utils.lamports = 0.5e9;
+      const first = PgClientRun.start();
+      await Promise.resolve();
+      PgClientRun.confirmRun();
+      await first;
+
+      PgDocsLink.open({
+        name: "quickstart.ts",
+        code: "console.log(2)",
+        title: "Quickstart",
+        from: "https://solana.com/docs/quickstart",
+        sol: 0.02,
+      });
+      void PgClientRun.start();
+      await Promise.resolve();
+
+      expect(PgClientRun.state.kind).toBe("confirm");
+    });
+
+    it("never asks for a project no link opened", async () => {
+      const { PgClientRun, states } = await loadAsking();
+      await PgClientRun.start();
+
+      expect(states).not.toContain("confirm");
+      expect(utils.PgCommand.run.execute).toHaveBeenCalledTimes(1);
+    });
+
+    it("lets a run typed in the terminal close the question", async () => {
+      const { PgClientRun, PgDocsLink } = await loadAsking();
+      PgDocsLink.open(QUICKSTART);
+      const started = PgClientRun.start();
+      await Promise.resolve();
+
+      startRun();
+      await started;
+
+      expect(PgClientRun.state).toMatchObject({
+        kind: "running",
+        previous: { kind: "idle" },
+      });
+      expect(utils.PgCommand.run.execute).not.toHaveBeenCalled();
+    });
   });
 });

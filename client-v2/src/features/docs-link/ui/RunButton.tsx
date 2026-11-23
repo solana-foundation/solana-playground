@@ -1,10 +1,12 @@
 import type { FC } from "react";
 
+import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 import type { RunState } from "../model/run";
 import { PgClientRun } from "../model/run";
 import BaseRunButton from "./BaseRunButton";
+import BaseRunConfirm from "./BaseRunConfirm";
 import { useLinkState, useRunState } from "./use-run-state";
 
 const ENDED: ReadonlySet<RunState["kind"]> = new Set<RunState["kind"]>([
@@ -13,25 +15,45 @@ const ENDED: ReadonlySet<RunState["kind"]> = new Set<RunState["kind"]>([
   "missing-package",
 ]);
 
-/** Whether the project has run: the funding card keeps the run before it */
+/**
+ * Whether the project has run: the funding card and the question before a
+ * link's first Run keep the run before them
+ */
 const hasRun = (state: RunState) =>
-  ENDED.has(state.kind === "funding" ? state.previous.kind : state.kind);
+  ENDED.has(
+    state.kind === "funding" || state.kind === "confirm"
+      ? state.previous.kind
+      : state.kind
+  );
 
-/** The stage row's Run, connected to the run store */
+/**
+ * The stage row's Run, connected to the run store, with the question it asks
+ * before a link's first Run. One Run is mounted at a time, so the dialog is
+ * too.
+ */
 const RunButton: FC = () => {
   const state = useRunState();
+  const isPhone = useViewport() === "phone";
   // "This link is broken" opened no project: there is nothing to run
   const link = useLinkState();
   // eslint-disable-next-line unicorn/no-null -- a component that draws nothing returns `null`; React's types refuse `undefined`
   if (link.kind === "broken") return null;
   return (
-    <BaseRunButton
-      running={state.kind === "running"}
-      ran={hasRun(state)}
-      onRun={() => {
-        PgClientRun.start().catch(reportButtonFailure("run the script"));
-      }}
-    />
+    <>
+      <BaseRunButton
+        running={state.kind === "running"}
+        ran={hasRun(state)}
+        onRun={() => {
+          PgClientRun.start().catch(reportButtonFailure("run the script"));
+        }}
+      />
+      <BaseRunConfirm
+        link={state.kind === "confirm" ? state.link : undefined}
+        isPhone={isPhone}
+        onRun={PgClientRun.confirmRun}
+        onCancel={PgClientRun.cancelRun}
+      />
+    </>
   );
 };
 
