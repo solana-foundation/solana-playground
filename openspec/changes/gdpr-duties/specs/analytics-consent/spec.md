@@ -22,6 +22,7 @@ Storage that throws SHALL read as `unanswered` and SHALL NOT break the page.
 - **THEN** the choice reads `unanswered`
 
 #### Scenario: Storage is blocked (manual)
+Pinned by the in-source blocks of `client-v2/src/shared/lib/telemetry/consent.ts` and `providers/ga4.ts`, under `yarn test-unit`.
 - **WHEN** the browser throws on every `localStorage` access
 - **THEN** the page renders, the choice reads `unanswered`, and GA4 does not load
 
@@ -56,13 +57,16 @@ While the choice is `unanswered` in a build with a measurement id, a banner (`ro
 "Analytics consent") SHALL show at the foot of the window with the line
 "Playground uses Google Analytics to see which features people use. Allow
 it?", a "Privacy policy" link to `https://solana.com/privacy-policy` that
-opens in a new tab, and the buttons "Decline" and "Allow". Either button SHALL
-store the choice and close the banner. The banner SHALL NOT show again in that
-browser while a choice is stored.
+opens in a new tab, and the buttons "Decline" and "Allow".
 
 #### Scenario: The banner on a fresh browser
 - **WHEN** a visitor opens Playground with no stored choice
 - **THEN** the banner shows with Decline, Allow and the Privacy policy link
+
+### Requirement: An answer closes the banner for good
+
+Either button SHALL store the choice and close the banner. The banner SHALL NOT
+show again in that browser while a choice is stored.
 
 #### Scenario: The banner after an answer
 - **WHEN** a visitor presses Decline and reloads the page

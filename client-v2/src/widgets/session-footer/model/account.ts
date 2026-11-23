@@ -166,9 +166,6 @@ export const REVOKE_AT_GITHUB =
 export const GITHUB_APPLICATIONS_URL =
   "https://github.com/settings/applications";
 
-/** The Solana Foundation's privacy policy, which covers Playground */
-export const PRIVACY_POLICY_URL = "https://solana.com/privacy-policy";
-
 export const DOCS_URL = "https://solana.com/docs";
 
 export const githubProfileUrl = (login: string) =>

@@ -24,8 +24,8 @@ type AuthEvents = {
    */
   auth_session_expired: NoParams;
   /**
-   * The server accepted the user's account deletion; a failed one tracks
-   * nothing, and neither does it track `auth_signed_out`.
+   * Sent instead of `auth_signed_out` when the server accepted the deletion;
+   * a failed deletion sends nothing.
    */
   auth_account_deleted: NoParams;
 };

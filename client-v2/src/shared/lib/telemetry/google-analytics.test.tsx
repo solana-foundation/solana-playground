@@ -1,5 +1,6 @@
 import { act, render } from "@testing-library/react";
 
+import { initLogger, memoryProvider, resetLogger } from "../logger";
 import { writeConsent } from "./consent";
 import { GoogleAnalytics } from "./google-analytics";
 
@@ -69,6 +70,34 @@ describe("GoogleAnalytics", () => {
 
     expect(disableFlag("G-TEST")).toBe(true);
     expect(document.cookie).not.toContain("_ga");
+  });
+
+  it("should expire the cookies an older build set while the choice is unanswered", () => {
+    document.cookie = "_ga=GA1.1.1; path=/";
+    document.cookie = "_ga_TEST=GS1.1; path=/";
+
+    render(<GoogleAnalytics measurementId="G-TEST" />);
+
+    expect(document.cookie).not.toContain("_ga");
+    expect(gtagScripts()).toHaveLength(0);
+  });
+
+  it("should log at info when gtag.js fails to load", () => {
+    const logged = memoryProvider();
+    initLogger({ providers: [logged] });
+    writeConsent("allowed");
+    render(<GoogleAnalytics measurementId="G-TEST" />);
+
+    gtagScripts()[0].dispatchEvent(new Event("error"));
+
+    expect(logged.entries).toEqual([
+      expect.objectContaining({
+        ns: "telemetry:google-analytics",
+        level: "info",
+        message: "gtag.js did not load",
+      }),
+    ]);
+    resetLogger();
   });
 
   it("should clear the off switch on a later Allow", () => {

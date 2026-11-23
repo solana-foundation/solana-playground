@@ -33,13 +33,14 @@ after 1.1 is merged and before the release.
   `shared/lib/telemetry/consent.ts` per design.md "Consent is a small store";
   `ga4Provider` and `GoogleAnalytics` read it. Verified by in-source tests of
   the store (missing, garbage and throwing storage read as `unanswered`), and
-  `ga4.test.ts` cases for the `client-v2-telemetry` scenarios, including no
+  cases in the in-source block of `providers/ga4.ts` for the `client-v2-telemetry` scenarios, including no
   `window.gtag` while not `allowed` and no pre-consent event after Allow.
 - [x] 2.2 Banner, Settings switch and `obs_analytics_consent_set` (HOO-2955,
   depends on 2.1). `BaseConsentBanner` and `ConsentBanner` in
   `widgets/observability/ui`, the event declared in that slice's
   `model/telemetry.ts`, the Analytics row in the Settings page's Advanced
-  section. A design ticket is filed for the banner's look (ticket to file).
+  section. The banner's look follows theme tokens; its design is a ticket of
+  its own (ticket to file, outside this task).
   `docs/assistant-context.md` says analytics is asked for, then
   `yarn sync-assistant-context`. Verified by Playwright tests named after every `analytics-consent`
   scenario not marked manual, run with a test measurement id and asserting on

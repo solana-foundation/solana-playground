@@ -67,13 +67,15 @@ export const handleWith = (deps) => async (req, res) => {
   const userId = session.user.id;
 
   // Before the delete: the cascade removes the account row that holds it
-  let token;
+  /** @type {{ status: "read"; token: string } | { status: "failed" }} */
+  let tokenRead;
   try {
-    token = await deps.readGithubToken(userId);
+    tokenRead = { status: "read", token: await deps.readGithubToken(userId) };
   } catch (e) {
     log.error(new Error("could not read the GitHub token", { cause: e }), {
       report: true,
     });
+    tokenRead = { status: "failed" };
   }
 
   try {
@@ -88,11 +90,31 @@ export const handleWith = (deps) => async (req, res) => {
     return sendJson(res, 500, { error: "Could not delete the account" });
   }
 
-  // After the commit: a revoke followed by a failed transaction would leave an
-  // account that can no longer reach GitHub
-  const githubRevoked = await deps.revokeGithubGrant(token);
-  const cookies = await deps.sessionCookieExpiry(req);
-  if (cookies.length) res.setHeader("set-cookie", cookies);
+  // After the commit, the account is gone whatever happens next, so the
+  // answer is a 200: a 500 would tell the person it still stands
+  let githubRevoked = false;
+  try {
+    // A revoke before the commit, followed by a failed transaction, would
+    // leave an account that can no longer reach GitHub. A token read that
+    // failed was reported already; the revoke would only report it again
+    if (tokenRead.status === "read") {
+      githubRevoked = await deps.revokeGithubGrant(tokenRead.token);
+    }
+  } catch (e) {
+    log.error(new Error("the GitHub grant revocation threw", { cause: e }), {
+      report: true,
+    });
+  }
+  try {
+    const cookies = await deps.sessionCookieExpiry(req);
+    if (cookies.length) res.setHeader("set-cookie", cookies);
+  } catch (e) {
+    // The session row went with the account, so the next request reads as
+    // signed out even with the cookie left
+    log.error(new Error("could not clear the session cookie", { cause: e }), {
+      report: true,
+    });
+  }
   return sendJson(res, 200, { githubRevoked });
 };
 

@@ -193,7 +193,10 @@ export const ROWS: Record<string, RowCopy | undefined> = {
  * setting is two-valued with a default, and the analytics choice has a third
  * state, not asked yet (`analytics-consent`).
  */
-export const ANALYTICS_ROW = {
+// Annotated rather than `satisfies RowCopy`: the pinned prettier cannot parse
+// `satisfies`
+export const ANALYTICS_ROW: RowCopy = {
+  section: "advanced",
   label: "Analytics",
   help: "Send usage events to Google Analytics.",
 };

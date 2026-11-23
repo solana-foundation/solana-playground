@@ -15,6 +15,7 @@ import {
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 
+import { PRIVACY_POLICY_URL } from "@/shared/config/links";
 import { GithubMark } from "@/shared/lib/github-mark";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { SETTINGS_TRIGGER_ATTR } from "@/shared/lib/settings-request";
@@ -47,7 +48,6 @@ import {
   GITHUB_APPLICATIONS_URL,
   githubProfileUrl,
   leftoversText,
-  PRIVACY_POLICY_URL,
   profileName,
   REVOKE_AT_GITHUB,
   SIGN_OUT_CONSEQUENCE,

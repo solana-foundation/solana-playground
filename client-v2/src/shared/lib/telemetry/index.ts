@@ -8,7 +8,7 @@ export {
   subscribe as subscribeToConsent,
   writeConsent,
 } from "./consent";
-export type { Consent } from "./consent";
+export type { Consent, ConsentChoice } from "./consent";
 export { EVENT_PREFIXES } from "./prefixes";
 export { ga4Provider } from "./providers/ga4";
 export { logProvider } from "./providers/log";

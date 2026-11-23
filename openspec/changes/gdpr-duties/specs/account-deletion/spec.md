@@ -85,6 +85,7 @@ an "Export this project" link, a destructive "Delete account" button and a
 Cancel that holds focus.
 
 #### Scenario: Asking and cancelling (manual)
+Pinned by `client-v2/src/widgets/session-footer/ui/SessionFooter.test.tsx`, under `yarn test-unit`.
 - **WHEN** a signed-in person opens the account menu, picks Delete account, then Cancel
 - **THEN** the question shows with focus on Cancel, then the menu's items return and nothing is deleted
 
@@ -113,5 +114,6 @@ question stays open. `session_account_item_picked` SHALL accept the item
 `delete-account`.
 
 #### Scenario: Cancelling counts once (manual)
+Pinned by `client-v2/src/widgets/session-footer/ui/SessionFooter.test.tsx`, under `yarn test-unit`.
 - **WHEN** the person picks Delete account, then Cancel
 - **THEN** `session_account_item_picked` with `item: "delete-account"` and one `session_delete_account_ended` with `outcome: "cancelled"` are sent

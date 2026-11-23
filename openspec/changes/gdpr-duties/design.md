@@ -31,8 +31,9 @@ See [proposal.md](proposal.md), "Why". The facts the approach rests on, read at
 **Goals:**
 
 - Ship with no migration: the release is close and the user ruled one out.
-- No new way to lose work. Deletion removes from the browser only what the
-  server held identically at the moment of deletion.
+- No new way to lose work. Deletion removes from the browser only chats the
+  server held whole at the moment of deletion, and only projects whose files
+  match the account's sync mark.
 
 **Non-Goals:**
 
@@ -44,10 +45,10 @@ See [proposal.md](proposal.md), "Why". The facts the approach rests on, read at
 
 ### Account deletion is our route, not Better Auth's `deleteUser`
 
-`DELETE /api/account` (`api/account.mjs`) calls a `deleteAccount(userId)` in
-`features/auth/server.mjs` that runs, in one `transaction`:
-`update build_audit set login = null, github_id = null where user_id = $1`, then
-`delete from "user" where id = $1`. The cascades do the rest.
+`DELETE /api/account` (`api/account.mjs`) runs, in one `transaction`:
+`scrubIdentity(q, userId)`
+(`update build_audit set login = null, github_id = null where user_id = $1`),
+then `delete from "user" where id = $1`. The cascades do the rest.
 
 Better Auth's `deleteUser` was the alternative. It needs enabling in
 `getAuth`, runs its own deletes outside our pool's transaction, and offers
@@ -56,8 +57,8 @@ statements and covers the acceptance criterion in one place.
 
 The `build_audit` update lives in `features/build-server`
 (`scrubIdentity(query, userId)`, taking the transaction's `query`) so the table
-keeps one owner; `features/auth` calls it through `server.mjs`. A feature
-importing a feature breaks the layer rule, so the route composes them:
+keeps one owner. A feature importing a feature breaks the layer rule, so the
+route composes them:
 `api/account.mjs` opens the transaction and calls both, as
 `api/build-server.mjs` already composes slices. `persistence/server.mjs`
 exports `query` but not `transaction`, so the task exports `transaction` there
@@ -79,8 +80,8 @@ reach GitHub.
 ### Deletion in the browser runs the teardown and skips the upload
 
 `PgSession.deleteAccount()` mirrors `_signOut`: it shares the
-`_signingOut` latch, calls `DELETE /api/account`, and on success clears the
-user and runs the teardown. It does not call the sign-out hook's upload half.
+`_signingOut` latch, calls `DELETE /api/account`, and on success runs the
+teardown, then clears the user: marks are keyed by the user id. It does not call the sign-out hook's upload half.
 On deletion, an upload turns work the account never held into "saved", and the
 teardown then removes it from the browser seconds before the server deletes it.
 
@@ -98,7 +99,9 @@ teardown is the sign-out teardown minus the upload:
   asks the server for each thread before the `DELETE`, while the session is
   still valid. A thread with anything missing, or a read that fails, stays.
   `forget` compares the hash taken at the read, so a thread written to between
-  the read and the teardown stays too.
+  the read and the teardown stays too. A thread deleted on the server under a
+  live project answers `404` and stays, where `pushAll` would count it handed
+  over: the read errs on keeping.
 
 The alternative, keeping every local copy and detaching it from the account,
 needs new transitions in the sync mark and the thread fence, which are where
@@ -116,11 +119,12 @@ is the existing rule for leftovers.
 and `subscribe`, over one `localStorage` key, every access in `try`/`catch`.
 `ga4Provider` reads the store at each `send`: it installs the gtag queue on the
 first send while `allowed`, and drops the event otherwise. `GoogleAnalytics`
-subscribes and injects `gtag.js` once the choice becomes `allowed`. On a change
-to `declined` after `allowed`, the store sets
+subscribes and injects `gtag.js` once the choice becomes `allowed`. On every
+`declined` it reads or hears, `GoogleAnalytics` sets
 `window["ga-disable-<measurementId>"] = true`, Google's documented switch that
 stops `gtag.js` from sending, and expires the `_ga` and `_ga_*` cookies on the
-app's domain.
+app's domain (`ga-cookies.ts`). It does so only while mounted with a
+measurement id, which is the only case in which GA4 runs.
 
 A Settings entry through `createSetting` was the alternative. A setting is
 two-valued with a default, and the banner needs a third state, "not asked yet".

@@ -817,6 +817,7 @@ describe("signing out", () => {
 describe("deleting the account", () => {
   let order: string[];
   const held = { handedOver: [{ id: "t1", hash: "h1" }], complete: true };
+  const marks = new Map([["tut:hello", "mark as read"]]);
 
   beforeEach(async () => {
     order = [];
@@ -849,10 +850,16 @@ describe("deleting the account", () => {
       order.push(`claimChats ${id}`);
       return true;
     });
-    vi.spyOn(restore, "releaseLocalProjects").mockImplementation(async () => {
-      order.push("releaseProjects");
-      return [];
+    vi.spyOn(restore, "readProjectMarks").mockImplementation(async () => {
+      order.push("readMarks");
+      return marks;
     });
+    vi.spyOn(restore, "releaseProjectsUnchangedSince").mockImplementation(
+      async () => {
+        order.push("releaseProjects");
+        return [];
+      }
+    );
     vi.spyOn(PgAssistant, "stopTurn").mockImplementation(
       () => order.push("stopTurn") as unknown as void
     );
@@ -904,6 +911,7 @@ describe("deleting the account", () => {
     expect(order).toEqual([
       "claimChats u1",
       "readChats",
+      "readMarks",
       // The one request, and no POST
       "request DELETE",
       "stopTurn",
@@ -931,6 +939,31 @@ describe("deleting the account", () => {
     effect.dispose();
   });
 
+  it("releases only projects against the marks read before the request", async () => {
+    serverDeletes(accepted);
+
+    const effect = await mount();
+    await PgSession.deleteAccount();
+
+    expect(
+      restore.releaseProjectsUnchangedSince
+    ).toHaveBeenCalledExactlyOnceWith(marks);
+    effect.dispose();
+  });
+
+  it("releases no project when the marks cannot be read", async () => {
+    vi.mocked(restore.readProjectMarks).mockRejectedValue(new Error("quota"));
+    serverDeletes(accepted);
+
+    const effect = await mount();
+    await PgSession.deleteAccount();
+
+    expect(
+      restore.releaseProjectsUnchangedSince
+    ).toHaveBeenCalledExactlyOnceWith(new Map());
+    effect.dispose();
+  });
+
   it("keeps every thread when the read fails, and still releases projects", async () => {
     vi.spyOn(PgChatSync, "syncedThreads").mockRejectedValue(
       new Error("offline")
@@ -951,8 +984,9 @@ describe("deleting the account", () => {
     [
       "fails on the network",
       () =>
-        vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
-          order.push("request DELETE");
+        // The session read that follows fails too, so the account may stand
+        vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+          if (String(input) === "/api/account") order.push("request DELETE");
           throw new Error("offline");
         }),
     ],
@@ -964,7 +998,12 @@ describe("deleting the account", () => {
     await expect(PgSession.deleteAccount()).rejects.toThrow();
 
     // Read, but nothing forgotten
-    expect(order).toEqual(["claimChats u1", "readChats", "request DELETE"]);
+    expect(order).toEqual([
+      "claimChats u1",
+      "readChats",
+      "readMarks",
+      "request DELETE",
+    ]);
     expect(PgChatSync.forget).not.toHaveBeenCalled();
     expect(PgSession.get()).toEqual(user);
     expect(PgProjectSync.conflictFor("tut:hello")).not.toBeNull();
@@ -972,7 +1011,7 @@ describe("deleting the account", () => {
   });
 
   it("forgets the account even when a step before it fails", async () => {
-    vi.spyOn(restore, "releaseLocalProjects").mockRejectedValue(
+    vi.spyOn(restore, "releaseProjectsUnchangedSince").mockRejectedValue(
       new Error("quota")
     );
     serverDeletes(accepted);

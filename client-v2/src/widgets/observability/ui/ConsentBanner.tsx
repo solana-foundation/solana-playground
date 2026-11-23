@@ -2,13 +2,13 @@ import { useSyncExternalStore } from "react";
 
 import { readConsent, subscribeToConsent } from "@/shared/lib/telemetry";
 
-import { chooseConsentFor } from "../model/consent";
 import { BaseConsentBanner } from "./BaseConsentBanner";
+import { chooseAndTellFor } from "./choose-consent";
 
 const subscribe = (onChange: () => void) =>
   subscribeToConsent(() => onChange());
 
-const chooseOnBanner = chooseConsentFor("banner");
+const chooseOnBanner = chooseAndTellFor("banner");
 
 /**
  * `BaseConsentBanner` on the stored choice: shows while it is `unanswered`,

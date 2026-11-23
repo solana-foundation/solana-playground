@@ -7,6 +7,10 @@ import {
   clearDeletedProjectNames,
   query,
 } from "../src/features/persistence/server.mjs";
+import {
+  initServerLogger,
+  resetServerLogger,
+} from "../src/shared/lib/logger/server.mjs";
 import { handleWith } from "./retention.mjs";
 
 // `yarn test-api` loads `.env`; the database-backed cases skip without one.
@@ -44,9 +48,16 @@ const call = async (handler, { method = "GET", authorization } = {}) => {
 };
 
 describe("/api/retention", () => {
+  /** What the route logged in this test */
+  let entries;
+
   beforeEach(() => {
     process.env.CRON_SECRET = SECRET;
+    entries = [];
+    initServerLogger({ providers: [{ log: (entry) => entries.push(entry) }] });
   });
+
+  after(() => resetServerLogger());
 
   it("answers 405 with Allow: GET for another method", async () => {
     const { default: handler } = await load();
@@ -68,6 +79,20 @@ describe("/api/retention", () => {
     const res = await call(handler, { authorization: `Bearer ${SECRET}` });
     assert.equal(res.statusCode, 503);
     assert.equal(ran, 0);
+    assert.deepEqual(
+      entries.map(({ level, report, error }) => ({
+        level,
+        report,
+        message: error?.message,
+      })),
+      [
+        {
+          level: "error",
+          report: true,
+          message: "CRON_SECRET is unset; retention did not run",
+        },
+      ]
+    );
   });
 
   for (const [title, authorization] of [
@@ -88,6 +113,10 @@ describe("/api/retention", () => {
       const res = await call(handler, { authorization });
       assert.equal(res.statusCode, 401);
       assert.equal(ran, 0);
+      assert.deepEqual(
+        entries.map(({ level, report }) => ({ level, report })),
+        [{ level: "warn", report: false }]
+      );
     });
   }
 

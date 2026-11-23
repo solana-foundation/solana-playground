@@ -61,9 +61,16 @@ export const handleWith = (deps) => async (req, res) => {
   }
   const { CRON_SECRET } = cronEnv();
   if (!CRON_SECRET) {
+    // Reported: with no secret the job never runs, and nothing else says so
+    log.error(new Error("CRON_SECRET is unset; retention did not run"), {
+      report: true,
+    });
     return sendJson(res, 503, { error: "The retention job is not configured" });
   }
   if (!isBearer(req.headers.authorization, CRON_SECRET)) {
+    // Not reported: anyone can call the route. A run of these in the log
+    // beside no "retention ran" means Vercel Cron holds an old secret
+    log.warn("retention refused a request without the cron secret");
     return sendJson(res, 401, { error: "Unauthorized" });
   }
 

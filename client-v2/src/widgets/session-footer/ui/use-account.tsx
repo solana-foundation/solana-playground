@@ -21,7 +21,11 @@ import type {
   SignOutState,
 } from "../model/account";
 import {
+  ACCOUNT_DELETED,
+  DELETE_ACCOUNT_FAILED,
   DELETE_ACCOUNT_RETRY,
+  GITHUB_APPLICATIONS_URL,
+  REVOKE_AT_GITHUB,
   sessionWith,
   shownDeleteAccountState,
   shownSignOutState,
@@ -41,6 +45,36 @@ const warnWallet = () =>
       </span>
     ),
     { options: { name: "wallet-failed" } }
+  );
+
+/** A deletion that succeeded behind a closed menu, GitHub's grant left standing */
+const toastRevokeAtGithub = () =>
+  PgView.setToast(
+    () => (
+      <span>
+        <strong>{ACCOUNT_DELETED}</strong>{" "}
+        <a
+          href={GITHUB_APPLICATIONS_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline underline-offset-2"
+        >
+          {REVOKE_AT_GITHUB}
+        </a>
+      </span>
+    ),
+    { options: { name: "account-deleted-revoke" } }
+  );
+
+/** A deletion that failed behind a closed menu; still signed in */
+const toastDeleteFailed = (reason: string) =>
+  PgView.setToast(
+    () => (
+      <span>
+        <strong>{DELETE_ACCOUNT_FAILED}</strong> {reason}
+      </span>
+    ),
+    { options: { name: "account-delete-failed" } }
   );
 
 interface UseAccountOptions {
@@ -266,12 +300,15 @@ export const useAccount = ({
           outcome: "ok",
         });
         // Said in the menu that deleted, never in one opened later. The
-        // GitHub line goes with it: the person can still remove the app there
-        setDeleteState(
-          menuOpen.current
-            ? { status: "done", githubRevoked }
-            : { status: "idle" }
-        );
+        // GitHub line goes with it: the person can still remove the app there.
+        // Closed over meanwhile, that line is a toast, since nothing else
+        // would ever say it
+        if (menuOpen.current) {
+          setDeleteState({ status: "done", githubRevoked });
+          return;
+        }
+        setDeleteState({ status: "idle" });
+        if (!githubRevoked) toastRevokeAtGithub();
       })
       .catch((error: unknown) => {
         // `PgSession.deleteAccount` has logged and reported a refusal; the
@@ -280,15 +317,14 @@ export const useAccount = ({
         log.info("account deletion failed; still signed in", {
           context: { error: String(error) },
         });
-        setDeleteState(
-          menuOpen.current
-            ? {
-                status: "failed",
-                reason:
-                  error instanceof Error ? error.message : DELETE_ACCOUNT_RETRY,
-              }
-            : { status: "idle" }
-        );
+        const reason =
+          error instanceof Error ? error.message : DELETE_ACCOUNT_RETRY;
+        if (menuOpen.current) {
+          setDeleteState({ status: "failed", reason });
+          return;
+        }
+        setDeleteState({ status: "idle" });
+        toastDeleteFailed(reason);
       })
       .finally(() => {
         deleting.current = undefined;

@@ -1,7 +1,5 @@
+import { PRIVACY_POLICY_URL } from "@/shared/config/links";
 import { Button } from "@/shared/ui/button";
-
-/** Where "Privacy policy" opens, in a new tab */
-export const PRIVACY_POLICY_URL = "https://solana.com/privacy-policy";
 
 interface BaseConsentBannerProps {
   onDecline: () => void;
@@ -11,7 +9,8 @@ interface BaseConsentBannerProps {
 /**
  * The question Playground asks a visitor once, at the foot of the window
  * (`analytics-consent`). It only draws: the choice is stored and tracked by
- * `ConsentBanner`. The look is a first pass, until the banner is designed.
+ * `ConsentBanner`. Its look follows the theme tokens; "Privacy policy" opens
+ * in a new tab.
  */
 export const BaseConsentBanner = ({
   onDecline,

@@ -286,8 +286,9 @@ Done:
   (`https://solana.com/privacy-policy`), which covers Playground. A signed-in
   user can delete their account from the account menu: the account's synced
   projects, conversations, sessions and AI usage are deleted from the server,
-  their GitHub login is removed from the build records, and Playground's
-  access to their GitHub account is revoked. In this browser, projects and
+  their GitHub login is removed from the build records, and Playground asks
+  GitHub to revoke its access; if GitHub could not, the menu says to remove
+  the app in GitHub's settings. In this browser, projects and
   chats the account held leave as on sign-out; work never saved to the account
   stays. Google Analytics runs only for a visitor who allows it, in a banner
   shown once or later in Settings (Advanced, Analytics). The server deletes

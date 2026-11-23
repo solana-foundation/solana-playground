@@ -1,5 +1,6 @@
 // TODO(ui-migration 1.4): a feature importing a feature; chat sync runs only for a signed-in session
 import { PgSession } from "@/features/auth";
+import { isNetworkFailure } from "@/shared/lib/ai";
 import { createLogger } from "@/shared/lib/logger";
 import { timeoutSignal } from "@/shared/lib/timeout-signal";
 
@@ -654,8 +655,9 @@ export class PgChatSync {
    * lacks or has deleted (404), a read that fails, a local copy that cannot
    * be read, a thread a fence names, and every thread while another account
    * owns the folder, stay on this device: logged, not reported, since each
-   * is an answer this hand-over expects. An empty thread is in, as `push`
-   * counts it pushed.
+   * is an answer this hand-over expects, except a failed read that is not
+   * the network dropping, which is reported. An empty thread is in, as
+   * `push` counts it pushed.
    *
    * Hashed from the copy compared, as `pushAll` hashes before its push, so a
    * write landing afterwards leaves the stored copy newer than the hash and
@@ -668,14 +670,23 @@ export class PgChatSync {
    * threads or sync is unavailable
    */
   static async syncedThreads(): Promise<HandOver | null> {
+    // Every thread stays: `forget` keeps all of them for `null`
+    const keepAll = (why: string) => {
+      log.info("chats kept: the server's copies were not read", {
+        context: { why },
+      });
+      // eslint-disable-next-line unicorn/no-null -- `HandOver | null`, the contract `pushAll` and `forget` share: "could not look"
+      return null;
+    };
     const userId = PgSession.get()?.id;
-    // eslint-disable-next-line unicorn/no-null -- `HandOver | null`, the contract `pushAll` and `forget` share: "could not look"
-    if (!userId || !(await PgSyncClient.available())) return null;
+    if (!userId) return keepAll("nobody is signed in");
+    if (!(await PgSyncClient.available())) {
+      return keepAll("sync is unavailable");
+    }
 
     const indexed = Object.values(await PgThreadIndex.all());
     const stored = await PgChatStorage.threadIds();
-    // eslint-disable-next-line unicorn/no-null -- as above
-    if (stored === null) return null;
+    if (stored === null) return keepAll("the stored threads cannot be listed");
     const threadIds = [...new Set([...indexed, ...stored])];
 
     // Another account's threads are not this one's to drop
@@ -724,7 +735,16 @@ export class PgChatSync {
       case "refused":
         return keep(`HTTP ${pulled.status}`);
       case "failed":
-        return keep(`read failed: ${String(pulled.error)}`);
+        // A dropped connection is the user's network; anything else (a body
+        // that does not parse, a fault of ours) is reported
+        if (isNetworkFailure(pulled.error)) {
+          log.info("chat kept: not known to be on the server", {
+            context: { threadId, why: "read failed", error: pulled.error },
+          });
+        } else {
+          report(`read held thread ${threadId}`, pulled.error);
+        }
+        return undefined;
       case "items":
         return isHeldBy(pulled.items, owed)
           ? { id: threadId, hash }
@@ -809,7 +829,7 @@ export class PgChatSync {
     return items === null ? null : sha256(JSON.stringify(items));
   }
 
-  /** Not while a sign-out tears down: the cookie is gone, see `PgSession.isEnding` */
+  /** No push may start while a sign-out tears down or an account deletion is under way, see `PgSession.isEnding` */
   private static async _ready() {
     return (
       !!PgSession.get() &&
@@ -1983,8 +2003,11 @@ if (import.meta.vitest) {
       it.each([
         ["the server has never seen it", () => serverHolds(new Map())],
         [
-          "the read fails",
-          () => respondingWith(() => Promise.reject(new Error("offline"))),
+          "the connection drops",
+          () =>
+            respondingWith(() =>
+              Promise.reject(new TypeError("Failed to fetch"))
+            ),
         ],
         [
           "the server answers an error",
@@ -2038,9 +2061,69 @@ if (import.meta.vitest) {
         serverHolds(new Map([[threadId, [item(1)]]]));
 
         const handed = await PgChatSync.syncedThreads();
+        await PgChatSync.forget(handed);
+        const kept = await PgChatStorage.read(threadId);
         await PgThreadFence.clearOwner();
 
-        expect(handed?.handedOver).toEqual([]);
+        expect(handed).toEqual({ handedOver: [], complete: false });
+        expect(kept).toEqual([item(1)]);
+      });
+
+      it("keeps a thread a fence names, though the server holds it", async () => {
+        await signedIn();
+        await PgChatStorage.write(threadId, [item(1)]);
+        serverHolds(new Map([[threadId, [item(1)]]]));
+        vi.spyOn(PgThreadFence, "isFenced").mockImplementation(
+          async (id) => id === threadId
+        );
+
+        const handed = await PgChatSync.syncedThreads();
+
+        expect(handed).toEqual({ handedOver: [], complete: false });
+      });
+
+      it("keeps a thread whose item's version does not parse, on either side", async () => {
+        await signedIn();
+        // A bad `updatedAt` is dropped on decode for `createdAt`; a bad
+        // `createdAt` has nothing to fall back on
+        const unparseable: ChatItem = {
+          kind: "user",
+          id: item(1).id,
+          createdAt: "not a date",
+          text: "m1",
+        };
+        await PgChatStorage.write(threadId, [unparseable]);
+        serverHolds(new Map([[threadId, [unparseable]]]));
+
+        expect(await PgChatSync.syncedThreads()).toEqual({
+          handedOver: [],
+          complete: false,
+        });
+      });
+
+      it("reports a failed read that is not the network dropping", async () => {
+        await signedIn();
+        await PgChatStorage.write(threadId, [item(1)]);
+        const failure = new SyntaxError("Unexpected token < in JSON");
+        respondingWith(() =>
+          Promise.resolve({
+            ok: true,
+            status: 200,
+            json: async () => {
+              throw failure;
+            },
+          })
+        );
+        const failures = getFailures().length;
+
+        const handed = await PgChatSync.syncedThreads();
+
+        expect(handed).toEqual({ handedOver: [], complete: false });
+        expect(getFailures().slice(failures)).toEqual([
+          expect.objectContaining({
+            what: `read held thread ${threadId}`,
+          }),
+        ]);
       });
 
       it("reads even while a deletion holds pushes off", async () => {

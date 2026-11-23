@@ -508,8 +508,9 @@ export const writeProject = async (q, userId, input) => {
  * "missing" and does not push its local copy back up. Its files go: a
  * tombstone is never read back. Its name goes too, set to the empty string
  * since the column is `not null`: a name can say what the user was working on,
- * and a tombstone needs none. The live-rows unique index no longer holds it
- * either. A tutorial started again takes the name its new run sends.
+ * and a tombstone needs none. The unique index covers live rows only, so the
+ * empty name collides with nothing. A tutorial started again takes the name
+ * its new run sends.
  *
  * Its conversations are tombstoned with it, in the same transaction. They
  * are listed by project id, and a tutorial started again reuses its id, so a
@@ -558,9 +559,8 @@ export const deleteProject = async (userId, id) => {
 };
 
 /**
- * Clear the name of every deleted project that still has one: the rows
- * deleted before `deleteProject` began clearing it. Run daily by the
- * retention job.
+ * Clear the name of every deleted row that still has a name (rows tombstoned
+ * by older code). Run daily by the retention job.
  *
  * @returns {Promise<number>} how many rows changed
  */

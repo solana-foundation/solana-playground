@@ -798,9 +798,11 @@ merges after that. Migrations are written so the code already deployed keeps wor
   (`client-v2/vercel.json`, `crons`). It deletes expired sessions and `build_audit` rows older than 90 days, and
   clears the names of deleted projects. Vercel → Settings → Cron Jobs lists it, with a Run button for a run by hand.
 - **Check a run:** Logs, filtered to `/api/retention`. A `200` carries the counts
-  `{"sessions":n,"buildAudit":n,"projectNames":n}`. A `500` means one step failed: Sentry has the `api:retention`
-  error, and the other steps still ran. A `503` means `CRON_SECRET` is missing from the deployment: set it in
-  `<DOPPLER_CONFIG>` ([Production environment](#production-environment)).
+  `{"sessions":n,"buildAudit":n,"projectNames":n}`. A `500` means at least one step failed: its key is missing from
+  the counts, Sentry has the `api:retention` error, and the other steps still ran. A `503` means `CRON_SECRET` is
+  missing from the deployment: set it in `<DOPPLER_CONFIG>` ([Production environment](#production-environment)). A
+  `401` means the cron sent a secret other than the deployment's, as after a rotation that no deployment picked up:
+  redeploy production.
 - **Account deletion** is the user's own action, in the account menu. It removes the account's projects, chats,
   sessions and AI usage, and clears their GitHub login and id from `build_audit`. If GitHub could not revoke the app's
   access, the menu tells the user to remove it at `https://github.com/settings/applications`.

@@ -1,6 +1,6 @@
 const isGaCookie = (name: string) => name === "_ga" || name.startsWith("_ga_");
 
-/** `a.b.example.com` -> that host and each parent with a dot left: `b.example.com`, `example.com` */
+/** `a.b.example.com` -> that host and each parent with a dot left: `a.b.example.com`, `b.example.com`, `example.com` */
 const domainsOf = (hostname: string) => {
   const labels = hostname.split(".");
   // A bare name (`localhost`) or an IP address has no parent domain to try
@@ -31,10 +31,11 @@ export const expireGaCookies = (hostname: string) => {
 };
 
 if (import.meta.vitest) {
-  const { describe, it, expect, afterEach } = import.meta.vitest;
+  const { describe, it, expect, afterEach, vi } = import.meta.vitest;
 
   describe("shared/lib/telemetry/ga-cookies", () => {
     afterEach(() => {
+      vi.restoreAllMocks();
       for (const name of cookieNames()) {
         document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
       }
@@ -49,6 +50,27 @@ if (import.meta.vitest) {
       expireGaCookies(window.location.hostname);
 
       expect(cookieNames().sort()).toEqual(["_gat", "theme"]);
+    });
+
+    it("should expire each cookie on the host and every parent domain, with and without the dot", () => {
+      document.cookie = "_ga=GA1.1.1; path=/";
+      const writes: string[] = [];
+      vi.spyOn(Document.prototype, "cookie", "set").mockImplementation(
+        (value: string) => {
+          writes.push(value);
+        }
+      );
+
+      expireGaCookies("app.example.com");
+
+      const expired = "_ga=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
+      expect(writes).toEqual([
+        expired,
+        `${expired}; domain=app.example.com`,
+        `${expired}; domain=.app.example.com`,
+        `${expired}; domain=example.com`,
+        `${expired}; domain=.example.com`,
+      ]);
     });
 
     it("should list the host and each parent domain, and none for a bare host", () => {

@@ -38,7 +38,7 @@ as soon as the Root Directory points at `client-v2`.
      `api/conversations.mjs` answer its writes with `403`. A production build with `PG_AI_API_KEY` fails
      without it (`scripts/check-agent-env.mjs`).
    - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — see step 3.
-   - `CRON_SECRET` — generated for production; without it the daily
+   - `CRON_SECRET`: generated for production; without it the daily
      retention job answers `503`
      ([Conversation and project sync](#conversation-and-project-sync)).
    - `SENTRY_AUTH_TOKEN`: a production build fails without it

@@ -11,9 +11,11 @@ tutorial started again under the same id SHALL take the name the new run
 sends.
 
 #### Scenario: The name of a deleted project is gone (manual)
+Pinned by `client-v2/src/features/persistence/model/projects.test.mjs`, under `yarn test-api`.
 - **WHEN** a signed-in user deletes the project "alice-defi"
 - **THEN** the account's database holds the deleted row with an empty name
 
 #### Scenario: A restarted tutorial is named again (manual)
+Pinned by `client-v2/src/features/persistence/model/projects.test.mjs`, under `yarn test-api`.
 - **WHEN** a signed-in user deletes a tutorial and starts it again
 - **THEN** the tutorial's row is live again under the tutorial's name

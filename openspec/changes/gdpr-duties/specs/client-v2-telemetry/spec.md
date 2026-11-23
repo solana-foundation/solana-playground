@@ -28,7 +28,8 @@ the choice is `allowed`, and nothing otherwise.
   allowed analytics, tracks `dply_started`
 - **THEN** `gtag` is called with event `dply_started` and its parameters
 
-#### Scenario: A measurement id is set and analytics is not allowed
+#### Scenario: A measurement id is set and analytics is not allowed (manual)
+Pinned by the in-source block of `client-v2/src/shared/lib/telemetry/providers/ga4.ts`, under `yarn test-unit`.
 
 - **WHEN** a build with `REACT_APP_GA_MEASUREMENT_ID`, in a browser whose
   choice is `unanswered` or `declined`, tracks `dply_started`

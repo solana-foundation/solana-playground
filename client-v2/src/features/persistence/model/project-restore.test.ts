@@ -5,7 +5,12 @@ import { PgExplorer } from "../../../utils/explorer/explorer";
 import { PgFs } from "../../../utils/explorer/fs";
 import { PgAccountList } from "./account-list";
 import { clearFailures, getFailures } from "./diagnostics";
-import { reconcile, releaseLocalProjects } from "./project-restore";
+import {
+  readProjectMarks,
+  reconcile,
+  releaseLocalProjects,
+  releaseProjectsUnchangedSince,
+} from "./project-restore";
 import type { ServerProject } from "./project-sync";
 import { PgProjectSync } from "./project-sync";
 import type { Snapshot } from "./snapshot";
@@ -920,6 +925,78 @@ describe("releasing local projects at sign-out", () => {
     await releaseLocalProjects();
 
     expect(await PgSyncMark.read("p1")).not.toBeNull();
+  });
+});
+
+describe("releasing local projects after an account deletion", () => {
+  beforeEach(async () => {
+    PgSession.reset();
+    PgProjectSync.reset();
+    storedFiles().clear();
+    await signedIn();
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  const stubDelete = () =>
+    vi
+      .spyOn(PgExplorer, "deleteWorkspace")
+      .mockResolvedValue(undefined as never);
+
+  it("removes a project whose mark is what the read found", async () => {
+    withLocal({ alpha: "p1" });
+    withFiles("alpha", { "src/lib.rs": "same" });
+    await agreed("p1", { files: { "src/lib.rs": "same" } }, "t1");
+    const reading = await readProjectMarks();
+    const remove = stubDelete();
+
+    expect(await releaseProjectsUnchangedSince(reading)).toEqual(["alpha"]);
+    expect(remove).toHaveBeenCalledWith("alpha");
+  });
+
+  it("keeps a project whose mark changed after the read", async () => {
+    // Another tab's push landed between the read and the teardown: the
+    // files match the new mark, but the server copy they reached is gone
+    // with the account
+    withLocal({ alpha: "p1" });
+    withFiles("alpha", { "src/lib.rs": "pushed by another tab" });
+    await agreed("p1", { files: { "src/lib.rs": "before" } }, "t1");
+    const reading = await readProjectMarks();
+    await agreed(
+      "p1",
+      { files: { "src/lib.rs": "pushed by another tab" } },
+      "t2"
+    );
+    const remove = stubDelete();
+
+    expect(await releaseProjectsUnchangedSince(reading)).toEqual([]);
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("keeps a project whose mark appeared after the read", async () => {
+    withLocal({ alpha: "p1" });
+    withFiles("alpha", { "src/lib.rs": "first push" });
+    const reading = await readProjectMarks();
+    await agreed("p1", { files: { "src/lib.rs": "first push" } }, "t1");
+    const remove = stubDelete();
+
+    expect(await releaseProjectsUnchangedSince(reading)).toEqual([]);
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("still keeps an unchanged mark's project holding unpushed work", async () => {
+    withLocal({ alpha: "p1" });
+    withFiles("alpha", { "src/lib.rs": "written since the last push" });
+    await agreed(
+      "p1",
+      { files: { "src/lib.rs": "what the server has" } },
+      "t1"
+    );
+    const reading = await readProjectMarks();
+    const remove = stubDelete();
+
+    expect(await releaseProjectsUnchangedSince(reading)).toEqual([]);
+    expect(remove).not.toHaveBeenCalled();
   });
 });
 

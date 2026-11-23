@@ -134,7 +134,7 @@ const DELETE_ACCOUNT_TIMEOUT_MS = 30_000;
 
 /** Why a deletion did not happen, by the status the route answered */
 const DELETION_REFUSED: Record<number, string> = {
-  401: "Your session ended. Sign in again, then delete the account.",
+  401: "The server couldn't confirm your session. Try again.",
   503: "Accounts are not available right now. Try again later.",
 };
 const DELETION_FAILED = "Try again.";
@@ -446,9 +446,41 @@ export class PgSession {
   }
 
   private static async _read() {
+    const { next, failed, isNobody } = await PgSession._fetchSession();
+
+    // A failed read keeps the user it had: it says nothing new about them
+    if (failed) {
+      PgSession._setRead("failed", PgSession._user);
+      return;
+    }
+    const before = PgSession._expiredUser;
+    // A read that said nothing about nobody leaves it as it stood
+    if (isNobody) {
+      PgSession._expiredUser = readRememberedUserOr(PgSession._user ?? before);
+    }
+    const after = PgSession._expiredUser;
+    PgSession._setRead("answered", next);
+    if (after && !before) authTelemetry.track("auth_session_expired", {});
+    // `_setRead` stays silent when the user and the read state stood still
+    if (after?.id !== before?.id) PgSession._emit();
+  }
+
+  /**
+   * Ask the server who is signed in, logging what went wrong, and change
+   * nothing here: `_read` applies the answer, and an account deletion that
+   * got no answer asks with it whether the account is already gone.
+   *
+   * @returns the user, or `undefined`; `failed` when the read says nothing
+   * about who is signed in; `isNobody` when the route itself said nobody, not
+   * a host without one, nor a proxy
+   */
+  private static async _fetchSession(): Promise<{
+    next: SessionUser | undefined;
+    failed: boolean;
+    isNobody: boolean;
+  }> {
     let next: SessionUser | undefined;
     let failed = false;
-    // The route itself saying nobody: not a host without one, not a proxy
     let isNobody = false;
 
     try {
@@ -528,21 +560,7 @@ export class PgSession {
       }
     }
 
-    // A failed read keeps the user it had: it says nothing new about them
-    if (failed) {
-      PgSession._setRead("failed", PgSession._user);
-      return;
-    }
-    const before = PgSession._expiredUser;
-    // A read that said nothing about nobody leaves it as it stood
-    if (isNobody) {
-      PgSession._expiredUser = readRememberedUserOr(PgSession._user ?? before);
-    }
-    const after = PgSession._expiredUser;
-    PgSession._setRead("answered", next);
-    if (after && !before) authTelemetry.track("auth_session_expired", {});
-    // `_setRead` stays silent when the user and the read state stood still
-    if (after?.id !== before?.id) PgSession._emit();
+    return { next, failed, isNobody };
   }
 
   /**
@@ -776,13 +794,13 @@ export class PgSession {
   }
 
   /**
-   * Whether the server has ended the session and its local teardown is
-   * running.
+   * No push may start: a sign-out tears down, or an account deletion is
+   * under way.
    *
    * `get` still answers the user then, because what the teardown removes is
    * keyed by their id. Nothing may go to the network on their behalf, though:
-   * the cookie is gone, every request answers 401, and each one was reported
-   * as a sync failure on an ordinary sign-out.
+   * after a sign-out the cookie is gone, every request answers 401, and each
+   * one was reported as a sync failure on an ordinary sign-out.
    *
    * An account deletion sets it from before its request (`deleteAccount`):
    * nothing may upload into an account about to be deleted.
@@ -876,9 +894,13 @@ export class PgSession {
    * would then remove it from the browser. Instead `isEnding` holds from
    * before the hook registered with `setOnAccountDeleted`, so no push starts
    * while it reads what the server holds or while the request is out, and
-   * only once the server answers `200` does the hook's teardown run. Any
-   * other answer, or none, leaves the user signed in with nothing torn down,
-   * and rejects with the reason, in words for the person.
+   * only once the server answers `200` does the hook's teardown run. No
+   * answer, or a `401`, asks the session again: a request whose answer was
+   * lost may have deleted the account, and when nobody is signed in any more
+   * the deletion counts as done, the grant's fate unknown
+   * (`githubRevoked: false`). Any other answer, or a user still signed in,
+   * leaves the user signed in with nothing torn down, and rejects with the
+   * reason, in words for the person.
    *
    * Shares the sign-out's latch: a deletion while a sign-out runs is refused,
    * a sign-out while a deletion runs joins it, and a second deletion joins
@@ -925,16 +947,40 @@ export class PgSession {
         signal: timeoutSignal(DELETE_ACCOUNT_TIMEOUT_MS),
       });
     } catch (error) {
+      if (nameOf(error) === "TimeoutError") {
+        // Reported: the server may have deleted the account and not said so
+        // in time. The bare `DOMException` carries no frame of ours
+        log.error(
+          new Error(
+            `account deletion timed out after ${DELETE_ACCOUNT_TIMEOUT_MS} ms`,
+            { cause: error }
+          ),
+          { report: true, context: { step: "delete-request" } }
+        );
+      } else {
+        // Offline or aborted: the user's network, not a defect to report
+        log.warn("account deletion request failed", {
+          context: {
+            step: "delete-request",
+            error: String(error),
+            name: nameOf(error),
+          },
+        });
+      }
+      // The request may have reached the server before the answer was lost
+      if (await PgSession._isNobodySignedIn()) {
+        return PgSession._endDeletedAccount(teardown, false);
+      }
       PgSession._ending = false;
-      // Offline, or timed out: the user's network, not a defect to report
-      log.warn("account deletion request failed; still signed in", {
-        context: {
-          step: "delete-request",
-          error: String(error),
-          name: (error as Error | undefined)?.name,
-        },
-      });
       throw new Error(DELETION_OFFLINE);
+    }
+    // The session went before this request: most likely an earlier attempt
+    // deleted the account and its answer was lost
+    if (res.status === 401 && (await PgSession._isNobodySignedIn())) {
+      log.info("account deletion answered 401 and nobody is signed in", {
+        context: { step: "delete-request", status: res.status },
+      });
+      return PgSession._endDeletedAccount(teardown, false);
     }
     // Only a 200 says the account is gone. Any other answer, a 2xx included,
     // keeps everything: a session that did end is found by the next request
@@ -960,10 +1006,32 @@ export class PgSession {
       log.error(error, { report: true, context: { step: "delete-body" } });
     }
 
+    return PgSession._endDeletedAccount(teardown, githubRevoked);
+  }
+
+  /**
+   * Whether a session read, after a deletion that got no answer or a `401`,
+   * finds nobody signed in: the account is taken as deleted. A read that
+   * fails, or finds a user, keeps it. Applies nothing to the session: the
+   * caller ends it, or leaves it as it was.
+   */
+  private static async _isNobodySignedIn() {
+    const { failed, isNobody } = await PgSession._fetchSession();
+    return !failed && isNobody;
+  }
+
+  /**
+   * End the session of an account the server deleted: the teardown, while
+   * the user is still readable since what it removes is keyed by their id,
+   * then the user cleared.
+   */
+  private static async _endDeletedAccount(
+    teardown: AccountDeletedTeardown | undefined,
+    githubRevoked: boolean
+  ): Promise<AccountDeleted> {
     removeRememberedUser();
     PgSession._expiredUser = undefined;
     try {
-      // While the user is still readable: what it removes is keyed by their id
       try {
         await teardown?.();
       } catch (error) {
@@ -3052,7 +3120,125 @@ if (import.meta.vitest) {
           ]);
         });
 
-        it.each([401, 403, 405, 500, 503, 204])(
+        /**
+         * The deletion answers with `deletion`; the session read after it
+         * finds `who`: Ada, nobody (a 401), or no answer
+         */
+        const deletionThenRead = (
+          deletion: () => Promise<Response>,
+          who: "ada" | "nobody" | "no answer"
+        ) =>
+          vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+            if (String(input) !== "/api/auth/get-session") return deletion();
+            if (who === "no answer") throw new TypeError("Failed to fetch");
+            return {
+              ok: who === "ada",
+              status: who === "ada" ? 200 : 401,
+              headers: new Headers({ "content-type": "application/json" }),
+              json: async () => (who === "ada" ? { user: ada } : {}),
+            } as unknown as Response;
+          });
+
+        const answered = (status: number) => async () =>
+          ({
+            ok: status >= 200 && status < 300,
+            status,
+            json: async () => ({ error: "x" }),
+          } as Response);
+
+        const timedOut = async (): Promise<Response> => {
+          throw new DOMException("signal timed out", "TimeoutError");
+        };
+
+        const offline = async (): Promise<Response> => {
+          throw new TypeError("Failed to fetch");
+        };
+
+        it("forgets the remembered user and any ended session after a 200", async () => {
+          await PgSession.refreshWith(ada);
+          expect(localStorage.getItem(SIGNED_IN_USER_KEY)).not.toBeNull();
+          deletionAnswers([], { status: 200, body: { githubRevoked: true } });
+
+          await PgSession.deleteAccount();
+
+          expect(localStorage.getItem(SIGNED_IN_USER_KEY)).toBeNull();
+          expect(PgSession.expiredUser).toBeUndefined();
+        });
+
+        it.each([
+          ["times out", timedOut],
+          ["fails on the network", offline],
+          ["answers 401", answered(401)],
+        ])(
+          "takes the account as deleted when the request %s and nobody is signed in any more",
+          async (_, deletion) => {
+            await PgSession.refreshWith(ada);
+            initLogger({ providers: [memoryProvider()] });
+            const teardown = vi.fn(async () => {
+              expect(PgSession.get()?.id).toBe("u1");
+            });
+            PgSession.setOnAccountDeleted(async () => teardown);
+            deletionThenRead(deletion, "nobody");
+
+            expect(await PgSession.deleteAccount()).toEqual({
+              githubRevoked: false,
+            });
+
+            expect(teardown).toHaveBeenCalledOnce();
+            expect(PgSession.get()).toBeUndefined();
+            expect(PgSession.expiredUser).toBeUndefined();
+            expect(localStorage.getItem(SIGNED_IN_USER_KEY)).toBeNull();
+            expect(PgSession.isEnding).toBe(false);
+          }
+        );
+
+        it.each([
+          ["times out", timedOut, "ada"],
+          ["fails on the network", offline, "no answer"],
+          ["answers 401", answered(401), "ada"],
+          ["answers 401", answered(401), "no answer"],
+        ] as const)(
+          "keeps the user and everything local when the request %s and the read finds %s",
+          // eslint-disable-next-line max-params -- `it.each` spreads each row into the callback
+          async (_, deletion, who) => {
+            await PgSession.refreshWith(ada);
+            initLogger({ providers: [memoryProvider()] });
+            const teardown = vi.fn().mockResolvedValue(undefined);
+            PgSession.setOnAccountDeleted(async () => teardown);
+            deletionThenRead(deletion, who);
+
+            await expect(PgSession.deleteAccount()).rejects.toThrow(Error);
+
+            expect(teardown).not.toHaveBeenCalled();
+            expect(PgSession.get()?.id).toBe("u1");
+            expect(PgSession.isEnding).toBe(false);
+          }
+        );
+
+        it("reports a deletion that timed out", async () => {
+          await PgSession.refreshWith(ada);
+          const logged = memoryProvider();
+          initLogger({ providers: [logged] });
+          deletionThenRead(timedOut, "ada");
+
+          await expect(PgSession.deleteAccount()).rejects.toThrow(
+            "Check your connection and try again."
+          );
+
+          expect(logged.entries).toEqual([
+            expect.objectContaining({
+              ns: "auth:session",
+              level: "error",
+              report: true,
+              error: expect.objectContaining({
+                message: "account deletion timed out after 30000 ms",
+              }),
+              context: { step: "delete-request" },
+            }),
+          ]);
+        });
+
+        it.each([403, 405, 500, 503, 204])(
           "keeps the user and everything local when the server answers %i",
           async (status) => {
             await PgSession.refreshWith(ada);
@@ -3082,9 +3268,9 @@ if (import.meta.vitest) {
           await PgSession.refreshWith(ada);
           initLogger({ providers: [memoryProvider()] });
 
-          deletionAnswers([], { status: 401 });
+          deletionThenRead(answered(401), "ada");
           await expect(PgSession.deleteAccount()).rejects.toThrow(
-            "Your session ended. Sign in again, then delete the account."
+            "The server couldn't confirm your session. Try again."
           );
           deletionAnswers([], { status: 500 });
           await expect(PgSession.deleteAccount()).rejects.toThrow("Try again.");

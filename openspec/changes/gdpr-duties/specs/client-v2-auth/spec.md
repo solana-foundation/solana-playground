@@ -54,12 +54,14 @@ listed:
 - **WHEN** a session read finds that the session ended without a sign-out
 - **THEN** `auth_session_expired` is tracked once, however many reads follow
 
-#### Scenario: An account deletion
+#### Scenario: An account deletion (manual)
+Pinned by `client-v2/src/features/auth/model/telemetry.test.ts`, under `yarn test-unit`.
 
 - **WHEN** the user deletes their account and the server accepts the request
 - **THEN** `auth_account_deleted` is tracked and `auth_signed_out` is not
 
-#### Scenario: An account deletion that fails
+#### Scenario: An account deletion that fails (manual)
+Pinned by `client-v2/src/features/auth/model/telemetry.test.ts`, under `yarn test-unit`.
 
 - **WHEN** the deletion request is refused or does not reach the server
 - **THEN** `auth_account_deleted` is not tracked, the user stays signed in, and

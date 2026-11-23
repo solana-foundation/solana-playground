@@ -3,9 +3,12 @@ import { PgAccountList } from "../../features/persistence/model/account-list";
 import type { HandOver } from "../../features/persistence/model/chat-sync";
 import { PgChatSync } from "../../features/persistence/model/chat-sync";
 import { report } from "../../features/persistence/model/diagnostics";
+import type { MarkReading } from "../../features/persistence/model/project-restore";
 import {
+  readProjectMarks,
   reconcile,
   releaseLocalProjects,
+  releaseProjectsUnchangedSince,
 } from "../../features/persistence/model/project-restore";
 import { PgProjectSync } from "../../features/persistence/model/project-sync";
 import { PgThreadFence } from "../../features/persistence/model/thread-fence";
@@ -320,10 +323,17 @@ export const session = (): Disposable => {
    * server for each thread and hands over those it holds whole; a thread it
    * cannot vouch for stays, and so does every thread when the read fails.
    *
+   * The read half also reads each project's sync mark (`readProjectMarks`).
+   * `isEnding` holds this tab's pushes only: another tab's push can land
+   * between the read and the `DELETE`, and its content then reached only a
+   * server copy the deletion removes.
+   *
    * The teardown is the sign-out's: the panel closes, `forget` drops the
-   * handed-over threads still as they were read, and `releaseLocalProjects`
-   * removes only projects whose files match this account's sync mark, so an
-   * unpushed edit or a project never synced stays. What stays is owned by the
+   * handed-over threads still as they were read, and
+   * `releaseProjectsUnchangedSince` removes only projects whose files match
+   * this account's sync mark and whose mark is still what the read found, so
+   * an unpushed edit, a project never synced, or one another tab pushed
+   * meanwhile stays. What stays is owned by the
    * deleted account (`claimUnowned` names it over a folder nobody owns), so
    * the next account's sign-in fences it rather than uploading it.
    */
@@ -347,6 +357,13 @@ export const session = (): Disposable => {
     } catch (e) {
       report("read conversations the account holds", e);
     }
+    // Empty when the read fails: nothing is released, every project stays
+    let marks: MarkReading = new Map();
+    try {
+      marks = await readProjectMarks();
+    } catch (e) {
+      report("read sync marks", e);
+    }
 
     return async () => {
       await runReportingFor("stop turn")(() => PgAssistant.stopTurn());
@@ -360,7 +377,7 @@ export const session = (): Disposable => {
         PgChatSync.forget(handed)
       );
       await runReportingFor("release local projects")(() =>
-        releaseLocalProjects()
+        releaseProjectsUnchangedSince(marks)
       );
       await runReportingFor("close thread")(() => PgAssistant.closeThread());
       await runReportingFor("forget account")(() =>

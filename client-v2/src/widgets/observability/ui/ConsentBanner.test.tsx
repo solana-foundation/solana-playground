@@ -8,6 +8,7 @@ import {
   resetTelemetry,
   writeConsent,
 } from "@/shared/lib/telemetry";
+import { PgView } from "@/utils/view";
 
 import { AnalyticsSwitch } from "./AnalyticsSwitch";
 import { ConsentBanner } from "./ConsentBanner";
@@ -123,5 +124,66 @@ describe("AnalyticsSwitch", () => {
     expect(events.events.map(({ params }) => params)).toEqual([
       { choice: "declined", via: "settings" },
     ]);
+  });
+});
+
+describe("a choice storage refuses", () => {
+  let toast: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    window.localStorage.setItem("analytics-consent", "allowed");
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    toast = vi.spyOn(PgView, "setToast").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    // A stored write drops the choice held for the page
+    writeConsent("declined");
+  });
+
+  const toastText = () => {
+    const [Body] = toast.mock.calls[0] as [() => React.JSX.Element];
+    render(<Body />);
+    return screen.getByText(/Couldn't save/).textContent;
+  };
+
+  it("should apply a decline from Settings at once, and say it lasts until reload", async () => {
+    render(<AnalyticsSwitch />);
+
+    await userEvent.click(screen.getByRole("switch", { name: "Analytics" }));
+
+    expect(readConsent()).toBe("declined");
+    expect(
+      screen
+        .getByRole("switch", { name: "Analytics" })
+        .getAttribute("aria-checked")
+    ).toBe("false");
+    expect(toast).toHaveBeenCalledTimes(1);
+    expect(toastText()).toBe(
+      "Couldn't save your choice; it applies until you reload."
+    );
+  });
+
+  it("should close the banner on Decline and say the same", async () => {
+    window.localStorage.clear();
+    render(<ConsentBanner />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Decline" }));
+
+    expect(readConsent()).toBe("declined");
+    expect(banner()).toBeNull();
+    expect(toast).toHaveBeenCalledTimes(1);
+  });
+
+  it("should toast nothing when the choice is stored", async () => {
+    vi.mocked(Storage.prototype.setItem).mockRestore();
+    render(<AnalyticsSwitch />);
+
+    await userEvent.click(screen.getByRole("switch", { name: "Analytics" }));
+
+    expect(toast).not.toHaveBeenCalled();
   });
 });

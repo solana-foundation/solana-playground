@@ -95,6 +95,20 @@ describe("DELETE /api/account", () => {
     assert.equal(transact.mock.callCount(), 0);
   });
 
+  for (const status of ["unavailable", "unconfigured"]) {
+    it(`answers 503 and deletes nothing when the session read is ${status}`, async () => {
+      const transact = mock.fn(transaction);
+      const res = await call(
+        depsWith({
+          readSession: async () => ({ status }),
+          transaction: transact,
+        })
+      );
+      assert.equal(res.statusCode, 503);
+      assert.equal(transact.mock.callCount(), 0);
+    });
+  }
+
   describe("against Postgres", { skip: !DB && "DATABASE_URL not set" }, () => {
     const seed = async (id, login) => {
       await query(
@@ -148,23 +162,74 @@ describe("DELETE /api/account", () => {
       );
     };
 
-    const TABLES = [
-      ["user", "id"],
-      ["account", `"userId"`],
-      ["session", `"userId"`],
-      ["projects", "user_id"],
-      ["project_files", "user_id"],
-      ["conversations", "user_id"],
-      ["agent_spend", "user_id"],
-      ["agent_turn", "user_id"],
-    ];
+    /**
+     * Tables that keep a user's id on purpose: `build_audit` outlives the
+     * account without its identity, and dbmate's own table holds no user
+     */
+    const KEPT = ["build_audit", "schema_migrations"];
+
+    /**
+     * Every table with a column naming a user (`user_id`, Better Auth's
+     * `userId`), read from the schema so a table added later is checked too,
+     * `"user"` itself first
+     */
+    const userTables = async () => {
+      const { rows } = await query(
+        `select table_name as table, column_name as column
+           from information_schema.columns
+          where table_schema = current_schema()
+            and column_name in ('user_id', 'userId')
+            and table_name <> all($1)
+          order by table_name`,
+        [KEPT]
+      );
+      return [{ table: "user", column: "id" }].concat(rows);
+    };
+
+    /** The tables a delete from `"user"` empties through `on delete cascade` */
+    const cascadedFromUser = async () => {
+      const { rows } = await query(
+        `select conrelid::regclass::text as child,
+                confrelid::regclass::text as parent
+           from pg_constraint
+          where contype = 'f' and confdeltype = 'c'`
+      );
+      const name = (regclass) => regclass.replaceAll('"', "");
+      const reached = new Set(["user"]);
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (const { child, parent } of rows) {
+          if (reached.has(name(parent)) && !reached.has(name(child))) {
+            reached.add(name(child));
+            grew = true;
+          }
+        }
+      }
+      return reached;
+    };
+
+    it("finds every table keyed by a user cascaded from it", async () => {
+      const tables = (await userTables()).map(({ table }) => table);
+      const cascaded = await cascadedFromUser();
+
+      // The schema read still sees the tables it was written against
+      for (const known of ["account", "session", "projects", "agent_turn"]) {
+        assert.ok(tables.includes(known), `${known} is not found`);
+      }
+      assert.deepEqual(
+        tables.filter((table) => !cascaded.has(table)),
+        [],
+        "these tables hold a user's rows that the account deletion leaves"
+      );
+    });
 
     /** How many rows each table holds for the user, plus their messages */
     const counts = async (id) => {
       const out = {};
-      for (const [table, column] of TABLES) {
+      for (const { table, column } of await userTables()) {
         const { rows } = await query(
-          `select count(*)::int as n from "${table}" where ${column} = $1`,
+          `select count(*)::int as n from "${table}" where "${column}" = $1`,
           [id]
         );
         out[table] = rows[0].n;
@@ -302,6 +367,58 @@ describe("DELETE /api/account", () => {
       );
       assert.equal(res.statusCode, 200);
       assert.deepEqual(JSON.parse(res.body), { githubRevoked: false });
+    });
+
+    it("deletes the account and skips the revoke when the token read throws", async () => {
+      const fetchImpl = grant(204);
+
+      const res = await call(
+        depsWith({
+          readGithubToken: async () => {
+            throw new Error("Better Auth is down");
+          },
+          revokeGithubGrant: revokeGithubGrantWith(fetchImpl),
+        })
+      );
+
+      assert.equal(res.statusCode, 200);
+      assert.deepEqual(JSON.parse(res.body), { githubRevoked: false });
+      assert.equal((await counts(USER)).user, 0);
+      // Reported once, by the read: the revoke has nothing to add
+      assert.equal(fetchImpl.mock.callCount(), 0);
+    });
+
+    it("deletes the account and answers githubRevoked: false without a token", async () => {
+      const fetchImpl = grant(204);
+
+      const res = await call(
+        depsWith({
+          readGithubToken: async () => undefined,
+          revokeGithubGrant: revokeGithubGrantWith(fetchImpl),
+        })
+      );
+
+      assert.equal(res.statusCode, 200);
+      assert.deepEqual(JSON.parse(res.body), { githubRevoked: false });
+      assert.equal((await counts(USER)).user, 0);
+      assert.equal(fetchImpl.mock.callCount(), 0);
+    });
+
+    it("answers 200 when a step after the commit throws", async () => {
+      const res = await call(
+        depsWith({
+          revokeGithubGrant: async () => {
+            throw new Error("revoke threw");
+          },
+          sessionCookieExpiry: async () => {
+            throw new Error("cookie threw");
+          },
+        })
+      );
+
+      assert.equal(res.statusCode, 200);
+      assert.deepEqual(JSON.parse(res.body), { githubRevoked: false });
+      assert.equal((await counts(USER)).user, 0);
     });
 
     it("passes the session cookie's expiry on", async () => {

@@ -768,3 +768,90 @@ it("keeps the deletion busy so it cannot run twice, and counts a close while it 
   ).toBeTruthy();
   expect(screen.queryByText("Your account was deleted.")).toBeNull();
 });
+
+describe("a deletion that settles after the menu closed", () => {
+  /**
+   * Starts a deletion that waits, closes the menu over it, and returns how to
+   * settle it
+   */
+  const deleteThenClose = async () => {
+    let settle: (
+      outcome: () => Promise<{ githubRevoked: boolean }>
+    ) => void = () => {};
+    vi.spyOn(PgSession, "deleteAccount").mockReturnValue(
+      new Promise((resolve, reject) => {
+        settle = (outcome) => {
+          outcome().then(resolve, reject);
+        };
+      })
+    );
+    draw("footer");
+    await pick("Delete account");
+    await deleteQuestion();
+    await confirmDelete();
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    return settle;
+  };
+
+  /** The one toast's body, drawn */
+  const drawnToast = (toast: typeof setToast) => {
+    const [Body] = toast.mock.calls[0] as [() => React.JSX.Element];
+    render(<Body />);
+  };
+
+  it("toasts the GitHub line with its link when GitHub kept the grant", async () => {
+    await signInAsTester();
+    const settle = await deleteThenClose();
+
+    settle(async () => {
+      PgSession.reset();
+      return { githubRevoked: false };
+    });
+
+    await waitFor(() => expect(setToast).toHaveBeenCalledTimes(1));
+    drawnToast(setToast);
+    expect(screen.getByText("Your account was deleted.")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", {
+          name: "Remove Playground from your GitHub settings too.",
+        })
+        .getAttribute("href")
+    ).toBe("https://github.com/settings/applications");
+  });
+
+  it("toasts nothing when GitHub revoked the grant", async () => {
+    await signInAsTester();
+    const settle = await deleteThenClose();
+
+    settle(async () => {
+      PgSession.reset();
+      return { githubRevoked: true };
+    });
+
+    await waitFor(() =>
+      expect(eventsNamed("session_delete_account_ended")).toEqual([
+        { outcome: "ok" },
+      ])
+    );
+    expect(setToast).not.toHaveBeenCalled();
+  });
+
+  it("toasts the failure with its reason", async () => {
+    await signInAsTester();
+    const settle = await deleteThenClose();
+
+    settle(async () => {
+      throw new Error("The server did not answer.");
+    });
+
+    await waitFor(() => expect(setToast).toHaveBeenCalledTimes(1));
+    drawnToast(setToast);
+    expect(
+      screen.getByText("Couldn't delete your account.").parentElement
+        ?.textContent
+    ).toBe("Couldn't delete your account. The server did not answer.");
+    expect(PgSession.get()?.id).toBe("u1");
+  });
+});
