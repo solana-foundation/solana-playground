@@ -282,6 +282,16 @@ Done:
   what lets a reload tell a local copy that is behind the account from one
   holding work that never finished uploading, and deleting a project
   propagates rather than coming back on the next load.
+- Privacy: the account menu links the Solana Foundation's privacy policy
+  (`https://solana.com/privacy-policy`), which covers Playground. A signed-in
+  user can delete their account from the account menu: the account's synced
+  projects, conversations, sessions and AI usage are deleted from the server,
+  their GitHub login is removed from the build records, and Playground's
+  access to their GitHub account is revoked. In this browser, projects and
+  chats the account held leave as on sign-out; work never saved to the account
+  stays. Google Analytics runs only for a visitor who allows it, in a banner
+  shown once or later in Settings (Advanced, Analytics). The server deletes
+  expired sessions daily and build records after 90 days.
 
 Ecosystem grounding shipped: skills the model loads on demand
 (`list_skills` / `load_skill` / `read_skill_reference`), and MCP tools — both

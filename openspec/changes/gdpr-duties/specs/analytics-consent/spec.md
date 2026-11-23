@@ -52,7 +52,7 @@ sent.
 
 ### Requirement: A banner asks once
 
-While the choice is `unanswered`, a banner (`role` "region", `aria-label`
+While the choice is `unanswered` in a build with a measurement id, a banner (`role` "region", `aria-label`
 "Analytics consent") SHALL show at the foot of the window with the line
 "Playground uses Google Analytics to see which features people use. Allow
 it?", a "Privacy policy" link to `https://solana.com/privacy-policy` that

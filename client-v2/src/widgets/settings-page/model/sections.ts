@@ -188,6 +188,16 @@ export const ROWS: Record<string, RowCopy | undefined> = {
   },
 };
 
+/**
+ * The Analytics row of Advanced. Not a `PgSettings` entry, so not in `ROWS`: a
+ * setting is two-valued with a default, and the analytics choice has a third
+ * state, not asked yet (`analytics-consent`).
+ */
+export const ANALYTICS_ROW = {
+  label: "Analytics",
+  help: "Send usage events to Google Analytics.",
+};
+
 /** Settings already reported, so a page that re-renders on every scroll reports each once */
 const reported = new Set<string>();
 

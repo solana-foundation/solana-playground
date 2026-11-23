@@ -37,6 +37,7 @@ import {
 import { catalogPage, catalogSlot, useCatalogPage } from "@/widgets/catalog";
 import { homeSlot, useStartView } from "@/widgets/home";
 import { CONSOLE_KEY, keyLabel, LayoutShell } from "@/widgets/layout-shell";
+import { AnalyticsSwitch } from "@/widgets/observability";
 import { ModalHost, ToastHost } from "@/widgets/overlays";
 import { RailFooter, SessionFooter } from "@/widgets/session-footer";
 import { SettingsPage, settingsTelemetry } from "@/widgets/settings-page";
@@ -232,6 +233,11 @@ const shareFromCodeHead = (name: string) =>
     name
   );
 
+/** The Analytics row's switch, which `widgets/observability` owns and the settings page may not import */
+const renderAnalytics = (controlId: string) => (
+  <AnalyticsSwitch id={controlId} />
+);
+
 /**
  * The settings page with whether the hosted model answers, and the asking
  * again its row offers. Its own component, so the probe is read only while
@@ -240,7 +246,7 @@ const shareFromCodeHead = (name: string) =>
 const LiveSettings = (
   props: Omit<
     ComponentProps<typeof SettingsPage>,
-    "hosted" | "hostedName" | "ownKey" | "onRetryHosted"
+    "hosted" | "hostedName" | "ownKey" | "onRetryHosted" | "renderAnalytics"
   >
 ) => {
   const backend = useDefaultBackend();
@@ -257,6 +263,7 @@ const LiveSettings = (
       }
       ownKey={current.kind === "keyed" ? current.label : undefined}
       onRetryHosted={retryHosted}
+      renderAnalytics={renderAnalytics}
     />
   );
 };

@@ -29,13 +29,13 @@ after 1.1 is merged and before the release.
 
 ## 2. Analytics consent
 
-- [ ] 2.1 Consent store and the GA4 gate (HOO-2955).
+- [x] 2.1 Consent store and the GA4 gate (HOO-2955).
   `shared/lib/telemetry/consent.ts` per design.md "Consent is a small store";
   `ga4Provider` and `GoogleAnalytics` read it. Verified by in-source tests of
   the store (missing, garbage and throwing storage read as `unanswered`), and
   `ga4.test.ts` cases for the `client-v2-telemetry` scenarios, including no
   `window.gtag` while not `allowed` and no pre-consent event after Allow.
-- [ ] 2.2 Banner, Settings switch and `obs_analytics_consent_set` (HOO-2955,
+- [x] 2.2 Banner, Settings switch and `obs_analytics_consent_set` (HOO-2955,
   depends on 2.1). `BaseConsentBanner` and `ConsentBanner` in
   `widgets/observability/ui`, the event declared in that slice's
   `model/telemetry.ts`, the Analytics row in the Settings page's Advanced

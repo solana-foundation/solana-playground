@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { StrictMode } from "react";
 
 import { resetLogger } from "@/shared/lib/logger";
-import { resetTelemetry } from "@/shared/lib/telemetry";
+import { resetTelemetry, writeConsent } from "@/shared/lib/telemetry";
 
 import { resetObservability } from "../model/init";
 import { Observability } from "./Observability";
@@ -17,6 +17,7 @@ vi.mock("@sentry/react", () => ({
 }));
 
 afterEach(() => {
+  window.localStorage.clear();
   resetObservability();
   resetLogger();
   resetTelemetry();
@@ -51,7 +52,8 @@ const queuedEvents = () =>
     .filter(([command]) => command === "event")
     .map(([, name]) => name);
 
-it("should initialise Sentry and queue obs_initialised once under StrictMode's double render", () => {
+it("should initialise Sentry and queue obs_initialised once under StrictMode's double render, for a visitor who allowed analytics", () => {
+  writeConsent("allowed");
   // No gtag.js and no stub beforehand, as on a real page load
   renderObservability(<p>app</p>, { measurementId: "G-TEST" });
 
@@ -118,4 +120,24 @@ it("should send nothing to Google without a measurement id", () => {
 
   expect(document.querySelector('script[src*="googletagmanager"]')).toBeNull();
   expect(window.dataLayer).toBeUndefined();
+});
+
+it("should send nothing to Google, and inject no gtag.js, before the visitor allows analytics", () => {
+  renderObservability(<p>app</p>, { measurementId: "G-TEST" });
+
+  expect(window.dataLayer).toBeUndefined();
+  expect(document.querySelector('script[src*="googletagmanager"]')).toBeNull();
+});
+
+it("should show the consent banner only when a measurement id is set", () => {
+  const { unmount } = renderObservability(<p>app</p>);
+  expect(
+    screen.queryByRole("region", { name: "Analytics consent" })
+  ).toBeNull();
+  unmount();
+
+  renderObservability(<p>app</p>, { measurementId: "G-TEST" });
+  expect(
+    screen.getByRole("region", { name: "Analytics consent" })
+  ).toBeTruthy();
 });
