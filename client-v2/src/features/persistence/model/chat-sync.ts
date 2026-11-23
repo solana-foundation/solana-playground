@@ -259,7 +259,7 @@ export class PgChatSync {
 
     for (const body of bodies) {
       const outcome = await PgChatSync._post({ threadId, userId }, body);
-      if (outcome === "no-project" && PgChatSync._stillSignedIn(userId))
+      if (outcome === "no-project" && PgChatSync._isSignedInAs(userId))
         PgChatSync._awaiting.set(threadId, projectId);
       if (outcome !== "pushed") return outcome;
     }
@@ -336,7 +336,7 @@ export class PgChatSync {
    * session change mid-request has already forgotten that account's caps and
    * waits, and its answer must not put them back for the next account.
    */
-  private static _stillSignedIn(userId: string) {
+  private static _isSignedInAs(userId: string) {
     return PgSession.get()?.id === userId;
   }
 
@@ -409,7 +409,7 @@ export class PgChatSync {
       if (response.status === 413) {
         const limit = readChatLimitExceeded(await PgChatSync._body(response));
         if (limit) {
-          if (PgChatSync._stillSignedIn(userId))
+          if (PgChatSync._isSignedInAs(userId))
             PgChatSync._setLimit(threadId, limit);
           PgChatSync._reportRefusal(`account cap: ${limit.reason}`);
           return "over-limit";
