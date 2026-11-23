@@ -1,7 +1,7 @@
 import type { FC } from "react";
 
 import { clusterName } from "@/entities/cluster";
-import { PgClientRun, RunButton } from "@/features/docs-link";
+import { RunButton } from "@/features/docs-link";
 import { useRenderOnChange } from "@/hooks";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { PgCommand, PgCommon, PgConnection, PgExplorer } from "@/utils";
@@ -18,11 +18,7 @@ const handleAddProgram = async () => {
 };
 
 const handleAddProgramError = reportButtonFailure("add a program");
-/** Tests run the link's code too, so they ask first, as Run does */
-const handleTest = async () => {
-  if (!(await PgClientRun.askFirst())) return;
-  await PgCommand.test.execute();
-};
+const handleTest = () => PgCommand.test.execute();
 const handleTestError = reportButtonFailure("run the tests");
 
 /** `BaseClientProjectBar` on the connection, the explorer and the commands */

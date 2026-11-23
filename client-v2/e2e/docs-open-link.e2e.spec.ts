@@ -284,9 +284,23 @@ test.describe("client-run", () => {
     );
   });
 
-  test("client-run: Test asks first too", async ({ page }) => {
-    await page.goto(docsLink({ name: "hello.ts", code: 'console.log("hi")' }));
-    await page.getByRole("button", { name: "Test", exact: true }).click(LONG);
+  test("client-run: Test on a link's test file asks first too", async ({
+    page,
+  }) => {
+    await page.goto(
+      docsLink({ name: "hello.test.ts", code: 'console.log("hi")' })
+    );
+    await expect(callout(page)).toBeVisible(LONG);
+    await page.getByRole("button", { name: "Files" }).click();
+    const files = page.getByRole("dialog", { name: "Files" });
+    const file = files.getByRole("button", { name: "hello.test.ts" });
+    await expect(files).toBeVisible();
+    // The open file's folder may already be expanded
+    if (!(await file.isVisible())) {
+      await files.getByRole("button", { name: "client" }).click();
+    }
+    await file.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Test" }).click();
 
     const dialog = confirmDialog(page);
     await expect(dialog).toContainText('console.log("hi")', LONG);

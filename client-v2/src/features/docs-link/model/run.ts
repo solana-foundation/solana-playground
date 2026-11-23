@@ -88,8 +88,9 @@ const settle = (isYes: boolean) => {
 };
 
 const set = (next: RunState) => {
-  // Any state but the question closes it: a project that switched, a run
-  // typed in the terminal. Run and Cancel answer before they set
+  // Any state but the question closes it, with "no": a project that
+  // switched, a run typed in the terminal, Cancel. Run answers "yes" first,
+  // so this finds nothing left to answer
   if (next.kind !== "confirm") settle(false);
   state = next;
   listeners.forEach((listener) => listener(next));
@@ -394,7 +395,10 @@ export const PgClientRun = {
     // run going refuses it: the question would replace the running state
     // the stage row shows. Otherwise the command answers, as it always did
     const isOwed = link !== undefined && link !== confirmedLink;
-    if (isOwed && state.kind === "running") return Promise.resolve(false);
+    if (isOwed && state.kind === "running") {
+      log.info("a run from elsewhere waits for the one going to end");
+      return Promise.resolve(false);
+    }
     return isAgreed(switches);
   },
 

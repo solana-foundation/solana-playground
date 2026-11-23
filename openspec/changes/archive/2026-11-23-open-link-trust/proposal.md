@@ -40,7 +40,6 @@ a Run the user confirms still sends `docs_link_run_started` and
   `PgClientRun.askFirst()`.
 - `client-v2/e2e/docs-open-link.e2e.spec.ts`: Run now confirms first.
 - `docs/open-in-playground-link.md`: the cap.
-- `client-v2/src/widgets/client-project-bar`: the stage row's Test asks too.
 
 Out of scope: verifying a link's code against a list the docs site publishes
 (no such list exists); asking before a `run` or `test` typed in the terminal,

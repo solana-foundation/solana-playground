@@ -143,16 +143,16 @@ describe("useExplorerContextMenu modal actions", () => {
 });
 
 describe("useExplorerContextMenu Run", () => {
-  // A link's code must not run from the menu before the user agreed to it
-  // A test file runs too: a link may name its file `example.test.ts`
-  it.each([
+  // A link's code must not run from the menu before the user agreed to it.
+  // Test on a file runs that file, and a link may name its file `a.test.ts`
+  const ASKING = [
     "runClient",
     "runClientFolder",
     "addClient",
     "runTest",
-    "runTestFolder",
-    "addTests",
-  ] as const)(
+  ] as const;
+
+  it.each(ASKING)(
     "%s asks before the first run of a link's code",
     async (action) => {
       run.answer.isAgreed = false;
@@ -166,12 +166,26 @@ describe("useExplorerContextMenu Run", () => {
     }
   );
 
-  it("runs once agreed", async () => {
+  it.each(ASKING)("%s runs once agreed", async (action) => {
     run.answer.isAgreed = true;
     const { result } = renderHook(() => useExplorerContextMenu());
 
-    await result.current.runClientFolder();
+    await result.current[action]();
 
-    expect(run.execute).toHaveBeenCalledTimes(1);
+    expect(run.execute.mock.calls.length + run.test.mock.calls.length).toBe(1);
   });
+
+  // A bare `test` runs only `tests/`, which holds none of a link's code
+  it.each(["runTestFolder", "addTests"] as const)(
+    "%s runs the tests folder without asking",
+    async (action) => {
+      run.answer.isAgreed = false;
+      const { result } = renderHook(() => useExplorerContextMenu());
+
+      await result.current[action]();
+
+      expect(run.askFirst).not.toHaveBeenCalled();
+      expect(run.test).toHaveBeenCalledTimes(1);
+    }
+  );
 });
