@@ -37,7 +37,6 @@ fn app(config: Config) -> Router {
 
     let unstable_routes = if cfg!(feature = "unstable") {
         let build_concurrency = config.unstable_build.limits.route.concurrency;
-        let bundle_concurrency = config.unstable_bundle.limits.route.concurrency;
         Router::new()
             .route(
                 "/build",
@@ -46,12 +45,6 @@ fn app(config: Config) -> Router {
                     .layer(concurrency_limit(build_concurrency)),
             )
             .route("/deploy/{uuid}", get(unstable::deploy))
-            .route(
-                "/bundle",
-                post(unstable::bundle)
-                    .with_state(unstable::BundleState::new(config.unstable_bundle))
-                    .layer(concurrency_limit(bundle_concurrency)),
-            )
             .layer(api_key)
     } else {
         Router::new()
@@ -159,7 +152,6 @@ mod tests {
                 "GET",
                 "/unstable/deploy/0b9f4d3e-6c1a-4f7e-9a2b-3c4d5e6f7a8b",
             ),
-            ("POST", "/unstable/bundle"),
         ] {
             assert_eq!(
                 status(method, path, None).await,

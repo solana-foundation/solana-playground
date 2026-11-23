@@ -14,8 +14,6 @@ export const WASM_STUB_MARKER = "local dev stub";
 export const REAL_WASM_MARKERS = [
   "rust_analyzer_wasm_bg",
   "seahorse_compile_wasm_bg",
-  "solana_cli_wasm_bg",
-  "spl_token_cli_wasm_bg",
 ];
 
 // No import.meta: the e2e spec imports this module, and Playwright compiles it to CommonJS. yarn runs the CLI in client-v2.

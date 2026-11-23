@@ -24,7 +24,6 @@ const NEEDS_CONNECTION = [
   "deploy",
   "run",
   "solana",
-  "spl-token",
   "test",
 ];
 

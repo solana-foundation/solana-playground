@@ -611,7 +611,7 @@ reason.
   that workflow on the real wasm packages) on every PR (GitHub reads the
   workflow from the PR's merge commit; see the root `CLAUDE.md`, "This is a
   fork"), and a red spec fails the PR's checks. The `@real-wasm` specs run
-  the CLIs; the manual `client-v2-with-stubs.yml` runs the suite on the stubs
+  rust-analyzer; the manual `client-v2-with-stubs.yml` runs the suite on the stubs
   and leaves them out. It needs no server and no Postgres: every spec stubs
   the account endpoints with `page.route`, and the dev server serves
   `api/*.mjs` itself. The assistant's specs stub `/api/agent` the same way,

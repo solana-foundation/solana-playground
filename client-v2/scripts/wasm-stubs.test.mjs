@@ -30,10 +30,10 @@ for (const [label, env, expected] of [
 test("stubbedPackages names only the stubs", () => {
   assert.deepEqual(
     stubbedPackages([
-      { name: "solana-cli", manifest: { version: WASM_STUB_VERSION } },
-      { name: "spl-token-cli", manifest: { version: "0.1.0" } },
+      { name: "seahorse-compile", manifest: { version: WASM_STUB_VERSION } },
+      { name: "rust-analyzer", manifest: { version: "0.1.0" } },
     ]),
-    ["solana-cli"]
+    ["seahorse-compile"]
   );
 });
 
@@ -78,7 +78,7 @@ const clientWith = (version) => {
     dir,
     "node_modules",
     "@solana-playground",
-    "solana-cli"
+    "seahorse-compile"
   );
   fs.mkdirSync(pkg, { recursive: true });
   fs.writeFileSync(path.join(pkg, "package.json"), JSON.stringify({ version }));

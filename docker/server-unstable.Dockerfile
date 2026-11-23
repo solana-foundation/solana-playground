@@ -31,7 +31,6 @@ WORKDIR /home/${USER}
 # Start-up runs `docker build` on images/Dockerfile.* with this directory as the context
 COPY --chown=${USER}:${USER} .dockerignore Cargo.* rust-toolchain.toml ./
 COPY --chown=${USER}:${USER} images images
-COPY --chown=${USER}:${USER} packages packages
 COPY --chown=${USER}:${USER} src src
 COPY --chown=${USER}:${USER} templates templates
 

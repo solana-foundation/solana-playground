@@ -11,7 +11,7 @@ import { PgView } from "../view";
 import { PgWeb3 } from "../web3";
 import { type KeyFrame, KeyFrameUnavailable } from "./key-origin/client";
 import { handlerWith } from "./key-origin/frame/handler";
-import { CLI_KEY_ERROR, keyOriginSignerProvider } from "./key-origin/provider";
+import { keyOriginSignerProvider } from "./key-origin/provider";
 import { KeypairFileError } from "./keypair-file";
 import { localSignerProviderWith, publicKeyOf } from "./signer-provider";
 import type {
@@ -185,20 +185,6 @@ describe("utils/wallet/wallet", () => {
         name: "Wallet 1",
         publicKey: keypair.publicKey,
       });
-    });
-
-    it("getKeypairBytes gives the WASM CLIs the current account's key", () => {
-      const { secretKeyFor } = connect();
-      expect(PgWallet.getKeypairBytes()).toEqual(kp);
-      expect(secretKeyFor).toHaveBeenCalledWith(keypair.publicKey);
-    });
-
-    it("getPublicKeyBytes gives the WASM CLIs the public key, not the key", () => {
-      const { secretKeyFor } = connect();
-      expect(PgWallet.getPublicKeyBytes()).toEqual(
-        Array.from(keypair.publicKey.toBytes())
-      );
-      expect(secretKeyFor).not.toHaveBeenCalled();
     });
 
     it("export writes the current account's key file", () => {
@@ -495,7 +481,7 @@ describe("utils/wallet/wallet", () => {
         expect(Array.from(kept.keys())).toEqual([added]);
       });
 
-      it("getKeypairBytes refuses with the CLI message, export with the key panel's", async () => {
+      it("export refuses with the key panel's message", async () => {
         const { provider } = fakeKeyPage();
         PgWallet.setSignerProvider(provider);
         const publicKey = new PgWeb3.PublicKey(await provider.makeKey());
@@ -506,7 +492,6 @@ describe("utils/wallet/wallet", () => {
         });
         const exported = vi.spyOn(PgCommon, "export");
 
-        expect(() => PgWallet.getKeypairBytes()).toThrow(CLI_KEY_ERROR);
         expect(() => PgWallet.export()).toThrow(
           "Export the key file from the key panel."
         );

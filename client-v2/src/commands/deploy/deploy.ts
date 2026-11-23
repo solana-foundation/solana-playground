@@ -220,7 +220,7 @@ async function checkProgram() {
 
   if (!PgProgramInfo.onChain) {
     throw new Error(
-      "Could not fetch on-chain data. Try using a different RPC provider with 'solana config set -u <RPC_URL>' command."
+      "Could not fetch on-chain data. Add a custom RPC in Settings, under Network, and try again."
     );
   }
 

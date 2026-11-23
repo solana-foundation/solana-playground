@@ -255,8 +255,9 @@ Rust, one for each name in `WASM_PACKAGES` (`client-v2/scripts/wasm-stubs.sh`):
 `yarn setup`, `yarn build`, the compose `v2` and `v2-prod` profiles, and
 the `client-v2.yml` workflow on pushes to `master` and on every pull request.
 That workflow SHALL fail when a job it requires was skipped, so a skipped wasm
-build cannot pass as success. Neither `anchor-cli` nor `sugar-cli` SHALL be one of
-the packages.
+build cannot pass as success. The packages SHALL be `rust-analyzer` and
+`seahorse-compile`; none of `anchor-cli`, `sugar-cli`, `solana-cli` and
+`spl-token-cli` SHALL be one of them.
 
 #### Scenario: Setting up a checkout (manual)
 
@@ -278,6 +279,14 @@ the packages.
   `client-v2/node_modules/@solana-playground` holds no `sugar-cli`, and a
   production build passes `node scripts/wasm-stubs.mjs check-build build`
   without a `sugar_cli_wasm_bg` module
+
+#### Scenario: No solana-cli or spl-token-cli package (manual)
+
+- **WHEN** `yarn setup` has run in `client-v2/`
+- **THEN** no `wasm/solana-cli` or `wasm/spl-token-cli` folder exists,
+  `client-v2/node_modules/@solana-playground` holds neither package, and a
+  production build passes `node scripts/wasm-stubs.mjs check-build build`
+  without a `solana_cli_wasm_bg` or `spl_token_cli_wasm_bg` module
 
 #### Scenario: A pull request into master (manual)
 

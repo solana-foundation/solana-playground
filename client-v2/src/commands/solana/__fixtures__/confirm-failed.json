@@ -1,0 +1,61 @@
+{
+  "command": "solana confirm 2AZqR5FDsFrYdmRM87fABg7LP4WVH5KWquVYi1nY5nocAWNr8q2K1tmLJ1iGRGbVMuEgjA9mzfvjKnhj8Fom9mmd",
+  "settings": {
+    "endpoint": "https://api.devnet.solana.com",
+    "commitment": "confirmed"
+  },
+  "rpc": [
+    {
+      "url": "https://api.devnet.solana.com/",
+      "request": {
+        "id": 0,
+        "jsonrpc": "2.0",
+        "method": "getSignatureStatuses",
+        "params": [
+          [
+            "2AZqR5FDsFrYdmRM87fABg7LP4WVH5KWquVYi1nY5nocAWNr8q2K1tmLJ1iGRGbVMuEgjA9mzfvjKnhj8Fom9mmd"
+          ]
+        ]
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "result": {
+          "context": {
+            "apiVersion": "4.5.0-beta.0",
+            "slot": 524605108
+          },
+          "value": [
+            {
+              "confirmationStatus": "finalized",
+              "confirmations": null,
+              "err": {
+                "InstructionError": [
+                  5,
+                  {
+                    "Custom": 6072
+                  }
+                ]
+              },
+              "slot": 524604845,
+              "status": {
+                "Err": {
+                  "InstructionError": [
+                    5,
+                    {
+                      "Custom": 6072
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "id": 0
+      }
+    }
+  ],
+  "output": "Transaction failed: Error processing Instruction 5: custom program error: 0x17b8",
+  "outputParts": [
+    "Transaction failed: Error processing Instruction 5: custom program error: 0x17b8"
+  ]
+}

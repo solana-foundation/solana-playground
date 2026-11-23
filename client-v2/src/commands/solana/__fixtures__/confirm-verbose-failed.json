@@ -1,0 +1,242 @@
+{
+  "command": "solana confirm -v 2AZqR5FDsFrYdmRM87fABg7LP4WVH5KWquVYi1nY5nocAWNr8q2K1tmLJ1iGRGbVMuEgjA9mzfvjKnhj8Fom9mmd",
+  "settings": {
+    "endpoint": "https://api.devnet.solana.com",
+    "commitment": "confirmed"
+  },
+  "rpc": [
+    {
+      "url": "https://api.devnet.solana.com/",
+      "request": {
+        "id": 0,
+        "jsonrpc": "2.0",
+        "method": "getSignatureStatuses",
+        "params": [
+          [
+            "2AZqR5FDsFrYdmRM87fABg7LP4WVH5KWquVYi1nY5nocAWNr8q2K1tmLJ1iGRGbVMuEgjA9mzfvjKnhj8Fom9mmd"
+          ]
+        ]
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "result": {
+          "context": {
+            "apiVersion": "4.5.0-beta.0",
+            "slot": 524605106
+          },
+          "value": [
+            {
+              "confirmationStatus": "finalized",
+              "confirmations": null,
+              "err": {
+                "InstructionError": [
+                  5,
+                  {
+                    "Custom": 6072
+                  }
+                ]
+              },
+              "slot": 524604845,
+              "status": {
+                "Err": {
+                  "InstructionError": [
+                    5,
+                    {
+                      "Custom": 6072
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "id": 0
+      }
+    },
+    {
+      "url": "https://api.devnet.solana.com/",
+      "request": {
+        "id": 0,
+        "jsonrpc": "2.0",
+        "method": "getTransaction",
+        "params": [
+          "2AZqR5FDsFrYdmRM87fABg7LP4WVH5KWquVYi1nY5nocAWNr8q2K1tmLJ1iGRGbVMuEgjA9mzfvjKnhj8Fom9mmd",
+          {
+            "commitment": "confirmed",
+            "encoding": "base64",
+            "maxSupportedTransactionVersion": 0
+          }
+        ]
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "result": {
+          "blockTime": 1795238293,
+          "meta": {
+            "computeUnitsConsumed": 108602,
+            "costUnits": 113975,
+            "err": {
+              "InstructionError": [
+                5,
+                {
+                  "Custom": 6072
+                }
+              ]
+            },
+            "fee": 15201,
+            "innerInstructions": [
+              {
+                "index": 5,
+                "instructions": [
+                  {
+                    "accounts": [0, 3],
+                    "data": "111183yi6cxpSCEHj9ghUKHfWq9uGexwB6wkwYGKxj3cmc5cXjktk3LrEp9gMzga9ep6CQ",
+                    "programIdIndex": 9,
+                    "stackHeight": 2
+                  }
+                ]
+              }
+            ],
+            "loadedAddresses": {
+              "readonly": [],
+              "writable": []
+            },
+            "logMessages": [
+              "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+              "Program ComputeBudget111111111111111111111111111111 success",
+              "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+              "Program ComputeBudget111111111111111111111111111111 success",
+              "Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr invoke [1]",
+              "Program log: Memo (len 32): \"579774194c7f4dbeb9ec959aa50d83ae\"",
+              "Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr consumed 12775 of 214561 compute units",
+              "Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr success",
+              "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL invoke [1]",
+              "Program log: CreateIdempotent",
+              "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL consumed 5936 of 201786 compute units",
+              "Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL success",
+              "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [1]",
+              "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 76 of 195850 compute units",
+              "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+              "Program Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G invoke [1]",
+              "Program 11111111111111111111111111111111 invoke [2]",
+              "Program 11111111111111111111111111111111 success",
+              "Program log: AnchorError occurred. Error Code: E6072. Error Number: 6072. Error Message: E6072.",
+              "Program Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G consumed 89515 of 195774 compute units",
+              "Program Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G failed: custom program error: 0x17b8"
+            ],
+            "postBalances": [
+              6366761960539, 1100000890882, 0, 0, 1488440, 1488440, 1488440,
+              8249920, 2885440, 1, 1, 41509619334, 20508277856, 0, 1178560,
+              5938070540, 1066800, 833120, 11744960
+            ],
+            "postTokenBalances": [
+              {
+                "accountIndex": 4,
+                "mint": "Aj1qyqJRvi7VFdCriNvLiiCvjkLW3pTRgFCKSyGtAbsk",
+                "owner": "DGJGQEDQ7R54tfVH2AtwwWetpgh9gXsNTg2fZg2en4Mt",
+                "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                "uiTokenAmount": {
+                  "amount": "14818569081",
+                  "decimals": 6,
+                  "uiAmount": 14818.569081,
+                  "uiAmountString": "14818.569081"
+                }
+              },
+              {
+                "accountIndex": 5,
+                "mint": "Aj1qyqJRvi7VFdCriNvLiiCvjkLW3pTRgFCKSyGtAbsk",
+                "owner": "96159cfV5mABgfAV7wo82TUKZ71cKbMVoiEhi7BynBKi",
+                "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                "uiTokenAmount": {
+                  "amount": "14475200198",
+                  "decimals": 6,
+                  "uiAmount": 14475.200198,
+                  "uiAmountString": "14475.200198"
+                }
+              },
+              {
+                "accountIndex": 6,
+                "mint": "Aj1qyqJRvi7VFdCriNvLiiCvjkLW3pTRgFCKSyGtAbsk",
+                "owner": "4tvnspM9Af164V6sBLrCB14p4nKUrJeNWTRRDRVUVWHo",
+                "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                "uiTokenAmount": {
+                  "amount": "32687743320913",
+                  "decimals": 6,
+                  "uiAmount": 32687743.320913,
+                  "uiAmountString": "32687743.320913"
+                }
+              }
+            ],
+            "preBalances": [
+              6366761975740, 1100000890882, 0, 0, 1488440, 1488440, 1488440,
+              8249920, 2885440, 1, 1, 41509619334, 20508277856, 0, 1178560,
+              5938070540, 1066800, 833120, 11744960
+            ],
+            "preTokenBalances": [
+              {
+                "accountIndex": 4,
+                "mint": "Aj1qyqJRvi7VFdCriNvLiiCvjkLW3pTRgFCKSyGtAbsk",
+                "owner": "DGJGQEDQ7R54tfVH2AtwwWetpgh9gXsNTg2fZg2en4Mt",
+                "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                "uiTokenAmount": {
+                  "amount": "14818569081",
+                  "decimals": 6,
+                  "uiAmount": 14818.569081,
+                  "uiAmountString": "14818.569081"
+                }
+              },
+              {
+                "accountIndex": 5,
+                "mint": "Aj1qyqJRvi7VFdCriNvLiiCvjkLW3pTRgFCKSyGtAbsk",
+                "owner": "96159cfV5mABgfAV7wo82TUKZ71cKbMVoiEhi7BynBKi",
+                "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                "uiTokenAmount": {
+                  "amount": "14475200198",
+                  "decimals": 6,
+                  "uiAmount": 14475.200198,
+                  "uiAmountString": "14475.200198"
+                }
+              },
+              {
+                "accountIndex": 6,
+                "mint": "Aj1qyqJRvi7VFdCriNvLiiCvjkLW3pTRgFCKSyGtAbsk",
+                "owner": "4tvnspM9Af164V6sBLrCB14p4nKUrJeNWTRRDRVUVWHo",
+                "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                "uiTokenAmount": {
+                  "amount": "32687743320913",
+                  "decimals": 6,
+                  "uiAmount": 32687743.320913,
+                  "uiAmountString": "32687743.320913"
+                }
+              }
+            ],
+            "rewards": [],
+            "status": {
+              "Err": {
+                "InstructionError": [
+                  5,
+                  {
+                    "Custom": 6072
+                  }
+                ]
+              }
+            }
+          },
+          "slot": 524604845,
+          "transaction": [
+            "AzpENlLmkP/sgYs8hT1RjmQC8m6B0/aviq2i0WgjccvQrVmqBX1O59BSWwQQnHeJyr5Zjyo7HeakF9OlzkOzHgyHs8Uf10kxZAb4CpcKnB8BkrIHEeRYLk2/7NLLMh+iRJ8uXgJ6nh6JD2RnJ2TqhdTBuoEBAM//1PS23V5FfkwNWi61Y0uzVa29Q3eYOyIsshqStXs8dy81u5EA30GKJAopTrfa4b0wJAE2wY2RXvEaI4YYZHKpDFv6IWWVtlFYCgMCChONFzbkH/ElMWv/SuwY9iJXOMZgiiFJaooClgrj+H3ssDnggPFjevl1loKk2kz9ZI7FmAhXlBrihVeShHpIHXdytjd6Ocn1rYQ/px4+ZORs8MdZ9eft3dOoYy9IekPufd8xPYZTIWmmqbr0LLADJ9o+3kg9j5Kqm2ly9TSNz0RWtl6tnIa1F//Ku4FemP8Kw7xc6UrZowOPJzdguVfxTI6xXz77E62tlqihoz5X6iWaA0pO6gcT6TRl9j7yLguvl2Bqg9yZYijIB6tW0aWpY812JjuJ52uMdWaXiiQ0QVldEXglevb/S+3Nle4T2kRlbqbyEbL6xmiZUEsjltfEaTZt2j8F9Y9vIoIRsxvAc9bNBIR03m9Cndm4oG/yVRNTiroAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAABUpTWpkpIQZNJOhxYNo4fHw1td28kruB5B+oQEEFRI0G3fbh12Whk9nL4UbO63msHLSF7V9bN5E6jPWFfv8AqQ7c/JqvAjF/8CPjhkIvJ2BPbFgQbsHD+QD2QH8fxcmkf8Q0Uj7foKMMzMuGXiS4wn68xxztcRf6j7rARVsTCCmMlyWPTiSJ8bs9ECkUjg2DC1oTmdr/EIQEjnvY2+n4WZB8h/sfoZ6Wl6mjERbmlwcK8ce7Uy12fdhfAe4bpFi/ozKO92IzF9wUbB8q7A3GG+Wrlh7wvyIclq0j7Mu5NrHn+e5T2BiGmH3x9tzDmGRzM9qV2hJR2HboJK0xzAiQ30yIV2CY+JmoyigFWh4HI4J3uIjMyO/sWzeD3VI3IXrRBgoABQJNRwMACgAJA6MDAAAAAAAACwAgNTc5Nzc0MTk0YzdmNGRiZWI5ZWM5NTlhYTUwZDgzYWUPBgAEAhAJDAEBDAMGBAEJAwDh9QUAAAAAERYAAg4SBwgDBAUQDwwJEREREREREQ0RLmYGPRIB2uvqfK3OS39GDCkA4fUFAAAAAAAAAAEGlmsAAAAAAAAAAAAAAAAAAQA=",
+            "base64"
+          ],
+          "transactionIndex": 5,
+          "version": "legacy"
+        },
+        "id": 0
+      }
+    }
+  ],
+  "output": "RPC URL: https://api.devnet.solana.com\nDefault Signer: Playground Wallet\nCommitment: confirmed\n\nTransaction executed in slot 524604845:\n  Block Time: 2026-11-21T05:18:13+00:00\n  Version: legacy\n  Recent Blockhash: 69kZpxxd1mUjkXbUJBhkxVbwRFcnW1VP2qTN1xKZsNqn\n  Signature 0: 2AZqR5FDsFrYdmRM87fABg7LP4WVH5KWquVYi1nY5nocAWNr8q2K1tmLJ1iGRGbVMuEgjA9mzfvjKnhj8Fom9mmd\n  Signature 1: 3iMwh4K3Q8TT7GBeXtjew4Qt4qyRyFGnfigCAmhmHUKk6AQRzw3cZ4tXzhdCeCK6WnD2DPyEMdFnNehk5z6U45Xi\n  Signature 2: 2oaQzAesdmfLMkgmz8RNsDt9Xg8vgSmgMYpjtcXtu1evjhVcao9T7T3CD4wwbNoGQAE5gdWi4ewuEqsrUMn99X7P\n  Account 0: srw- AVm1wwtnLtsdJSpgz8S2SfC4JDepipEwBpLYuHgQ25Yb (fee payer)\n  Account 1: sr-- 4tvnspM9Af164V6sBLrCB14p4nKUrJeNWTRRDRVUVWHo\n  Account 2: sr-- DGJGQEDQ7R54tfVH2AtwwWetpgh9gXsNTg2fZg2en4Mt\n  Account 3: -rw- 4KDPcoLzWqB7qrRCSxizCJZFUKX4ER8EzQgSf8Att3uX\n  Account 4: -rw- 7NasFdhXrp1p9cTfWitZSVCpt53cQsGyjoBNsmS2fbFW\n  Account 5: -rw- 7QoS3a7QKmWgQH3ex6715VtX6YzYR6RZfCPC4s6qJoKD\n  Account 6: -rw- 8AnqSPLDLU5gPpEpKs2zGBRHJYW11M1F2EwAwqYt4XbW\n  Account 7: -rw- 96159cfV5mABgfAV7wo82TUKZ71cKbMVoiEhi7BynBKi\n  Account 8: -rw- FgwcjxfGUVGk616R8yzqYHGUvQt3yFLNcqdcDwRoHtau\n  Account 9: -r-- 11111111111111111111111111111111\n  Account 10: -r-x ComputeBudget111111111111111111111111111111\n  Account 11: -r-x MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr\n  Account 12: -r-x TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA\n  Account 13: -r-- 2129g7V5wHFByM2tM3BvPfo4J4QhnmeX4yhz2aQ1mYdZ\n  Account 14: -r-- 9bkJW8mcWU7YyEHFEefDj5QqjWrkuu5zQCQhhvWKfmM2\n  Account 15: -r-x ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL\n  Account 16: -r-- Aj1qyqJRvi7VFdCriNvLiiCvjkLW3pTRgFCKSyGtAbsk\n  Account 17: -r-x Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G\n  Account 18: -r-- GcYDfgs2rPoGiGi8YkfsDxpH2Y3BaZmEC4Jy9CRgh7ev\n  Instruction 0\n    Program:   ComputeBudget111111111111111111111111111111 (10)\n    Data: [2, 77, 71, 3, 0]\n  Instruction 1\n    Program:   ComputeBudget111111111111111111111111111111 (10)\n    Data: [3, 163, 3, 0, 0, 0, 0, 0, 0]\n  Instruction 2\n    Program:   MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr (11)\n    Data: [53, 55, 57, 55, 55, 52, 49, 57, 52, 99, 55, 102, 52, 100, 98, 101, 98, 57, 101, 99, 57, 53, 57, 97, 97, 53, 48, 100, 56, 51, 97, 101]\n  Instruction 3\n    Program:   ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL (15)\n    Account 0: AVm1wwtnLtsdJSpgz8S2SfC4JDepipEwBpLYuHgQ25Yb (0)\n    Account 1: 7NasFdhXrp1p9cTfWitZSVCpt53cQsGyjoBNsmS2fbFW (4)\n    Account 2: DGJGQEDQ7R54tfVH2AtwwWetpgh9gXsNTg2fZg2en4Mt (2)\n    Account 3: Aj1qyqJRvi7VFdCriNvLiiCvjkLW3pTRgFCKSyGtAbsk (16)\n    Account 4: 11111111111111111111111111111111 (9)\n    Account 5: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA (12)\n    Data: [1]\n  Instruction 4\n    Program:   TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA (12)\n    Account 0: 8AnqSPLDLU5gPpEpKs2zGBRHJYW11M1F2EwAwqYt4XbW (6)\n    Account 1: 7NasFdhXrp1p9cTfWitZSVCpt53cQsGyjoBNsmS2fbFW (4)\n    Account 2: 4tvnspM9Af164V6sBLrCB14p4nKUrJeNWTRRDRVUVWHo (1)\n    Data: [3, 0, 225, 245, 5, 0, 0, 0, 0]\n  Instruction 5\n    Program:   Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G (17)\n    Account 0: AVm1wwtnLtsdJSpgz8S2SfC4JDepipEwBpLYuHgQ25Yb (0)\n    Account 1: DGJGQEDQ7R54tfVH2AtwwWetpgh9gXsNTg2fZg2en4Mt (2)\n    Account 2: 9bkJW8mcWU7YyEHFEefDj5QqjWrkuu5zQCQhhvWKfmM2 (14)\n    Account 3: GcYDfgs2rPoGiGi8YkfsDxpH2Y3BaZmEC4Jy9CRgh7ev (18)\n    Account 4: 96159cfV5mABgfAV7wo82TUKZ71cKbMVoiEhi7BynBKi (7)\n    Account 5: FgwcjxfGUVGk616R8yzqYHGUvQt3yFLNcqdcDwRoHtau (8)\n    Account 6: 4KDPcoLzWqB7qrRCSxizCJZFUKX4ER8EzQgSf8Att3uX (3)\n    Account 7: 7NasFdhXrp1p9cTfWitZSVCpt53cQsGyjoBNsmS2fbFW (4)\n    Account 8: 7QoS3a7QKmWgQH3ex6715VtX6YzYR6RZfCPC4s6qJoKD (5)\n    Account 9: Aj1qyqJRvi7VFdCriNvLiiCvjkLW3pTRgFCKSyGtAbsk (16)\n    Account 10: ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL (15)\n    Account 11: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA (12)\n    Account 12: 11111111111111111111111111111111 (9)\n    Account 13: Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G (17)\n    Account 14: Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G (17)\n    Account 15: Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G (17)\n    Account 16: Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G (17)\n    Account 17: Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G (17)\n    Account 18: Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G (17)\n    Account 19: Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G (17)\n    Account 20: 2129g7V5wHFByM2tM3BvPfo4J4QhnmeX4yhz2aQ1mYdZ (13)\n    Account 21: Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G (17)\n    Data: [102, 6, 61, 18, 1, 218, 235, 234, 124, 173, 206, 75, 127, 70, 12, 41, 0, 225, 245, 5, 0, 0, 0, 0, 0, 0, 0, 1, 6, 150, 107, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0]\n  Status: Error processing Instruction 5: custom program error: 0x17b8\n    Fee: ◎0.000015201\n    Account 0 balance: ◎6366.76197574 -> ◎6366.761960539\n    Account 1 balance: ◎1100.000890882\n    Account 2 balance: ◎0\n    Account 3 balance: ◎0\n    Account 4 balance: ◎0.00148844\n    Account 5 balance: ◎0.00148844\n    Account 6 balance: ◎0.00148844\n    Account 7 balance: ◎0.00824992\n    Account 8 balance: ◎0.00288544\n    Account 9 balance: ◎0.000000001\n    Account 10 balance: ◎0.000000001\n    Account 11 balance: ◎41.509619334\n    Account 12 balance: ◎20.508277856\n    Account 13 balance: ◎0\n    Account 14 balance: ◎0.00117856\n    Account 15 balance: ◎5.93807054\n    Account 16 balance: ◎0.0010668\n    Account 17 balance: ◎0.00083312\n    Account 18 balance: ◎0.01174496\n  Log Messages:\n    Program ComputeBudget111111111111111111111111111111 invoke [1]\n    Program ComputeBudget111111111111111111111111111111 success\n    Program ComputeBudget111111111111111111111111111111 invoke [1]\n    Program ComputeBudget111111111111111111111111111111 success\n    Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr invoke [1]\n    Program log: Memo (len 32): \"579774194c7f4dbeb9ec959aa50d83ae\"\n    Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr consumed 12775 of 214561 compute units\n    Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr success\n    Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL invoke [1]\n    Program log: CreateIdempotent\n    Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL consumed 5936 of 201786 compute units\n    Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL success\n    Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [1]\n    Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 76 of 195850 compute units\n    Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success\n    Program Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G invoke [1]\n    Program 11111111111111111111111111111111 invoke [2]\n    Program 11111111111111111111111111111111 success\n    Program log: AnchorError occurred. Error Code: E6072. Error Number: 6072. Error Message: E6072.\n    Program Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G consumed 89515 of 195774 compute units\n    Program Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G failed: custom program error: 0x17b8\n\nTransaction failed: Error processing Instruction 5: custom program error: 0x17b8",
+  "outputParts": [
+    "RPC URL: https://api.devnet.solana.com\nDefault Signer: Playground Wallet\nCommitment: confirmed",
+    "\nTransaction executed in slot 524604845:\n  Block Time: 2026-11-21T05:18:13+00:00\n  Version: legacy\n  Recent Blockhash: 69kZpxxd1mUjkXbUJBhkxVbwRFcnW1VP2qTN1xKZsNqn\n  Signature 0: 2AZqR5FDsFrYdmRM87fABg7LP4WVH5KWquVYi1nY5nocAWNr8q2K1tmLJ1iGRGbVMuEgjA9mzfvjKnhj8Fom9mmd\n  Signature 1: 3iMwh4K3Q8TT7GBeXtjew4Qt4qyRyFGnfigCAmhmHUKk6AQRzw3cZ4tXzhdCeCK6WnD2DPyEMdFnNehk5z6U45Xi\n  Signature 2: 2oaQzAesdmfLMkgmz8RNsDt9Xg8vgSmgMYpjtcXtu1evjhVcao9T7T3CD4wwbNoGQAE5gdWi4ewuEqsrUMn99X7P\n  Account 0: srw- AVm1wwtnLtsdJSpgz8S2SfC4JDepipEwBpLYuHgQ25Yb (fee payer)\n  Account 1: sr-- 4tvnspM9Af164V6sBLrCB14p4nKUrJeNWTRRDRVUVWHo\n  Account 2: sr-- DGJGQEDQ7R54tfVH2AtwwWetpgh9gXsNTg2fZg2en4Mt\n  Account 3: -rw- 4KDPcoLzWqB7qrRCSxizCJZFUKX4ER8EzQgSf8Att3uX\n  Account 4: -rw- 7NasFdhXrp1p9cTfWitZSVCpt53cQsGyjoBNsmS2fbFW\n  Account 5: -rw- 7QoS3a7QKmWgQH3ex6715VtX6YzYR6RZfCPC4s6qJoKD\n  Account 6: -rw- 8AnqSPLDLU5gPpEpKs2zGBRHJYW11M1F2EwAwqYt4XbW\n  Account 7: -rw- 96159cfV5mABgfAV7wo82TUKZ71cKbMVoiEhi7BynBKi\n  Account 8: -rw- FgwcjxfGUVGk616R8yzqYHGUvQt3yFLNcqdcDwRoHtau\n  Account 9: -r-- 11111111111111111111111111111111\n  Account 10: -r-x ComputeBudget111111111111111111111111111111\n  Account 11: -r-x MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr\n  Account 12: -r-x TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA\n  Account 13: -r-- 2129g7V5wHFByM2tM3BvPfo4J4QhnmeX4yhz2aQ1mYdZ\n  Account 14: -r-- 9bkJW8mcWU7YyEHFEefDj5QqjWrkuu5zQCQhhvWKfmM2\n  Account 15: -r-x ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL\n  Account 16: -r-- Aj1qyqJRvi7VFdCriNvLiiCvjkLW3pTRgFCKSyGtAbsk\n  Account 17: -r-x Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G\n  Account 18: -r-- GcYDfgs2rPoGiGi8YkfsDxpH2Y3BaZmEC4Jy9CRgh7ev\n  Instruction 0\n    Program:   ComputeBudget111111111111111111111111111111 (10)\n    Data: [2, 77, 71, 3, 0]\n  Instruction 1\n    Program:   ComputeBudget111111111111111111111111111111 (10)\n    Data: [3, 163, 3, 0, 0, 0, 0, 0, 0]\n  Instruction 2\n    Program:   MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr (11)\n    Data: [53, 55, 57, 55, 55, 52, 49, 57, 52, 99, 55, 102, 52, 100, 98, 101, 98, 57, 101, 99, 57, 53, 57, 97, 97, 53, 48, 100, 56, 51, 97, 101]\n  Instruction 3\n    Program:   ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL (15)\n    Account 0: AVm1wwtnLtsdJSpgz8S2SfC4JDepipEwBpLYuHgQ25Yb (0)\n    Account 1: 7NasFdhXrp1p9cTfWitZSVCpt53cQsGyjoBNsmS2fbFW (4)\n    Account 2: DGJGQEDQ7R54tfVH2AtwwWetpgh9gXsNTg2fZg2en4Mt (2)\n    Account 3: Aj1qyqJRvi7VFdCriNvLiiCvjkLW3pTRgFCKSyGtAbsk (16)\n    Account 4: 11111111111111111111111111111111 (9)\n    Account 5: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA (12)\n    Data: [1]\n  Instruction 4\n    Program:   TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA (12)\n    Account 0: 8AnqSPLDLU5gPpEpKs2zGBRHJYW11M1F2EwAwqYt4XbW (6)\n    Account 1: 7NasFdhXrp1p9cTfWitZSVCpt53cQsGyjoBNsmS2fbFW (4)\n    Account 2: 4tvnspM9Af164V6sBLrCB14p4nKUrJeNWTRRDRVUVWHo (1)\n    Data: [3, 0, 225, 245, 5, 0, 0, 0, 0]\n  Instruction 5\n    Program:   Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G (17)\n    Account 0: AVm1wwtnLtsdJSpgz8S2SfC4JDepipEwBpLYuHgQ25Yb (0)\n    Account 1: DGJGQEDQ7R54tfVH2AtwwWetpgh9gXsNTg2fZg2en4Mt (2)\n    Account 2: 9bkJW8mcWU7YyEHFEefDj5QqjWrkuu5zQCQhhvWKfmM2 (14)\n    Account 3: GcYDfgs2rPoGiGi8YkfsDxpH2Y3BaZmEC4Jy9CRgh7ev (18)\n    Account 4: 96159cfV5mABgfAV7wo82TUKZ71cKbMVoiEhi7BynBKi (7)\n    Account 5: FgwcjxfGUVGk616R8yzqYHGUvQt3yFLNcqdcDwRoHtau (8)\n    Account 6: 4KDPcoLzWqB7qrRCSxizCJZFUKX4ER8EzQgSf8Att3uX (3)\n    Account 7: 7NasFdhXrp1p9cTfWitZSVCpt53cQsGyjoBNsmS2fbFW (4)\n    Account 8: 7QoS3a7QKmWgQH3ex6715VtX6YzYR6RZfCPC4s6qJoKD (5)\n    Account 9: Aj1qyqJRvi7VFdCriNvLiiCvjkLW3pTRgFCKSyGtAbsk (16)\n    Account 10: ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL (15)\n    Account 11: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA (12)\n    Account 12: 11111111111111111111111111111111 (9)\n    Account 13: Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G (17)\n    Account 14: Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G (17)\n    Account 15: Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G (17)\n    Account 16: Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G (17)\n    Account 17: Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G (17)\n    Account 18: Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G (17)\n    Account 19: Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G (17)\n    Account 20: 2129g7V5wHFByM2tM3BvPfo4J4QhnmeX4yhz2aQ1mYdZ (13)\n    Account 21: Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G (17)\n    Data: [102, 6, 61, 18, 1, 218, 235, 234, 124, 173, 206, 75, 127, 70, 12, 41, 0, 225, 245, 5, 0, 0, 0, 0, 0, 0, 0, 1, 6, 150, 107, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0]\n  Status: Error processing Instruction 5: custom program error: 0x17b8\n    Fee: ◎0.000015201\n    Account 0 balance: ◎6366.76197574 -> ◎6366.761960539\n    Account 1 balance: ◎1100.000890882\n    Account 2 balance: ◎0\n    Account 3 balance: ◎0\n    Account 4 balance: ◎0.00148844\n    Account 5 balance: ◎0.00148844\n    Account 6 balance: ◎0.00148844\n    Account 7 balance: ◎0.00824992\n    Account 8 balance: ◎0.00288544\n    Account 9 balance: ◎0.000000001\n    Account 10 balance: ◎0.000000001\n    Account 11 balance: ◎41.509619334\n    Account 12 balance: ◎20.508277856\n    Account 13 balance: ◎0\n    Account 14 balance: ◎0.00117856\n    Account 15 balance: ◎5.93807054\n    Account 16 balance: ◎0.0010668\n    Account 17 balance: ◎0.00083312\n    Account 18 balance: ◎0.01174496\n  Log Messages:\n    Program ComputeBudget111111111111111111111111111111 invoke [1]\n    Program ComputeBudget111111111111111111111111111111 success\n    Program ComputeBudget111111111111111111111111111111 invoke [1]\n    Program ComputeBudget111111111111111111111111111111 success\n    Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr invoke [1]\n    Program log: Memo (len 32): \"579774194c7f4dbeb9ec959aa50d83ae\"\n    Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr consumed 12775 of 214561 compute units\n    Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr success\n    Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL invoke [1]\n    Program log: CreateIdempotent\n    Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL consumed 5936 of 201786 compute units\n    Program ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL success\n    Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [1]\n    Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 76 of 195850 compute units\n    Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success\n    Program Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G invoke [1]\n    Program 11111111111111111111111111111111 invoke [2]\n    Program 11111111111111111111111111111111 success\n    Program log: AnchorError occurred. Error Code: E6072. Error Number: 6072. Error Message: E6072.\n    Program Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G consumed 89515 of 195774 compute units\n    Program Bz4AoAXL8vkTSFPqR52GwNxFixAbKPJ3VShhgoS2eV2G failed: custom program error: 0x17b8\n\nTransaction failed: Error processing Instruction 5: custom program error: 0x17b8"
+  ]
+}

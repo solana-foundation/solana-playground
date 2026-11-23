@@ -79,6 +79,41 @@ test.describe("client-v2-terminal", () => {
     );
   });
 
+  test("client-v2-terminal: Typing spl-token", async ({ seededPage: page }) => {
+    await openConsole(page);
+    await runInTerminal(page, "spl-token --help");
+
+    await expect(terminalText(page)).toContainText(
+      "`spl-token` is not a command. Type `help` to see commands."
+    );
+  });
+
+  test("client-v2-terminal: An unknown solana subcommand", async ({
+    seededPage: page,
+  }) => {
+    await openConsole(page);
+    await runInTerminal(page, "solana balance");
+
+    await expect(terminalText(page)).toContainText(
+      "Subcommand doesn't exist: `balance`"
+    );
+    await expect(terminalText(page)).toContainText(
+      "Available subcommands: confirm, program"
+    );
+    await expect(terminalText(page)).not.toContainText(
+      "Your Playground wallet is not connected"
+    );
+  });
+
+  test("client-v2-terminal: solana help", async ({ seededPage: page }) => {
+    await openConsole(page);
+    await runInTerminal(page, "solana --help");
+
+    await expect(terminalText(page)).toContainText("confirm");
+    await expect(terminalText(page)).toContainText("program");
+    await expect(terminalText(page)).not.toContainText("Process error");
+  });
+
   test("client-v2-terminal: Build offline", async ({
     seededPage: page,
     context,

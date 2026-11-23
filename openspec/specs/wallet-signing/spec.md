@@ -1,8 +1,8 @@
 # wallet-signing Specification
 
 ## Purpose
-How the built-in wallet's secret keys are reached, for signing, for the key
-file export and for the WASM CLIs, and what project code keeps of them.
+How the built-in wallet's secret keys are reached, for signing and for the
+key file export, and what project code keeps of them.
 Every use goes through one signer provider, so a provider that keeps the keys
 out of the page can replace the local one.
 
@@ -12,8 +12,7 @@ out of the page can replace the local one.
 
 The built-in wallet SHALL reach an account's secret key only through its
 signer provider: to build the wallet and sign with it, to hand project code
-`pg.wallet.keypair`, to export the key file and to give the WASM CLIs their
-keypair. The provider SHALL address an account by its public key. When the
+`pg.wallet.keypair` and to export the key file. The provider SHALL address an account by its public key. When the
 build names a key origin, the key-origin provider SHALL be the default;
 otherwise the local provider, which keeps the keys in the page, SHALL be.
 
@@ -32,8 +31,8 @@ otherwise the local provider, which keeps the keys in the page, SHALL be.
 
 #### Scenario: The key bytes handed out are a copy
 
-- **WHEN** the key file export or a WASM CLI asks the local provider for an
-  account's key bytes
+- **WHEN** the key file export asks the local provider for an account's key
+  bytes
 - **THEN** it gets a copy, and changing it leaves the provider's key as it was
 
 #### Scenario: Project code gets the sandbox provider by default
@@ -265,14 +264,3 @@ the key page stopped answering.
 
 - **WHEN** the user picks a file that is not 64 key bytes in JSON
 - **THEN** the panel says the file is not a key file, and no account is added
-
-### Requirement: The WASM CLIs say why they cannot use a key held on its own origin
-
-Under the key-origin provider, asking for the built-in wallet's key bytes for
-the `solana`, `spl-token` or `anchor` commands SHALL throw an error saying the
-key is kept on its own origin and naming what to use instead.
-
-#### Scenario: solana balance with the built-in wallet
-
-- **WHEN** the built-in wallet is current and a WASM CLI asks for its keypair
-- **THEN** the command fails with that error and no key bytes

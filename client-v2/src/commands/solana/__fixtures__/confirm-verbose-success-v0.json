@@ -1,0 +1,117 @@
+{
+  "command": "solana confirm -v 4XdzsEyNT2UMR8dBgvsPKjzkWCb1mXrHqJVJv3kt2PyPfBNkiJXfh51Ljoz2RGbms7fcX7a8es5ef5SAXC62JJY1",
+  "settings": {
+    "endpoint": "https://api.devnet.solana.com",
+    "commitment": "confirmed"
+  },
+  "rpc": [
+    {
+      "url": "https://api.devnet.solana.com/",
+      "request": {
+        "id": 0,
+        "jsonrpc": "2.0",
+        "method": "getSignatureStatuses",
+        "params": [
+          [
+            "4XdzsEyNT2UMR8dBgvsPKjzkWCb1mXrHqJVJv3kt2PyPfBNkiJXfh51Ljoz2RGbms7fcX7a8es5ef5SAXC62JJY1"
+          ]
+        ]
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "result": {
+          "context": {
+            "apiVersion": "4.5.0-beta.0",
+            "slot": 524605105
+          },
+          "value": [
+            {
+              "confirmationStatus": "finalized",
+              "confirmations": null,
+              "err": null,
+              "slot": 524604911,
+              "status": {
+                "Ok": null
+              }
+            }
+          ]
+        },
+        "id": 0
+      }
+    },
+    {
+      "url": "https://api.devnet.solana.com/",
+      "request": {
+        "id": 0,
+        "jsonrpc": "2.0",
+        "method": "getTransaction",
+        "params": [
+          "4XdzsEyNT2UMR8dBgvsPKjzkWCb1mXrHqJVJv3kt2PyPfBNkiJXfh51Ljoz2RGbms7fcX7a8es5ef5SAXC62JJY1",
+          {
+            "commitment": "confirmed",
+            "encoding": "base64",
+            "maxSupportedTransactionVersion": 0
+          }
+        ]
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "result": {
+          "blockTime": 1795238309,
+          "meta": {
+            "computeUnitsConsumed": 101305,
+            "costUnits": 103122,
+            "err": null,
+            "fee": 8625,
+            "innerInstructions": [],
+            "loadedAddresses": {
+              "readonly": [],
+              "writable": []
+            },
+            "logMessages": [
+              "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+              "Program ComputeBudget111111111111111111111111111111 success",
+              "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+              "Program ComputeBudget111111111111111111111111111111 success",
+              "Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr invoke [1]",
+              "Program log: Signed by 6RAb9hDKR777EWccBnH4DqJJMvwmoeLegpKYrouFGeJa",
+              "Program log: Memo (len 45): \"Game=3 Room=1 Round=1438429 Result=CCBCCBBCAB\"",
+              "Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr consumed 31200 of 144700 compute units",
+              "Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr success",
+              "Program DEALERKFspSo5RoXNnKAhRPhTcvJeqeEgAgZsNSjCx5E invoke [1]",
+              "Program log: Instruction: DistroRewards",
+              "Program log: Round finished Game=3 Room=1 Round=1438429. Bets open for next round.",
+              "Program DEALERKFspSo5RoXNnKAhRPhTcvJeqeEgAgZsNSjCx5E consumed 69805 of 113500 compute units",
+              "Program DEALERKFspSo5RoXNnKAhRPhTcvJeqeEgAgZsNSjCx5E success"
+            ],
+            "postBalances": [
+              95894226397, 38398320, 272683450044, 1, 41509619334, 1141440, 1
+            ],
+            "postTokenBalances": [],
+            "preBalances": [
+              95894235022, 38398320, 272683450044, 1, 41509619334, 1141440, 1
+            ],
+            "preTokenBalances": [],
+            "rewards": [],
+            "status": {
+              "Ok": null
+            }
+          },
+          "slot": 524604911,
+          "transaction": [
+            "AbB40bBdUb7/NJ0RnFdPj/5OVH94uxVWsMYsQGP+fC7HbnzCaMZZqVNWqSOp2D8tWlF75CdurLuPR28KlsAHvwKAAQAEB1B7N1RPyFFY4Pn4YTVsKAguI+0DJvc7Z5uKk6etXSbnob0F0zAcllw7gTokil5bhWTEV0ZGpvUGQ+gpnTw3kKxh3G2G4jGO2eTZ2b66hAbsm6xw9I22gbzs1VoURQnTvgMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAABUpTWpkpIQZNJOhxYNo4fHw1td28kruB5B+oQEEFRI21q1hKDlEVwtr1MvFsDkyc3C5IgMcglCnCBjBk+bSm6QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA5r2ONMCmS4xKm5soDs9tl1yE3R2MMIc8ubpXyi3vlG8EAwAJA6hhAAAAAAAAAwAFAmg2AgAEAQAtR2FtZT0zIFJvb209MSBSb3VuZD0xNDM4NDI5IFJlc3VsdD1DQ0JDQ0JCQ0FCBQYBBQIFAAYcv6QKQ0koPP4DAAEA3fIVAAAAAAAAAAAAAAAAAAA=",
+            "base64"
+          ],
+          "transactionIndex": 8,
+          "version": 0
+        },
+        "id": 0
+      }
+    }
+  ],
+  "output": "RPC URL: https://api.devnet.solana.com\nDefault Signer: Playground Wallet\nCommitment: confirmed\n\nTransaction executed in slot 524604911:\n  Block Time: 2026-11-21T05:18:29+00:00\n  Version: 0\n  Recent Blockhash: GXiR2nVZrTHaRaKKnGbs22aV1qMc3ZetH8ZXZ2WuAuEe\n  Signature 0: 4XdzsEyNT2UMR8dBgvsPKjzkWCb1mXrHqJVJv3kt2PyPfBNkiJXfh51Ljoz2RGbms7fcX7a8es5ef5SAXC62JJY1\n  Account 0: srw- 6RAb9hDKR777EWccBnH4DqJJMvwmoeLegpKYrouFGeJa (fee payer)\n  Account 1: -rw- BtMp6e5SucXcL5qefQnT89G6jH8zpjRoRMR7njWEjbQo\n  Account 2: -rw- 7b1VfRjNoCn7gPEQ7HFAg8wtjaLkrVrZTQNvkEdmrwsj\n  Account 3: -r-x ComputeBudget111111111111111111111111111111\n  Account 4: -r-x MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr\n  Account 5: -r-x DEALERKFspSo5RoXNnKAhRPhTcvJeqeEgAgZsNSjCx5E\n  Account 6: -r-- 11111111111111111111111111111111\n  Instruction 0\n    Program:   ComputeBudget111111111111111111111111111111 (3)\n    Data: [3, 168, 97, 0, 0, 0, 0, 0, 0]\n  Instruction 1\n    Program:   ComputeBudget111111111111111111111111111111 (3)\n    Data: [2, 104, 54, 2, 0]\n  Instruction 2\n    Program:   MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr (4)\n    Account 0: 6RAb9hDKR777EWccBnH4DqJJMvwmoeLegpKYrouFGeJa (0)\n    Data: [71, 97, 109, 101, 61, 51, 32, 82, 111, 111, 109, 61, 49, 32, 82, 111, 117, 110, 100, 61, 49, 52, 51, 56, 52, 50, 57, 32, 82, 101, 115, 117, 108, 116, 61, 67, 67, 66, 67, 67, 66, 66, 67, 65, 66]\n  Instruction 3\n    Program:   DEALERKFspSo5RoXNnKAhRPhTcvJeqeEgAgZsNSjCx5E (5)\n    Account 0: BtMp6e5SucXcL5qefQnT89G6jH8zpjRoRMR7njWEjbQo (1)\n    Account 1: DEALERKFspSo5RoXNnKAhRPhTcvJeqeEgAgZsNSjCx5E (5)\n    Account 2: 7b1VfRjNoCn7gPEQ7HFAg8wtjaLkrVrZTQNvkEdmrwsj (2)\n    Account 3: DEALERKFspSo5RoXNnKAhRPhTcvJeqeEgAgZsNSjCx5E (5)\n    Account 4: 6RAb9hDKR777EWccBnH4DqJJMvwmoeLegpKYrouFGeJa (0)\n    Account 5: 11111111111111111111111111111111 (6)\n    Data: [191, 164, 10, 67, 73, 40, 60, 254, 3, 0, 1, 0, 221, 242, 21, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]\n  Status: Ok\n    Fee: ◎0.000008625\n    Account 0 balance: ◎95.894235022 -> ◎95.894226397\n    Account 1 balance: ◎0.03839832\n    Account 2 balance: ◎272.683450044\n    Account 3 balance: ◎0.000000001\n    Account 4 balance: ◎41.509619334\n    Account 5 balance: ◎0.00114144\n    Account 6 balance: ◎0.000000001\n  Log Messages:\n    Program ComputeBudget111111111111111111111111111111 invoke [1]\n    Program ComputeBudget111111111111111111111111111111 success\n    Program ComputeBudget111111111111111111111111111111 invoke [1]\n    Program ComputeBudget111111111111111111111111111111 success\n    Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr invoke [1]\n    Program log: Signed by 6RAb9hDKR777EWccBnH4DqJJMvwmoeLegpKYrouFGeJa\n    Program log: Memo (len 45): \"Game=3 Room=1 Round=1438429 Result=CCBCCBBCAB\"\n    Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr consumed 31200 of 144700 compute units\n    Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr success\n    Program DEALERKFspSo5RoXNnKAhRPhTcvJeqeEgAgZsNSjCx5E invoke [1]\n    Program log: Instruction: DistroRewards\n    Program log: Round finished Game=3 Room=1 Round=1438429. Bets open for next round.\n    Program DEALERKFspSo5RoXNnKAhRPhTcvJeqeEgAgZsNSjCx5E consumed 69805 of 113500 compute units\n    Program DEALERKFspSo5RoXNnKAhRPhTcvJeqeEgAgZsNSjCx5E success\n\nFinalized",
+  "outputParts": [
+    "RPC URL: https://api.devnet.solana.com\nDefault Signer: Playground Wallet\nCommitment: confirmed",
+    "\nTransaction executed in slot 524604911:\n  Block Time: 2026-11-21T05:18:29+00:00\n  Version: 0\n  Recent Blockhash: GXiR2nVZrTHaRaKKnGbs22aV1qMc3ZetH8ZXZ2WuAuEe\n  Signature 0: 4XdzsEyNT2UMR8dBgvsPKjzkWCb1mXrHqJVJv3kt2PyPfBNkiJXfh51Ljoz2RGbms7fcX7a8es5ef5SAXC62JJY1\n  Account 0: srw- 6RAb9hDKR777EWccBnH4DqJJMvwmoeLegpKYrouFGeJa (fee payer)\n  Account 1: -rw- BtMp6e5SucXcL5qefQnT89G6jH8zpjRoRMR7njWEjbQo\n  Account 2: -rw- 7b1VfRjNoCn7gPEQ7HFAg8wtjaLkrVrZTQNvkEdmrwsj\n  Account 3: -r-x ComputeBudget111111111111111111111111111111\n  Account 4: -r-x MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr\n  Account 5: -r-x DEALERKFspSo5RoXNnKAhRPhTcvJeqeEgAgZsNSjCx5E\n  Account 6: -r-- 11111111111111111111111111111111\n  Instruction 0\n    Program:   ComputeBudget111111111111111111111111111111 (3)\n    Data: [3, 168, 97, 0, 0, 0, 0, 0, 0]\n  Instruction 1\n    Program:   ComputeBudget111111111111111111111111111111 (3)\n    Data: [2, 104, 54, 2, 0]\n  Instruction 2\n    Program:   MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr (4)\n    Account 0: 6RAb9hDKR777EWccBnH4DqJJMvwmoeLegpKYrouFGeJa (0)\n    Data: [71, 97, 109, 101, 61, 51, 32, 82, 111, 111, 109, 61, 49, 32, 82, 111, 117, 110, 100, 61, 49, 52, 51, 56, 52, 50, 57, 32, 82, 101, 115, 117, 108, 116, 61, 67, 67, 66, 67, 67, 66, 66, 67, 65, 66]\n  Instruction 3\n    Program:   DEALERKFspSo5RoXNnKAhRPhTcvJeqeEgAgZsNSjCx5E (5)\n    Account 0: BtMp6e5SucXcL5qefQnT89G6jH8zpjRoRMR7njWEjbQo (1)\n    Account 1: DEALERKFspSo5RoXNnKAhRPhTcvJeqeEgAgZsNSjCx5E (5)\n    Account 2: 7b1VfRjNoCn7gPEQ7HFAg8wtjaLkrVrZTQNvkEdmrwsj (2)\n    Account 3: DEALERKFspSo5RoXNnKAhRPhTcvJeqeEgAgZsNSjCx5E (5)\n    Account 4: 6RAb9hDKR777EWccBnH4DqJJMvwmoeLegpKYrouFGeJa (0)\n    Account 5: 11111111111111111111111111111111 (6)\n    Data: [191, 164, 10, 67, 73, 40, 60, 254, 3, 0, 1, 0, 221, 242, 21, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]\n  Status: Ok\n    Fee: ◎0.000008625\n    Account 0 balance: ◎95.894235022 -> ◎95.894226397\n    Account 1 balance: ◎0.03839832\n    Account 2 balance: ◎272.683450044\n    Account 3 balance: ◎0.000000001\n    Account 4 balance: ◎41.509619334\n    Account 5 balance: ◎0.00114144\n    Account 6 balance: ◎0.000000001\n  Log Messages:\n    Program ComputeBudget111111111111111111111111111111 invoke [1]\n    Program ComputeBudget111111111111111111111111111111 success\n    Program ComputeBudget111111111111111111111111111111 invoke [1]\n    Program ComputeBudget111111111111111111111111111111 success\n    Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr invoke [1]\n    Program log: Signed by 6RAb9hDKR777EWccBnH4DqJJMvwmoeLegpKYrouFGeJa\n    Program log: Memo (len 45): \"Game=3 Room=1 Round=1438429 Result=CCBCCBBCAB\"\n    Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr consumed 31200 of 144700 compute units\n    Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr success\n    Program DEALERKFspSo5RoXNnKAhRPhTcvJeqeEgAgZsNSjCx5E invoke [1]\n    Program log: Instruction: DistroRewards\n    Program log: Round finished Game=3 Room=1 Round=1438429. Bets open for next round.\n    Program DEALERKFspSo5RoXNnKAhRPhTcvJeqeEgAgZsNSjCx5E consumed 69805 of 113500 compute units\n    Program DEALERKFspSo5RoXNnKAhRPhTcvJeqeEgAgZsNSjCx5E success\n\nFinalized"
+  ]
+}

@@ -4,6 +4,7 @@ import {
 } from "@/features/unknown-command";
 import { createLogger } from "@/shared/lib/logger";
 
+import { hoistParentOptionsWith, valueOptionOf } from "./command-options";
 import { PgCommon } from "./common";
 import {
   PgTerminal,
@@ -63,10 +64,20 @@ export type CommandParam<
   needsConnection?: true;
   /** The line `<name> --version` and `<name> -V` print, offline too. Read on the top-level command only */
   version?: string;
-} & (WithSubcommands<S> | WithHandle<A, O, R>);
+} & (WithSubcommands<S> | WithHandle<A, O, S, R>);
 
 /** What a command that needs a connection ends with offline (Spec 13) */
 export const OFFLINE_LINE = "You're offline. This command needs a connection.";
+
+/** Whether a token is a value-taking option the command declares */
+const takesValueOf = (cmd: { options?: Option[] }, token: string) =>
+  valueOptionOf(cmd.options ?? [])(token) !== undefined;
+
+const isHelpToken = (token: string) => token === "--help" || token === "-h";
+
+/** Whether the parser reads arguments or options of the command's own, `help` aside */
+const hasArgsOrOpts = (cmd: { args?: Arg[]; options?: Option[] }) =>
+  Boolean(cmd.args?.length) || (cmd.options?.length ?? 0) > 1;
 
 /** The end of a refused value's line: what it could have been, if anything */
 const possibleValues = (values: string[]) =>
@@ -85,15 +96,22 @@ type WithSubcommands<S> = {
   subcommands?: S;
 };
 
-type WithHandle<A, O, R> = {
+type WithHandle<A, O, S, R> = {
   /** Command arguments */
   args?: A;
   /** Command options */
   options?: O;
   /** Function to run when the command is called */
   handle: (input: ParsedInput<A, O>) => R;
-  /** Subcommands */
-  subcommands?: never;
+  /**
+   * Subcommands. A top-level command with a handler and subcommands takes
+   * the options it declares before or among its subcommand's (see
+   * `hoistParentOptionsWith`), skips them when it names an unknown subcommand
+   * in its error, and runs its handler when no subcommand follows them. A
+   * nested command with both gets neither: `execute` hoists for the top-level
+   * command only, and the type does not forbid the nested form.
+   */
+  subcommands?: S;
 };
 
 type ParsedInput<A, O> = {
@@ -365,12 +383,12 @@ export class PgCommandManager {
    *
    * All command processing logic happens in this method.
    *
-   * @param tokens parsed input tokens
+   * @param rawTokens parsed input tokens
    * @returns the return value of the command
    */
-  static async execute(tokens: string[]) {
+  static async execute(rawTokens: string[]) {
     return await PgTerminal.process(async () => {
-      const inputCmdName = tokens.at(0);
+      const inputCmdName = rawTokens.at(0);
       if (!inputCmdName) return;
 
       const topCmd = Object.values(PgCommandManager.all).find(
@@ -398,6 +416,15 @@ export class PgCommandManager {
         throw new TerminalLineError(answer.line);
       }
 
+      // A command with options of its own and subcommands takes those options
+      // before its subcommand too, as clap's global arguments
+      const tokens =
+        topCmd.subcommands && topCmd.options
+          ? hoistParentOptionsWith(topCmd.options)(topCmd.subcommands)(
+              rawTokens
+            )
+          : rawTokens;
+
       // As clap answers it: only directly after the command's name, and nothing runs
       const [, flag, ...rest] = tokens;
       const isVersionLine =
@@ -410,7 +437,7 @@ export class PgCommandManager {
       // Before the start event and the pre-checks: no wallet question first,
       // and nothing has run, so nothing finishes. Asking for a command's help
       // reaches no server, so it stays available
-      const asksForHelp = tokens.includes("--help") || tokens.includes("-h");
+      const asksForHelp = tokens.some(isHelpToken);
       if (topCmd.needsConnection && !asksForHelp && !navigator.onLine) {
         throw new TonedLineError("error", OFFLINE_LINE);
       }
@@ -451,6 +478,24 @@ export class PgCommandManager {
         const args = [];
         const opts = [];
 
+        // The command the tokens end at only prints when it has no handler
+        // or is asked for its help, so no pre-check on the way to it asks
+        // anything: a wallet question before a help or a usage is noise
+        let deepest = topCmd;
+        let deepestAt = 0;
+        for (const token of tokens.slice(1)) {
+          const next = deepest.subcommands?.find(
+            (candidate) => candidate.name === token
+          );
+          if (!next) break;
+          deepest = next;
+          deepestAt++;
+        }
+        const shouldOnlyPrint =
+          !deepest.handle ||
+          (hasArgsOrOpts(deepest) &&
+            tokens.slice(deepestAt + 1).some(isHelpToken));
+
         for (const i in tokens) {
           const token = tokens[i];
           const nextIndex = +i + 1;
@@ -461,7 +506,7 @@ export class PgCommandManager {
           if (subcmd) cmd = subcmd;
 
           // Handle checks
-          if (cmd.preChecks) {
+          if (cmd.preChecks && !shouldOnlyPrint) {
             const preChecks = PgCommon.toArray(cmd.preChecks);
             for (const preCheck of preChecks) await preCheck(tokens);
           }
@@ -486,10 +531,10 @@ ${PgTerminal.formatList(cmd.subcommands!)}`);
             break;
           }
 
-          const hasArgsOrOpts = cmd.args?.length || cmd.options!.length > 1;
-          if (hasArgsOrOpts) {
-            // Handle `help` option
-            if (nextToken === "--help" || nextToken === "-h") {
+          if (hasArgsOrOpts(cmd)) {
+            // Help anywhere behind the command: `close --buffers --help`
+            // prints the help and closes nothing
+            if (tokens.slice(nextIndex).some(isHelpToken)) {
               const usagePrefix = `Usage: ${[
                 ...tokens.slice(0, +i),
                 cmd.name,
@@ -566,17 +611,27 @@ ${PgTerminal.formatList(cmd.subcommands!)}`);
               }
 
               if (!cmd.args && cmd.subcommands) {
-                if (nextToken.startsWith("-")) {
-                  throw new Error(`Unexpected option: \`${nextToken}\``);
+                // The value options the command declares are no subcommand's
+                // problem: name the token behind them, or run the handler
+                // when nothing follows them
+                const behind = tokens.slice(nextIndex);
+                let at = 0;
+                while (at < behind.length && takesValueOf(cmd, behind[at])) {
+                  at += 2;
                 }
-
-                throw new Error(
-                  `Subcommand doesn't exist: \`${nextToken}\`
+                const problem = behind.at(at);
+                if (problem?.startsWith("-")) {
+                  throw new Error(`Unexpected option: \`${problem}\``);
+                }
+                if (problem !== undefined) {
+                  throw new Error(
+                    `Subcommand doesn't exist: \`${problem}\`
 
 Available subcommands: ${cmd.subcommands
-                    .map((subcommand) => subcommand.name)
-                    .join(", ")}`
-                );
+                      .map((subcommand) => subcommand.name)
+                      .join(", ")}`
+                  );
+                }
               }
               if (
                 args.length > (cmd.args?.length ?? 0) &&

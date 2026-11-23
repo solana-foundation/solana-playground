@@ -422,6 +422,23 @@ describe("commands/deploy", () => {
       }
     };
 
+    // HOO-2901: the terminal has no `solana config set` any more, so the hint
+    // points at the custom RPC setting
+    it("points at the custom RPC setting when on-chain data is missing", async () => {
+      const { deploy } = await import("./deploy");
+      const { preChecks } = deploy as unknown as {
+        preChecks: Array<() => Promise<unknown>>;
+      };
+      env.onChain = undefined as unknown as { deployed: boolean };
+      try {
+        await expect(preChecks.at(-1)?.()).rejects.toThrow(
+          "Could not fetch on-chain data. Add a custom RPC in Settings, under Network, and try again."
+        );
+      } finally {
+        env.onChain = { deployed: false };
+      }
+    });
+
     it("prints a program that is not built as a warning", async () => {
       await checkProgram({ importedProgram: undefined, uuid: undefined });
 

@@ -1,0 +1,45 @@
+{
+  "command": "solana confirm 33tHNAXy1dxxjgeomcHLXgf1rsp8Ssi4cs7d6a4sHcvf2uE4Xwakt9Ki3oenVMTViA6SRf7Hh8rVJ1GmMs2kDZHu",
+  "settings": {
+    "endpoint": "https://api.devnet.solana.com",
+    "commitment": "confirmed"
+  },
+  "rpc": [
+    {
+      "url": "https://api.devnet.solana.com/",
+      "request": {
+        "id": 0,
+        "jsonrpc": "2.0",
+        "method": "getSignatureStatuses",
+        "params": [
+          [
+            "33tHNAXy1dxxjgeomcHLXgf1rsp8Ssi4cs7d6a4sHcvf2uE4Xwakt9Ki3oenVMTViA6SRf7Hh8rVJ1GmMs2kDZHu"
+          ]
+        ]
+      },
+      "response": {
+        "jsonrpc": "2.0",
+        "result": {
+          "context": {
+            "apiVersion": "4.5.0-beta.0",
+            "slot": 524605107
+          },
+          "value": [
+            {
+              "confirmationStatus": "finalized",
+              "confirmations": null,
+              "err": null,
+              "slot": 524604912,
+              "status": {
+                "Ok": null
+              }
+            }
+          ]
+        },
+        "id": 0
+      }
+    }
+  ],
+  "output": "Finalized",
+  "outputParts": ["Finalized"]
+}

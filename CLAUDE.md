@@ -160,15 +160,12 @@ Asked to build something in the client, look in `openspec/changes/` first.
   `client-v2/scripts/vercel-install.sh` installs it from what those pins lock
   (`client-v2/docs/deploy-client-vercel.md`, "wasm-bindgen"). A bump changes
   the pin and the lockfile together.
-- **`wasm/` also carries the built-in wallet's CLI signing, which an upstream
-  sync must keep:** the wallet signs the CLIs' transactions at the send step
-  under the key origin (OpenSpec `wallet-cli-signing`). Keep
-  `solana-client/src/deferred_signer.rs` and its call in
-  `send_transaction_with_config`, `utils/solana-playground-utils/src/wallet.rs`
-  with the `wallet` feature, and the CLIs' `wallet_signer()` calls.
 - **`server/` carries fork-owned changes that an upstream sync must keep,**
   so a conflict there is resolved by hand, never by taking upstream's file:
-  the share routes and MongoDB are gone (`e5d1cf747`); the stable build runs
+  the share routes and MongoDB are gone (`e5d1cf747`); so is the `unstable`
+  feature's `/bundle` route, with `server/packages/`, `images/Dockerfile.bundle`
+  and the npm files of `templates/legacy`, which nothing deployed and which
+  held Dependabot alerts no release fixes (HOO-2901); the stable build runs
   Anchor 1.1.2 without IDL generation (`c45a8dcd9`); `routes/build.rs` gives
   each request `REQUEST_TIME_LIMIT`, wait included, holds the slot until the
   build process ends and sweeps old build directories (HOO-2874, #174); and
@@ -178,10 +175,11 @@ Asked to build something in the client, look in `openspec/changes/` first.
   `server/app.yaml`. `REQUEST_TIME_LIMIT` fits inside the `maxDuration` of
   `api/build-server.mjs` in `client-v2/vercel.json`: change the two together.
 - **The wasm packages are real unless `USE_WASM_STUBS=true` says
-  otherwise.** Four of the five local `wasm/*/pkg` deps compile from Rust, and
+  otherwise.** Two of the three local `wasm/*/pkg` deps compile from Rust, and
   `yarn install` refuses to run while those directories are missing. The fork
   has no `wasm/anchor-cli`, since the terminal's `anchor` command is TypeScript
-  (`client-v2/src/commands/anchor`), no `wasm/sugar-cli`, taken out until its
+  (`client-v2/src/commands/anchor`), no `wasm/solana-cli` or `wasm/spl-token-cli`, since the terminal's
+  `solana` command is TypeScript (`client-v2/src/commands/solana`) and `spl-token` is gone, no `wasm/sugar-cli`, taken out until its
   subcommands are validated on Devnet (HOO-2866), and no `wasm/playnet` or
   `wasm/pkgs/playnet`, since Playnet's binary was built from Solana forks the
   repository does not hold; an upstream sync that changes these folders keeps
@@ -196,11 +194,11 @@ Asked to build something in the client, look in `openspec/changes/` first.
   `CARGO_TARGET_DIR` and fails when a cargo config's `build.target-dir` moves
   either target folder, since both would share one folder again. `setup-wasm.sh` writes the stubs
   (`wasm/stub-packages.sh`) only under `USE_WASM_STUBS=true`, which the `:with-stubs` scripts and
-  the manual `client-v2-with-stubs.yml` set; the stubs make Rust intellisense and the `solana`/
-  `spl-token` terminal commands throw. `yarn start`, `yarn dev`,
+  the manual `client-v2-with-stubs.yml` set; Rust intellisense stays empty under the stubs and Seahorse
+  builds throw. `yarn start`, `yarn dev`,
   `yarn dev-cra` (which `vercel dev` runs) and `yarn test-e2e` refuse stubs
   nobody asked for, `vercel-install.sh` refuses the variable, and the
-  Vercel build fails on a bundle that carries a stub or lacks any of the four
+  Vercel build fails on a bundle that carries a stub or lacks either of the two
   real packages (`REAL_WASM_MARKERS` in `client-v2/scripts/wasm-stubs.mjs`);
   `openspec/specs/client-v2-build/spec.md` holds these requirements. yarn 1 copies a `file:`
   package again only when its folder is missing, so `setup-wasm.sh` clears

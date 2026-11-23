@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use solpg_server::{package, program, templates::get_all_templates, utils::get_image_name};
+use solpg_server::{program, templates::get_all_templates, utils::get_image_name};
 use tokio::{fs, process::Command};
 
 /// Images directory path
@@ -9,7 +9,6 @@ const IMAGES_DIR: &str = "images";
 pub async fn setup() -> Result<()> {
     build_images().await?;
     remove_program_artifacts().await?;
-    remove_package_artifacts().await?;
     Ok(())
 }
 
@@ -70,19 +69,6 @@ async fn remove_program_artifacts() -> Result<()> {
         fs::remove_dir_all(out_path)
             .await
             .map_err(|e| anyhow!("Failed to remove program out directory: {e}"))?;
-    }
-
-    Ok(())
-}
-
-/// Remove all package artifacts from previous runs.
-async fn remove_package_artifacts() -> Result<()> {
-    let out_path = package::get_out_path();
-    let exists = fs::try_exists(&out_path).await?;
-    if exists {
-        fs::remove_dir_all(out_path)
-            .await
-            .map_err(|e| anyhow!("Failed to remove package out directory: {e}"))?;
     }
 
     Ok(())

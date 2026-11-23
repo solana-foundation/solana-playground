@@ -162,7 +162,7 @@ Mirrors the `checks` and `build` jobs in [reusable-client-v2.yml](../.github/wor
 
 Precondition: B-7. `yarn --cwd client-v2 setup:with-stubs` (`USE_WASM_STUBS=true`) mirrors
 [client-v2-with-stubs.yml](../.github/workflows/client-v2-with-stubs.yml) instead: the stubs skip the Rust build but
-disable Rust intellisense and the `solana` and `spl-token` terminal commands, so S-3, C-6, and the
+leave Rust intellisense empty and make Seahorse builds throw, so S-3, C-6, and the
 `check-build` line need B-7.
 
 ```sh
@@ -273,12 +273,12 @@ Expect: `setup` exits 0; both `grep` lines print nothing. On a warm target folde
 recompiles its own crates, is unmeasured. A cold one takes about an hour.
 
 In a linked worktree with no target folder of its own, whose sources of one package differ from the main checkout's,
-run `setup` and compare that package's `.wasm` with the main checkout's, here for `solana-cli`:
+run `setup` and compare that package's `.wasm` with the main checkout's, here for `seahorse-compile`:
 
 ```sh
 main=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")
-git diff --quiet "$(git -C "$main" rev-parse HEAD)" -- wasm/solana-cli || echo sources differ
-cmp wasm/solana-cli/pkg/solana_cli_wasm_bg.wasm "$main/wasm/solana-cli/pkg/solana_cli_wasm_bg.wasm"
+git diff --quiet "$(git -C "$main" rev-parse HEAD)" -- wasm/seahorse-compile || echo sources differ
+cmp wasm/seahorse-compile/pkg/seahorse_compile_wasm_bg.wasm "$main/wasm/seahorse-compile/pkg/seahorse_compile_wasm_bg.wasm"
 ```
 
 Expect: `sources differ`, then `cmp` reports a difference. Identical files mean the seeded target folder's output
@@ -361,7 +361,7 @@ Expect:
 
 Same steps and expectations as C-2, run against the C-4 session.
 
-### C-6. the CLIs run in the client
+### C-6. the wasm packages run in the client
 
 Precondition: a C-1 or C-4 session on the real packages. For client-v2,
 [wasm-clis.e2e.spec.ts](../client-v2/e2e/wasm-clis.e2e.spec.ts) runs these steps:
@@ -369,13 +369,11 @@ Precondition: a C-1 or C-4 session on the real packages. For client-v2,
 [reusable-client-v2.yml](../.github/workflows/reusable-client-v2.yml) runs it when `client-v2.yml` calls that workflow;
 `client-v2-with-stubs.yml` excludes the tag.
 
-Steps: connect the Playground Wallet, then run in the terminal `solana config get` and `spl-token --help`.
+Steps: open the seeded project's `lib.rs`, type `fn probe() { Vec::with_cap` and press Control+Space.
 
 Expect:
 
-- [ ] `solana config get` prints an `RPC URL:` line.
-- [ ] `spl-token --help` prints its usage and subcommands.
-- [ ] no output contains `local dev stub`, the error every stub throws.
+- [ ] the completion list offers `with_capacity` (rust-analyzer; a stub answers with an empty list).
 
 ## 3. Full suite with Docker Compose
 
@@ -418,8 +416,7 @@ Precondition: D-2 session; a wallet connected and funded on the selected cluster
 
 Steps: click Deploy.
 
-Expect: `GET http://localhost:8080/deploy/{uuid}` returns 200; the terminal prints the program ID; `solana program show
-<program ID>` in the playground terminal shows the program on the selected cluster.
+Expect: `GET http://localhost:8080/deploy/{uuid}` returns 200; the terminal prints the program ID; the program ID's page in the Solana Explorer, on the selected cluster, shows the program.
 
 ### D-5. CORS
 
@@ -786,10 +783,9 @@ Expect: `404` for `/unstable/build`; anything but `404` for `/build`, which prov
 
 ### R-4. the deployment carries no stub
 
-A stub in production makes the `solana` and `spl-token` commands throw, and leaves Rust
-intellisense empty. The requirement is "A deployment never carries a wasm stub" in
+A stub in production leaves Rust intellisense empty and makes Seahorse builds throw. The requirement is "A deployment never carries a wasm stub" in
 `openspec/specs/client-v2-build/spec.md`. The Vercel build already fails on a bundle that carries a stub or lacks the wasm-bindgen module of
-any of the four packages (`REAL_WASM_MARKERS` in `client-v2/scripts/wasm-stubs.mjs`; `node scripts/wasm-stubs.mjs check-build build` in the `buildCommand` of
+any of the two packages (`REAL_WASM_MARKERS` in `client-v2/scripts/wasm-stubs.mjs`; `node scripts/wasm-stubs.mjs check-build build` in the `buildCommand` of
 [vercel.json](../client-v2/vercel.json)), and CI runs the same check after its production build, in
 [reusable-client-v2.yml](../.github/workflows/reusable-client-v2.yml); this case checks what was deployed. For a protected preview, add
 `-H "x-vercel-protection-bypass: $VERCEL_BYPASS"` to each `curl` (S-6).
@@ -799,8 +795,8 @@ base=<deployment URL>
 curl -s "$base/asset-manifest.json" | jq -r '.files[] | select(endswith(".js"))' > <run folder>/chunks.txt
 while read -r f; do curl -s -o "<run folder>/$(basename "$f")" "$base$f"; done < <run folder>/chunks.txt
 grep -l 'local dev stub' <run folder>/*.js
-grep -o -h -e rust_analyzer_wasm_bg -e seahorse_compile_wasm_bg -e solana_cli_wasm_bg -e spl_token_cli_wasm_bg <run folder>/*.js | sort -u
-grep -l 'solana_cli_wasm_bg' <run folder>/*.js
+grep -o -h -e rust_analyzer_wasm_bg -e seahorse_compile_wasm_bg <run folder>/*.js | sort -u
+grep -l 'seahorse_compile_wasm_bg' <run folder>/*.js
 grep -o '"[0-9a-f]\{20\}"' <run folder>/<the chunk the previous grep listed>
 curl -s -o /dev/null -w '%{http_code} %{content_type} %{size_download}\n' "$base/<that hash>.module.wasm"
 ```
@@ -825,7 +821,7 @@ U-1 to U-3 run the unstable server as a native binary. This is the one exception
 cargo build --manifest-path server/Cargo.toml --release --features unstable
 ```
 
-Expect: exit code 0; binaries `solpg-server`, `build-program`, and `bundle` in `server/target/release/`.
+Expect: exit code 0; binaries `solpg-server` and `build-program` in `server/target/release/`.
 
 ### U-2. unstable routes
 
@@ -837,17 +833,13 @@ PG_PORT=8081 server/target/release/solpg-server
 
 Run it from `server/` so it finds `templates/` and `images/`. `PG_PORT` avoids a clash with the compose server.
 
-Steps: point a client at `http://localhost:8081`; in client-v2, turn `experimental.unstable` on. Build a program, then
-bundle a package.
+Steps: point a client at `http://localhost:8081`; in client-v2, turn `experimental.unstable` on. Build a program.
 
 Expect:
 
-- [ ] start-up builds one `program-<template>` image per directory in `server/templates/` and a bundle image. A cold
-      build takes several minutes.
-- [ ] `POST /unstable/build` and `POST /unstable/bundle` return 200.
-
-Known issue: `sandbox.rs` clears the environment before `docker exec`, which drops `PATH`; on macOS the bundle route
-then fails with "No such file or directory". Linux is unaffected.
+- [ ] start-up builds one `program-<template>` image per directory in `server/templates/`. A cold build takes
+      several minutes.
+- [ ] `POST /unstable/build` returns 200.
 
 ### U-3. sandbox templates
 
@@ -870,7 +862,7 @@ the Rust-side settings, `images/`, and `src/` stay the image's.
 ```sh
 docker compose --profile v2-unstable up --build -d
 tries=60
-until [ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d '{}' "http://localhost:${PG_PORT:-8080}/unstable/bundle")" = 422 ]; do
+until [ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d '{}' "http://localhost:${PG_PORT:-8080}/unstable/build")" = 422 ]; do
   if [ -n "$(docker compose --profile v2-unstable ps --status exited -q server-unstable)" ]; then
     echo 'server-unstable exited: read `docker compose --profile v2-unstable logs server-unstable`'; break
   fi
@@ -882,17 +874,6 @@ docker compose --profile v2-unstable logs server-unstable | grep 'naming to'
 docker compose --profile v2-unstable exec server-unstable docker version
 ```
 
-client-v2 has no caller for `/unstable/bundle`, so the bundle route is checked with `curl` and a minimal manifest:
-
-```sh
-curl -s -o /dev/null -w '%{http_code}\n' -H 'Content-Type: application/json' \
-  -d '{"manifest":"{\"dependencies\":{\"@coral-xyz/anchor\":\"^0.29.0\"}}"}' \
-  "http://localhost:${PG_PORT:-8080}/unstable/bundle"
-curl -s -f -H 'Content-Type: application/json' \
-  -d '{"manifest":"{\"dependencies\":{\"@coral-xyz/anchor\":\"^0.29.0\"}}"}' \
-  "http://localhost:${PG_PORT:-8080}/unstable/bundle" | jq -c 'keys'
-```
-
 Steps: once the `until` loop ends without a message (the route exists and answers the empty request with `422`), open
 the client and build a program. The profile sets `REACT_APP_SERVER_UNSTABLE=true`, so `experimental.unstable` is on
 in a browser profile that has not stored it; in one that has, run `setting set experimental.unstable true` in the
@@ -900,11 +881,10 @@ client's terminal first.
 
 Expect:
 
-- [ ] the log names `solpg-server-sandbox-bundle` and one `solpg-server-sandbox-program-<template>` image per
-      template in `get_all_templates` (`server/src/templates/mod.rs`).
+- [ ] the log names one `solpg-server-sandbox-program-<template>` image per template in `get_all_templates`
+      (`server/src/templates/mod.rs`).
 - [ ] `docker version` prints a `Server` section: the container reaches the host's daemon.
 - [ ] the build from the client sends `POST /unstable/build`, which returns 200.
-- [ ] the first `curl` prints `200`; the second prints keys that include `bundle` and `types`.
 
 ```sh
 docker compose --profile v2-unstable down
