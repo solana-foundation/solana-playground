@@ -6,7 +6,7 @@ import {
 /**
  * What went wrong, in words a person can read. kit builds a `SolanaError`'s
  * message from a table that production builds leave out ("Solana error
- * #8100002; Decode this error by running npx …"), so the text is made from
+ * #<code>; Decode this error by running npx …"), so the text is made from
  * the error's `context` (the HTTP status, the server's message) instead.
  *
  * @param error whatever a `catch` caught
