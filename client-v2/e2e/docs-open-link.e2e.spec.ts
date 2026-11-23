@@ -259,6 +259,31 @@ test.describe("client-run", () => {
     );
   });
 
+  test("client-run: The explorer's Run after adding a program", async ({
+    page,
+  }) => {
+    await page.goto(docsLink({ name: "hello.ts", code: 'console.log("hi")' }));
+    await page.getByRole("button", { name: "Add program" }).click(LONG);
+    // The stage row's Run leaves with the program; the question must not
+    await expect(page.locator("#flow-run")).toHaveCount(0, LONG);
+
+    await page.getByRole("button", { name: "Files" }).click();
+    const files = page.getByRole("dialog", { name: "Files" });
+    await files.getByRole("button", { name: "client" }).click();
+    await files
+      .getByRole("button", { name: "hello.ts" })
+      .click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Run" }).click();
+
+    const dialog = confirmDialog(page);
+    await expect(dialog).toContainText('console.log("hi")', LONG);
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.locator(".xterm-rows")).not.toContainText(
+      "Running client"
+    );
+  });
+
   test("client-run: Cancel", async ({ page }) => {
     await page.goto(docsLink({ name: "hello.ts", code: 'console.log("hi")' }));
     await page.locator("#flow-run").click(LONG);

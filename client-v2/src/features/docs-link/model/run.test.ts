@@ -721,5 +721,14 @@ describe("PgClientRun", () => {
       expect(PgClientRun.state.kind).toBe("idle");
       expect(utils.PgCommand.run.execute).not.toHaveBeenCalled();
     });
+
+    it("does not ask while a run is going", async () => {
+      const { PgClientRun, PgDocsLink } = await loadAsking();
+      PgDocsLink.open(QUICKSTART);
+      startRun();
+
+      await expect(PgClientRun.askFirst()).resolves.toBe(false);
+      expect(PgClientRun.state.kind).toBe("running");
+    });
   });
 });

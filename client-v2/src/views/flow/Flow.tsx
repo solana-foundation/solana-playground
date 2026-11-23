@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { openConnectDialog } from "@/app/ConnectDialog";
 import { openShareGistDialogFor, ShareButton } from "@/app/ShareGistDialog";
 import Wallet from "@/components/Wallet";
+import { RunConfirm } from "@/features/docs-link";
 import { FeedbackHost } from "@/features/feedback";
 import { FundDialogHost } from "@/features/fund-wallet";
 import SyncBanner from "@/features/persistence/Component/SyncBanner";
@@ -746,6 +747,7 @@ const FlowFrame = () => {
       <ModalHost />
       <ToastHost />
       <FundDialogHost />
+      <RunConfirm />
     </div>
   );
 };

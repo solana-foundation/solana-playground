@@ -26,3 +26,4 @@ export type { BaseRunConfirmProps } from "./ui/BaseRunConfirm";
 export type { BaseRunCalloutProps, RunSourceInfo } from "./ui/BaseRunCallout";
 export { default as RunButton } from "./ui/RunButton";
 export { default as RunCallout } from "./ui/RunCallout";
+export { default as RunConfirm } from "./ui/RunConfirm";

@@ -214,7 +214,10 @@ const isAgreed = async (since: number): Promise<boolean> => {
   const link = PgDocsLink.opened;
   if (!link || link === confirmedLink) return true;
   // One question at a time: a second asker would orphan the first's answer
-  if (answer) return false;
+  if (answer) {
+    log.debug("a run asked while the question was open; it runs nothing");
+    return false;
+  }
   const isYes = await new Promise<boolean>((resolve) => {
     answer = resolve;
     set({ kind: "confirm", link, previous: restingOf(state) });
@@ -383,6 +386,9 @@ export const PgClientRun = {
    */
   askFirst() {
     listen();
+    // A run is going: the command would refuse this one anyway, and the
+    // question would replace the running state the stage row shows
+    if (state.kind === "running") return Promise.resolve(false);
     return isAgreed(switches);
   },
 

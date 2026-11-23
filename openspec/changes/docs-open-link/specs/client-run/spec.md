@@ -3,7 +3,10 @@
 ### Requirement: Run a client project from the stage row
 
 A project with no program SHALL have a Run button (`flow-run`) in its stage
-row. Pressing it SHALL:
+row. When a docs link opened the project, its first press asks first
+(`open-link-trust`, "The first Run of a link's code asks first"); once the
+user agrees, and on every press in a project no link opened, pressing it
+SHALL:
 
 - run the project's scripts under `client/`, as the terminal's `run` does,
   stopping at the first script that fails (the terminal's `test` still runs
