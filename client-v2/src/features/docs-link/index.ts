@@ -13,7 +13,7 @@ export type { DecodedDocsLink, DocsLink, DocsLinkFailure } from "./lib/link";
 export type { LinkState } from "./model/opened";
 export { PgDocsLink } from "./model/opened";
 export { PgClientRun } from "./model/run";
-export type { RunState } from "./model/run";
+export type { RunAnswer, RunState } from "./model/run";
 export { docsLinkTelemetry } from "./model/telemetry";
 export type { RunOutcome } from "./model/telemetry";
 export { default as BaseBrokenLink } from "./ui/BaseBrokenLink";

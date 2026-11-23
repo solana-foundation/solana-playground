@@ -306,6 +306,9 @@ test.describe("client-run", () => {
     await expect(dialog).toContainText('console.log("hi")', LONG);
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(dialog).toHaveCount(0);
+    await expect(page.locator(".xterm-rows")).not.toContainText(
+      "Running tests"
+    );
   });
 
   test("client-run: Cancel", async ({ page }) => {

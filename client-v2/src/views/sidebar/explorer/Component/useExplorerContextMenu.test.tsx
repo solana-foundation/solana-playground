@@ -21,12 +21,12 @@ const explorer = vi.hoisted(() => ({
 }));
 const view = vi.hoisted(() => ({ setModal: vi.fn(), setToast: vi.fn() }));
 const run = vi.hoisted(() => {
-  const answer = { isAgreed: true };
+  const answer: { is: "run" | "no" | "busy" } = { is: "run" };
   return {
     answer,
     execute: vi.fn(async () => undefined),
     test: vi.fn(async () => undefined),
-    askFirst: vi.fn(async () => answer.isAgreed),
+    askFirst: vi.fn(async () => answer.is),
   };
 });
 vi.mock("@/features/docs-link", () => ({
@@ -155,7 +155,7 @@ describe("useExplorerContextMenu Run", () => {
   it.each(ASKING)(
     "%s asks before the first run of a link's code",
     async (action) => {
-      run.answer.isAgreed = false;
+      run.answer.is = "no";
       const { result } = renderHook(() => useExplorerContextMenu());
 
       await result.current[action]();
@@ -166,20 +166,49 @@ describe("useExplorerContextMenu Run", () => {
     }
   );
 
-  it.each(ASKING)("%s runs once agreed", async (action) => {
-    run.answer.isAgreed = true;
-    const { result } = renderHook(() => useExplorerContextMenu());
+  // Each action's own command, with the item's path where it takes one
+  it.each([
+    { action: "runClient", command: "run", args: ["/client/a.ts"] },
+    { action: "runClientFolder", command: "run", args: [] },
+    { action: "addClient", command: "run", args: [] },
+    { action: "runTest", command: "test", args: ["/client/a.ts"] },
+  ] as const)(
+    "$action runs $command once agreed",
+    async ({ action, command, args }) => {
+      run.answer.is = "run";
+      explorer.getSelectedEl.mockReturnValue({});
+      explorer.getItemPathFromEl.mockReturnValue("/client/a.ts");
+      const { result } = renderHook(() => useExplorerContextMenu());
 
-    await result.current[action]();
+      await result.current[action]();
 
-    expect(run.execute.mock.calls.length + run.test.mock.calls.length).toBe(1);
-  });
+      const called = command === "run" ? run.execute : run.test;
+      const other = command === "run" ? run.test : run.execute;
+      expect(called).toHaveBeenCalledTimes(1);
+      expect(called).toHaveBeenCalledWith(...args);
+      expect(other).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(ASKING)(
+    "%s says so in a toast when a run is going, and runs nothing",
+    async (action) => {
+      run.answer.is = "busy";
+      const { result } = renderHook(() => useExplorerContextMenu());
+
+      await result.current[action]();
+
+      expect(view.setToast).toHaveBeenCalledTimes(1);
+      expect(run.execute).not.toHaveBeenCalled();
+      expect(run.test).not.toHaveBeenCalled();
+    }
+  );
 
   // A bare `test` runs only `tests/`, which holds none of a link's code
   it.each(["runTestFolder", "addTests"] as const)(
     "%s runs the tests folder without asking",
     async (action) => {
-      run.answer.isAgreed = false;
+      run.answer.is = "no";
       const { result } = renderHook(() => useExplorerContextMenu());
 
       await result.current[action]();

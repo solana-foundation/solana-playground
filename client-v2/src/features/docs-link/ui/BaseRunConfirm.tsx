@@ -1,8 +1,10 @@
+import { TriangleAlert } from "lucide-react";
 import type { FC } from "react";
 import { useRef } from "react";
 
 import { BrandButton } from "@/shared/ui/brand-button";
 import { Button } from "@/shared/ui/button";
+import { Callout, CalloutDescription, CalloutTitle } from "@/shared/ui/callout";
 import {
   CodeBlock,
   CodeBlockContent,
@@ -20,6 +22,7 @@ import {
   ModalTitle,
 } from "@/shared/ui/modal";
 
+import { countHidden, partsOf } from "../lib/hidden-chars";
 import type { DocsLink } from "../lib/link";
 
 export interface BaseRunConfirmProps {
@@ -55,6 +58,7 @@ const BaseRunConfirm: FC<BaseRunConfirmProps> = ({
   onCancel,
 }) => {
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const hidden = link ? countHidden(link.code) : 0;
   return (
     <Modal open={!!link} onOpenChange={(isOpen) => !isOpen && onCancel()}>
       {link && (
@@ -81,6 +85,20 @@ const BaseRunConfirm: FC<BaseRunConfirmProps> = ({
               It runs with your Playground wallet and can sign transactions with
               it. Read it before you run it.
             </ModalDescription>
+            {hidden > 0 && (
+              <Callout variant="warning" role="alert" className="mb-4">
+                <TriangleAlert />
+                <CalloutTitle>
+                  {hidden === 1
+                    ? "1 hidden or direction-changing character"
+                    : `${hidden} hidden or direction-changing characters`}
+                </CalloutTitle>
+                <CalloutDescription>
+                  They can make code read differently from what runs, so each is
+                  shown as its code, such as U+202E.
+                </CalloutDescription>
+              </Callout>
+            )}
             <CodeBlock>
               <CodeBlockHeader>
                 <CodeBlockTitle>{link.name}</CodeBlockTitle>
@@ -95,7 +113,19 @@ const BaseRunConfirm: FC<BaseRunConfirmProps> = ({
                     key={index}
                     className="-indent-9 pl-9 whitespace-pre-wrap [overflow-wrap:anywhere]"
                   >
-                    {line}
+                    {partsOf(line).map((part, at) =>
+                      "hidden" in part ? (
+                        <mark
+                          // eslint-disable-next-line react/no-array-index-key -- a part has no identity beyond its place in the line
+                          key={at}
+                          className="rounded bg-destructive/20 px-0.5 text-destructive"
+                        >
+                          {part.hidden}
+                        </mark>
+                      ) : (
+                        part.text
+                      )
+                    )}
                   </CodeBlockLine>
                 ))}
               </CodeBlockContent>

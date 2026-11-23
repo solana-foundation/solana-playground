@@ -92,4 +92,25 @@ describe("BaseRunConfirm", () => {
     expect(line?.className).toContain("[overflow-wrap:anywhere]");
     expect(line?.className).not.toContain("break-all");
   });
+
+  it("shows hidden and direction-changing characters as markers, with a warning", () => {
+    // A right-to-left override can make a line read unlike what runs
+    confirmFor({
+      name: LINK.name,
+      code: "const isAdmin = false; /* \u202E } \u2066if (isAdmin)\u2069 \u2066 */\nlet a\u200B = 1;",
+    });
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.textContent).toContain("U+202E");
+    expect(dialog.textContent).toContain("U+2066");
+    expect(dialog.textContent).toContain("U+200B");
+    expect(dialog.textContent).not.toMatch(/[\u202E\u2066\u2069\u200B]/);
+    expect(screen.getByRole("alert").textContent).toMatch(
+      /5 hidden or direction-changing characters/
+    );
+  });
+
+  it("warns about nothing in plain code", () => {
+    confirm();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
 });

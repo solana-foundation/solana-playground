@@ -682,8 +682,19 @@ describe("PgClientRun", () => {
       expect(PgClientRun.state.kind).toBe("confirm");
       PgClientRun.confirmRun();
 
-      await expect(asked).resolves.toBe(true);
-      await expect(PgClientRun.askFirst()).resolves.toBe(true);
+      await expect(asked).resolves.toBe("run");
+      await expect(PgClientRun.askFirst()).resolves.toBe("run");
+    });
+
+    it("answers no on Cancel", async () => {
+      const { PgClientRun, PgDocsLink } = await loadAsking();
+      PgDocsLink.open(QUICKSTART);
+      const asked = PgClientRun.askFirst();
+      await Promise.resolve();
+
+      PgClientRun.cancelRun();
+
+      await expect(asked).resolves.toBe("no");
     });
 
     it("says no to a second question while one is open", async () => {
@@ -692,9 +703,9 @@ describe("PgClientRun", () => {
       const first = PgClientRun.askFirst();
       await Promise.resolve();
 
-      await expect(PgClientRun.askFirst()).resolves.toBe(false);
+      await expect(PgClientRun.askFirst()).resolves.toBe("no");
       PgClientRun.confirmRun();
-      await expect(first).resolves.toBe(true);
+      await expect(first).resolves.toBe("run");
     });
 
     it.each([
@@ -727,7 +738,7 @@ describe("PgClientRun", () => {
       PgDocsLink.open(QUICKSTART);
       startRun();
 
-      await expect(PgClientRun.askFirst()).resolves.toBe(false);
+      await expect(PgClientRun.askFirst()).resolves.toBe("busy");
       expect(PgClientRun.state.kind).toBe("running");
     });
 
@@ -736,7 +747,7 @@ describe("PgClientRun", () => {
       startRun();
 
       // The command then answers that a run is going, as it always did
-      await expect(PgClientRun.askFirst()).resolves.toBe(true);
+      await expect(PgClientRun.askFirst()).resolves.toBe("run");
     });
 
     it("keeps a run from the menu showing when Run's balance read ends", async () => {
@@ -748,6 +759,37 @@ describe("PgClientRun", () => {
 
       expect(PgClientRun.state.kind).toBe("running");
       expect(utils.PgCommand.run.execute).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      { sol: "enough", lamports: 0.5e9 },
+      { sol: "short", lamports: 0 },
+    ])(
+      "runs nothing twice when a run from elsewhere starts and ends while Run reads the balance ($sol SOL)",
+      async ({ lamports }) => {
+        const { PgClientRun, PgDocsLink } = await load();
+        PgDocsLink.open(QUICKSTART);
+        utils.lamports = lamports;
+        utils.duringBalance = () => {
+          startRun();
+          finishRun({ ok: { ok: true } });
+        };
+
+        await PgClientRun.start();
+
+        expect(utils.PgCommand.run.execute).not.toHaveBeenCalled();
+        expect(PgClientRun.state.kind).toBe("done");
+      }
+    );
+
+    it("lets a run from elsewhere through for an agreed link, even mid-run", async () => {
+      const { PgClientRun, PgDocsLink } = await load();
+      PgDocsLink.open(QUICKSTART);
+      utils.lamports = 0.5e9;
+      await PgClientRun.start();
+      startRun();
+
+      await expect(PgClientRun.askFirst()).resolves.toBe("run");
     });
   });
 });

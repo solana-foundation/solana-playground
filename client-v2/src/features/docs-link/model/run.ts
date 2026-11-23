@@ -7,6 +7,7 @@ import { missingPackageOf } from "@/utils/js-runtime";
 
 import type { DocsLink } from "../lib/link";
 import { PgDocsLink } from "./opened";
+import { restingOf } from "./resting";
 import type { RunOutcome, WalletOrigin } from "./telemetry";
 import { docsLinkTelemetry } from "./telemetry";
 
@@ -19,7 +20,7 @@ type EndedState =
   | { kind: "missing-package"; pkg: string };
 
 /** A state with no run going and no card asking for SOL */
-type RestingState = { kind: "idle" } | EndedState;
+export type RestingState = { kind: "idle" } | EndedState;
 
 /** What the stage row's Run and its callout show */
 export type RunState =
@@ -53,6 +54,13 @@ export type RunState =
       /** What Not now goes back to */
       previous: RestingState;
     };
+
+/**
+ * How the question before a run from elsewhere ended: `run` (no link, a link
+ * already agreed to, or Run), `no` (Cancel, another project, a question
+ * already open), or `busy` (a run is going; the caller says so)
+ */
+export type RunAnswer = "run" | "no" | "busy";
 
 type Listener = (state: RunState) => void;
 
@@ -99,18 +107,6 @@ const set = (next: RunState) => {
 /** Back to a clean callout, unless a run is still going */
 const reset = () => {
   if (state.kind !== "running") set({ kind: "idle" });
-};
-
-/** @returns what Not now should return to from the current state */
-const restingOf = (current: RunState): RestingState => {
-  if (
-    current.kind === "funding" ||
-    current.kind === "running" ||
-    current.kind === "confirm"
-  ) {
-    return current.previous;
-  }
-  return current;
 };
 
 const messageOf = (error: unknown) =>
@@ -245,11 +241,14 @@ type Funds = "enough" | "short" | "project-left" | "running";
  * @param since `switches` when the press began: another project opened
  * while the balance was read means the answer belongs to a project that is
  * no longer open, so no card is shown and nothing runs
+ * @param runsBefore `started` when the press began: a run started elsewhere
+ * since (the menu, the terminal), going or already ended, is the run, and a
+ * card would cover it
  * @param wallet `new` when Run had to set the wallet up first; Check again
  * always reports `existing`, since the card's wallet exists by then
  */
 const fundsFor =
-  (since: number) =>
+  (since: number, runsBefore: number) =>
   async (wallet: WalletOrigin): Promise<Funds> => {
     const needed = PgDocsLink.opened?.sol;
     if (!needed) return "enough";
@@ -261,9 +260,7 @@ const fundsFor =
 
     const balance = await balanceOf(current.publicKey);
     if (switches !== since) return "project-left";
-    // A run started elsewhere while the balance was read (the menu, the
-    // terminal): it shows, and the card would cover it
-    if (state.kind === "running") return "running";
+    if (started !== runsBefore) return "running";
     if (balance >= needed) return "enough";
 
     docsLinkTelemetry.track("docs_link_run_funding_shown", {
@@ -371,11 +368,15 @@ export const PgClientRun = {
     if (state.kind === "running" || isStarting) return;
     isStarting = true;
     const since = switches;
+    const runsBefore = started;
     try {
       if (!(await isAgreed(since))) return;
       const wallet = await walletForRun();
       if (!wallet || switches !== since) return;
-      if ((await fundsFor(since)(wallet)) !== "enough") return;
+      if ((await fundsFor(since, runsBefore)(wallet)) !== "enough") return;
+      // A run from the menu or the terminal went while Run waited on the
+      // wallet: that was the run, and this one would run the scripts again
+      if (started !== runsBefore) return;
     } finally {
       isStarting = false;
     }
@@ -386,9 +387,9 @@ export const PgClientRun = {
    * Ask before a run that does not start from Run, such as the explorer's
    * menu: the same question, once per link.
    *
-   * @returns whether to run: no link, a link already agreed to, or Run
+   * @returns how the question ended
    */
-  askFirst() {
+  async askFirst(): Promise<RunAnswer> {
     listen();
     const link = PgDocsLink.opened;
     // A question is owed only for a link's code not agreed to yet. Then a
@@ -396,10 +397,10 @@ export const PgClientRun = {
     // the stage row shows. Otherwise the command answers, as it always did
     const isOwed = link !== undefined && link !== confirmedLink;
     if (isOwed && state.kind === "running") {
-      log.info("a run from elsewhere waits for the one going to end");
-      return Promise.resolve(false);
+      log.info("a run from elsewhere was refused: another run is going");
+      return "busy";
     }
-    return isAgreed(switches);
+    return (await isAgreed(switches)) ? "run" : "no";
   },
 
   /** The question's Run: the user read the link's code and runs it */
@@ -421,9 +422,10 @@ export const PgClientRun = {
     if (isStarting) return;
     isStarting = true;
     const since = switches;
+    const runsBefore = started;
     let funds: Funds;
     try {
-      funds = await fundsFor(since)("existing");
+      funds = await fundsFor(since, runsBefore)("existing");
     } finally {
       isStarting = false;
     }
