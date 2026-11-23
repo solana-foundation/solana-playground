@@ -10,15 +10,22 @@ import { useOnline } from "@/shared/lib/hooks/use-online";
 import { createLogger } from "@/shared/lib/logger";
 import type { SettingsRequest } from "@/shared/lib/settings-request";
 import { PgCommon, PgExplorer, PgView, PgWallet } from "@/utils";
+import { ExportWorkspace } from "@/views/sidebar/explorer/Component/Modals/ExportWorkspace";
 
 import type {
   AccountItem,
   AccountSession,
   AccountSurface,
   AccountView,
+  DeleteAccountState,
   SignOutState,
 } from "../model/account";
-import { sessionWith, shownSignOutState } from "../model/account";
+import {
+  DELETE_ACCOUNT_RETRY,
+  sessionWith,
+  shownDeleteAccountState,
+  shownSignOutState,
+} from "../model/account";
 import { sessionTelemetry } from "../model/telemetry";
 import { useClusterStatus } from "../model/use-cluster-status";
 import BaseAccountMenu from "./BaseAccountMenu";
@@ -71,6 +78,11 @@ export const useAccount = ({
   const [signOutState, setSignOutState] = useState<SignOutState>({
     status: "idle",
   });
+  const [deleteState, setDeleteState] = useState<DeleteAccountState>({
+    status: "idle",
+  });
+  // The deletion under way: counted when it ends, never as a cancel
+  const deleting = useRef<Promise<void> | undefined>(undefined);
   // The question's busy item already stops a second press; this stops a
   // second question (the footer and the rail swap) from starting another
   const signingOut = useRef<Promise<void> | null>(null);
@@ -133,7 +145,9 @@ export const useAccount = ({
     // Links: the anchor opens the tab, the pick is only counted
     "github-profile": () => undefined,
     docs: () => undefined,
+    "privacy-policy": () => undefined,
     "sign-out": () => setSignOutState({ status: "asking" }),
+    "delete-account": () => setDeleteState({ status: "asking" }),
     // The item unmounts with its menu, so focus comes back to the trigger
     settings: () =>
       onToggleSettings({
@@ -183,6 +197,18 @@ export const useAccount = ({
       cancelSignOut();
       return;
     }
+    // Likewise the deletion; a question left open after a refusal is a cancel
+    if (
+      (deleteState.status === "asking" || deleteState.status === "failed") &&
+      !deleting.current
+    ) {
+      cancelDeleteAccount();
+      return;
+    }
+    if (deleteState.status === "done") {
+      setDeleteState({ status: "idle" });
+      return;
+    }
     // The leftovers line is said once, in the menu that signed out. Only
     // then a render: a close that re-renders would hand a pick deferred to
     // the close (`BaseAccountMenu`'s `closeAfterPick`) a stale render
@@ -221,6 +247,65 @@ export const useAccount = ({
     await signingOut.current;
   };
 
+  /** The deletion question closed unanswered: its Cancel, or the menu closing over it */
+  const cancelDeleteAccount = () => {
+    sessionTelemetry.track("session_delete_account_ended", {
+      outcome: "cancelled",
+    });
+    setDeleteState({ status: "idle" });
+  };
+
+  const deleteAccount = () => {
+    // The question's busy item stops a second press; this stops a second
+    // question (the footer and the rail swap) from starting another
+    if (deleting.current) return;
+    setDeleteState({ status: "running" });
+    deleting.current = PgSession.deleteAccount()
+      .then(({ githubRevoked }) => {
+        sessionTelemetry.track("session_delete_account_ended", {
+          outcome: "ok",
+        });
+        // Said in the menu that deleted, never in one opened later. The
+        // GitHub line goes with it: the person can still remove the app there
+        setDeleteState(
+          menuOpen.current
+            ? { status: "done", githubRevoked }
+            : { status: "idle" }
+        );
+      })
+      .catch((error: unknown) => {
+        // `PgSession.deleteAccount` has logged and reported a refusal; the
+        // reason is the person's to read. Closed over meanwhile, the menu
+        // opens on its items next time
+        log.info("account deletion failed; still signed in", {
+          context: { error: String(error) },
+        });
+        setDeleteState(
+          menuOpen.current
+            ? {
+                status: "failed",
+                reason:
+                  error instanceof Error ? error.message : DELETE_ACCOUNT_RETRY,
+              }
+            : { status: "idle" }
+        );
+      })
+      .finally(() => {
+        deleting.current = undefined;
+      });
+  };
+
+  // The export dialog the explorer and the project list open, for the open project
+  const exportProject = () => {
+    PgView.setModal(ExportWorkspace).catch((error: unknown) =>
+      log.error(error, { report: true, context: { item: "export" } })
+    );
+  };
+
+  const shownDelete = shownDeleteAccountState(deleteState, {
+    signedIn: !!user,
+  });
+
   const shownSignOut = shownSignOutState(signOutState, {
     signedIn: !!user,
     running: !!signingOut.current,
@@ -236,6 +321,10 @@ export const useAccount = ({
       signOut={shownSignOut}
       onSignOutConfirm={signOut}
       onSignOutCancel={cancelSignOut}
+      deleteAccount={shownDelete}
+      onDeleteAccountConfirm={deleteAccount}
+      onDeleteAccountCancel={cancelDeleteAccount}
+      onExportProject={exportProject}
       page={page}
     />
   );

@@ -48,11 +48,11 @@ after 1.1 is merged and before the release.
 
 ## 3. Account menu
 
-- [ ] 3.1 Privacy policy item (HOO-2955). The `client-v2-account` delta:
+- [x] 3.1 Privacy policy item (HOO-2955). The `client-v2-account` delta:
   the item in both menu states, `privacy-policy` added to `AccountItem`.
   Verified by a `BaseAccountMenu.test.tsx` case for the link's `href` and
   `target`, and the event through the memory provider.
-- [ ] 3.2 Delete account (HOO-2955, depends on 1.2 and 3.1, the second for
+- [x] 3.2 Delete account (HOO-2955, depends on 1.2 and 3.1, the second for
   the menu file both touch). `PgSession.deleteAccount`, the
   `setOnAccountDeleted` hook with the upload-free teardown,
   `PgChatSync.syncedThreads`, `auth_account_deleted`, and the menu's question

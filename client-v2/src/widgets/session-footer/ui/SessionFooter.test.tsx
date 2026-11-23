@@ -588,3 +588,183 @@ it("disconnects a wallet through the same command", async () => {
   await pick("Disconnect wallet");
   expect(connectWallet).toHaveBeenCalledOnce();
 });
+
+it("counts a pick of the privacy policy, signed out", async () => {
+  draw("footer");
+  await pick("Privacy policy");
+  expect(eventsNamed("session_account_item_picked")).toEqual([
+    { item: "privacy-policy" },
+  ]);
+});
+
+const deleteQuestion = () =>
+  screen.findByText("Delete your Playground account?");
+
+/** The question's destructive item, its spinner's label aside */
+const confirmDelete = () =>
+  userEvent.click(screen.getByRole("menuitem", { name: /^Delete account/ }));
+
+it("asks before deleting the account, and counts the pick and a cancel", async () => {
+  await signInAsTester();
+  const deleteAccount = vi.spyOn(PgSession, "deleteAccount");
+  draw("footer");
+
+  await pick("Delete account");
+  await deleteQuestion();
+  await userEvent.click(screen.getByRole("menuitem", { name: "Cancel" }));
+
+  expect(
+    await screen.findByRole("menuitem", { name: "Delete account" })
+  ).toBeTruthy();
+  expect(screen.queryByText("Delete your Playground account?")).toBeNull();
+  expect(deleteAccount).not.toHaveBeenCalled();
+  expect(eventsNamed("session_account_item_picked")).toEqual([
+    { item: "delete-account" },
+  ]);
+  expect(eventsNamed("session_delete_account_ended")).toEqual([
+    { outcome: "cancelled" },
+  ]);
+});
+
+it("counts a menu closed over the deletion question as a cancel", async () => {
+  await signInAsTester();
+  draw("footer");
+
+  await pick("Delete account");
+  await deleteQuestion();
+  await userEvent.keyboard("{Escape}");
+  await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+
+  expect(eventsNamed("session_delete_account_ended")).toEqual([
+    { outcome: "cancelled" },
+  ]);
+  // The next opening is on the items
+  await openMenu();
+  expect(
+    await screen.findByRole("menuitem", { name: "Delete account" })
+  ).toBeTruthy();
+});
+
+it("deletes on the confirmation, says so with the GitHub line, and counts ok once", async () => {
+  await signInAsTester();
+  const deleteAccount = vi
+    .spyOn(PgSession, "deleteAccount")
+    .mockImplementation(async () => {
+      PgSession.reset();
+      return { githubRevoked: false };
+    });
+  draw("footer");
+
+  await pick("Delete account");
+  await deleteQuestion();
+  await confirmDelete();
+
+  expect(await screen.findByText("Your account was deleted.")).toBeTruthy();
+  expect(
+    screen
+      .getByRole("link", {
+        name: "Remove Playground from your GitHub settings too.",
+      })
+      .getAttribute("href")
+  ).toBe("https://github.com/settings/applications");
+  expect(
+    screen.getByRole("menuitem", { name: "Sign in with GitHub" })
+  ).toBeTruthy();
+  expect(deleteAccount).toHaveBeenCalledOnce();
+  expect(eventsNamed("session_delete_account_ended")).toEqual([
+    { outcome: "ok" },
+  ]);
+
+  // Said once: closing the menu that deleted counts nothing more
+  await userEvent.keyboard("{Escape}");
+  await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+  await openMenu();
+  await screen.findByRole("menu");
+  expect(screen.queryByText("Your account was deleted.")).toBeNull();
+  expect(eventsNamed("session_delete_account_ended")).toHaveLength(1);
+});
+
+it("leaves the GitHub line out when GitHub revoked the grant", async () => {
+  await signInAsTester();
+  vi.spyOn(PgSession, "deleteAccount").mockImplementation(async () => {
+    PgSession.reset();
+    return { githubRevoked: true };
+  });
+  draw("footer");
+
+  await pick("Delete account");
+  await deleteQuestion();
+  await confirmDelete();
+
+  expect(await screen.findByText("Your account was deleted.")).toBeTruthy();
+  expect(screen.queryByText(/GitHub settings/)).toBeNull();
+});
+
+it("keeps the question after a refused deletion, with the reason, and counts nothing", async () => {
+  await signInAsTester();
+  const deleteAccount = vi
+    .spyOn(PgSession, "deleteAccount")
+    .mockRejectedValue(new Error("Try again."));
+  draw("footer");
+
+  await pick("Delete account");
+  await deleteQuestion();
+  await confirmDelete();
+
+  expect((await screen.findByRole("alert")).textContent).toBe(
+    "Couldn't delete your account. Try again."
+  );
+  expect(screen.getByText("Delete your Playground account?")).toBeTruthy();
+  expect(eventsNamed("session_delete_account_ended")).toEqual([]);
+  expect(PgSession.get()?.id).toBe("u1");
+
+  // A retry the server accepts
+  deleteAccount.mockImplementation(async () => {
+    PgSession.reset();
+    return { githubRevoked: true };
+  });
+  await confirmDelete();
+  expect(await screen.findByText("Your account was deleted.")).toBeTruthy();
+  expect(eventsNamed("session_delete_account_ended")).toEqual([
+    { outcome: "ok" },
+  ]);
+});
+
+it("keeps the deletion busy so it cannot run twice, and counts a close while it runs as ok", async () => {
+  await signInAsTester();
+  let finish: () => void = () => {};
+  const deleteAccount = vi.spyOn(PgSession, "deleteAccount").mockReturnValue(
+    new Promise((resolve) => {
+      finish = () => {
+        PgSession.reset();
+        resolve({ githubRevoked: true });
+      };
+    })
+  );
+  draw("footer");
+
+  await pick("Delete account");
+  await deleteQuestion();
+  await confirmDelete();
+  const confirm = screen.getByRole("menuitem", { name: /^Delete account/ });
+  await waitFor(() => expect(confirm.getAttribute("aria-busy")).toBe("true"));
+  await userEvent.click(confirm);
+  expect(deleteAccount).toHaveBeenCalledOnce();
+
+  await userEvent.keyboard("{Escape}");
+  await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+  expect(eventsNamed("session_delete_account_ended")).toEqual([]);
+  finish();
+
+  await waitFor(() =>
+    expect(eventsNamed("session_delete_account_ended")).toEqual([
+      { outcome: "ok" },
+    ])
+  );
+  // Settled into a closed menu: the next one opens on its items
+  await openMenu();
+  expect(
+    await screen.findByRole("menuitem", { name: "Sign in with GitHub" })
+  ).toBeTruthy();
+  expect(screen.queryByText("Your account was deleted.")).toBeNull();
+});

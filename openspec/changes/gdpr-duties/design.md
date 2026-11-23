@@ -93,7 +93,12 @@ teardown is the sign-out teardown minus the upload:
 - chats: `PgChatSync.forget` takes the threads that are fully on the server
   without pushing them. `chat-sync` gains a read, `syncedThreads()`, answering
   the same `HandOver` shape `pushAll` returns, for threads whose every local
-  item the server has acknowledged. A thread with anything unacknowledged stays.
+  item the server holds at the same or a newer version. The device keeps no
+  record of what the server acknowledged (`push` persists nothing), so the read
+  asks the server for each thread before the `DELETE`, while the session is
+  still valid. A thread with anything missing, or a read that fails, stays.
+  `forget` compares the hash taken at the read, so a thread written to between
+  the read and the teardown stays too.
 
 The alternative, keeping every local copy and detaching it from the account,
 needs new transitions in the sync mark and the thread fence, which are where

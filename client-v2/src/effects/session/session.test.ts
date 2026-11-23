@@ -814,6 +814,188 @@ describe("signing out", () => {
   });
 });
 
+describe("deleting the account", () => {
+  let order: string[];
+  const held = { handedOver: [{ id: "t1", hash: "h1" }], complete: true };
+
+  beforeEach(async () => {
+    order = [];
+    PgSession.reset();
+    vi.spyOn(PgExplorer, "isInitialized", "get").mockReturnValue(true);
+    vi.spyOn(PgSession, "refresh").mockResolvedValue(undefined);
+    await PgSession.refreshWith(user);
+    vi.spyOn(PgChatSync, "pushAll").mockImplementation(async () => {
+      order.push("pushChats");
+      return { handedOver: [{ id: "t1", hash: "h1" }], complete: true };
+    });
+    vi.spyOn(PgChatSync, "push").mockImplementation(async () => {
+      order.push("pushChat");
+      return "pushed";
+    });
+    vi.spyOn(PgProjectSync, "pushCurrent").mockImplementation(async () => {
+      order.push("pushProject");
+      return "ok";
+    });
+    vi.spyOn(PgChatSync, "adoptAccountThreads").mockResolvedValue(undefined);
+    vi.spyOn(restore, "reconcile").mockResolvedValue(result());
+    vi.spyOn(PgChatSync, "forget").mockImplementation(async () => {
+      order.push("forgetChats");
+    });
+    vi.spyOn(PgChatSync, "syncedThreads").mockImplementation(async () => {
+      order.push("readChats");
+      return held;
+    });
+    vi.spyOn(PgThreadFence, "claimUnowned").mockImplementation(async (id) => {
+      order.push(`claimChats ${id}`);
+      return true;
+    });
+    vi.spyOn(restore, "releaseLocalProjects").mockImplementation(async () => {
+      order.push("releaseProjects");
+      return [];
+    });
+    vi.spyOn(PgAssistant, "stopTurn").mockImplementation(
+      () => order.push("stopTurn") as unknown as void
+    );
+    vi.spyOn(PgAssistant, "closeThread").mockImplementation(
+      () => order.push("closeThread") as unknown as void
+    );
+    vi.spyOn(PgAssistant, "clear").mockImplementation(
+      () => order.push("clear") as unknown as void
+    );
+    vi.spyOn(PgAssistant, "whenPersisted").mockImplementation(async () => {
+      order.push("whenPersisted");
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    PgProjectSync.forgetAccount();
+  });
+
+  const mount = async () => {
+    const effect = session();
+    await settle();
+    order.length = 0;
+    // The sign-in's own dump ran on mount; only what the deletion does counts
+    vi.mocked(PgChatSync.pushAll).mockClear();
+    vi.mocked(PgChatSync.push).mockClear();
+    vi.mocked(PgProjectSync.pushCurrent).mockClear();
+    return effect;
+  };
+
+  const serverDeletes = (answer: Partial<Response>) =>
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_, init) => {
+      order.push(`request ${init?.method}`);
+      return answer as Response;
+    });
+
+  const accepted = {
+    ok: true,
+    status: 200,
+    json: async () => ({ githubRevoked: true }),
+  };
+
+  it("reads before the request, uploads nothing, and tears down only after the server's 200", async () => {
+    serverDeletes(accepted);
+
+    const effect = await mount();
+    await PgSession.deleteAccount();
+
+    expect(order).toEqual([
+      "claimChats u1",
+      "readChats",
+      // The one request, and no POST
+      "request DELETE",
+      "stopTurn",
+      "closeThread",
+      "clear",
+      "whenPersisted",
+      "forgetChats",
+      "releaseProjects",
+      "closeThread",
+    ]);
+    expect(PgChatSync.pushAll).not.toHaveBeenCalled();
+    expect(PgChatSync.push).not.toHaveBeenCalled();
+    expect(PgProjectSync.pushCurrent).not.toHaveBeenCalled();
+    expect(PgSession.get()).toBeUndefined();
+    effect.dispose();
+  });
+
+  it("forgets exactly what the read found on the server", async () => {
+    serverDeletes(accepted);
+
+    const effect = await mount();
+    await PgSession.deleteAccount();
+
+    expect(PgChatSync.forget).toHaveBeenCalledExactlyOnceWith(held);
+    effect.dispose();
+  });
+
+  it("keeps every thread when the read fails, and still releases projects", async () => {
+    vi.spyOn(PgChatSync, "syncedThreads").mockRejectedValue(
+      new Error("offline")
+    );
+    serverDeletes(accepted);
+
+    const effect = await mount();
+    await PgSession.deleteAccount();
+
+    // eslint-disable-next-line unicorn/no-null -- `forget`'s "nothing known, keep every thread"
+    expect(PgChatSync.forget).toHaveBeenCalledExactlyOnceWith(null);
+    expect(order).toContain("releaseProjects");
+    effect.dispose();
+  });
+
+  it.each([
+    ["is refused", () => serverDeletes({ ok: false, status: 500 })],
+    [
+      "fails on the network",
+      () =>
+        vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+          order.push("request DELETE");
+          throw new Error("offline");
+        }),
+    ],
+  ])("keeps everything when the request %s", async (_, arrange) => {
+    arrange();
+    PgProjectSync.raise({ projectId: "tut:hello", kind: "divergent" });
+
+    const effect = await mount();
+    await expect(PgSession.deleteAccount()).rejects.toThrow();
+
+    // Read, but nothing forgotten
+    expect(order).toEqual(["claimChats u1", "readChats", "request DELETE"]);
+    expect(PgChatSync.forget).not.toHaveBeenCalled();
+    expect(PgSession.get()).toEqual(user);
+    expect(PgProjectSync.conflictFor("tut:hello")).not.toBeNull();
+    effect.dispose();
+  });
+
+  it("forgets the account even when a step before it fails", async () => {
+    vi.spyOn(restore, "releaseLocalProjects").mockRejectedValue(
+      new Error("quota")
+    );
+    serverDeletes(accepted);
+    PgProjectSync.raise({ projectId: "tut:hello", kind: "divergent" });
+
+    const effect = await mount();
+    await PgSession.deleteAccount();
+
+    expect(PgProjectSync.conflictFor("tut:hello")).toBeNull();
+    effect.dispose();
+  });
+
+  it("stops tearing down once the effect is gone", async () => {
+    serverDeletes(accepted);
+
+    const effect = await mount();
+    effect.dispose();
+    await PgSession.deleteAccount();
+
+    expect(order).toEqual(["request DELETE"]);
+  });
+});
+
 describe("another account after a session ended", () => {
   const ada = {
     id: "ada",

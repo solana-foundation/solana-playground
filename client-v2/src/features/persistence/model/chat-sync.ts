@@ -1,10 +1,16 @@
 // TODO(ui-migration 1.4): a feature importing a feature; chat sync runs only for a signed-in session
 import { PgSession } from "@/features/auth";
+import { createLogger } from "@/shared/lib/logger";
 import { timeoutSignal } from "@/shared/lib/timeout-signal";
 
 import type { ChatItem } from "../../../views/sidebar/assistant/store";
 import { batchPush, MAX_BATCH_BYTES } from "./chat-batch.mjs";
-import { decodeThread, encodeThread, mergeThreads } from "./chat-codec";
+import {
+  decodeThread,
+  encodeThread,
+  mergeThreads,
+  versionOf,
+} from "./chat-codec";
 import {
   type ChatLimitExceeded,
   NO_PROJECT_REASON,
@@ -91,6 +97,31 @@ export const chatSyncLimit = () => PgChatSync.limit();
 export const onDidChangeChatSyncLimit = (cb: () => void) =>
   PgChatSync.onDidChangeLimit(cb);
 
+/** How a read of the server's copy of one thread ended; see `PgChatSync._pull` */
+type Pulled =
+  | { kind: "items"; items: ChatItem[]; offered: number }
+  | { kind: "missing" }
+  | { kind: "refused"; status: number }
+  | { kind: "failed"; error: unknown };
+
+const log = createLogger("persistence:chat-sync");
+
+/**
+ * Whether the server's copy holds every local item at a version at least as
+ * new: each id present, and `versionOf` not older. A version that does not
+ * parse (`NaN`) holds nothing, on either side.
+ */
+const isHeldBy = (
+  server: readonly ChatItem[],
+  local: readonly ChatItem[]
+): boolean => {
+  const versions = new Map(server.map((item) => [item.id, versionOf(item)]));
+  return local.every((item) => {
+    const held = versions.get(item.id);
+    return held !== undefined && held >= versionOf(item);
+  });
+};
+
 /**
  * Mirror local threads to Postgres.
  *
@@ -146,40 +177,58 @@ export class PgChatSync {
   ): Promise<ChatItem[] | "missing" | null> {
     if (!(await PgChatSync._ready())) return null;
 
+    const pulled = await PgChatSync._pull(threadId);
+    switch (pulled.kind) {
+      // A thread this browser started and has not pushed yet does not exist
+      // on the server, and saying so is the honest answer rather than a
+      // fault: there is simply nothing to merge in.
+      case "missing":
+        return "missing";
+      case "refused":
+        report(`pull ${threadId}: HTTP ${pulled.status}`, null);
+        return null;
+      case "failed":
+        report(`pull ${threadId}`, pulled.error);
+        return null;
+      case "items": {
+        // The server's own count, before decoding. A message that reached
+        // Postgres and then failed to decode here is invisible everywhere
+        // else: the thread simply looks shorter than it is.
+        const { items, offered } = pulled;
+        if (items.length < offered) {
+          report(
+            `pull ${threadId}: dropped ${
+              offered - items.length
+            } of ${offered} server item(s) as unreadable`,
+            null
+          );
+        }
+        return items;
+      }
+    }
+  }
+
+  /**
+   * `GET /api/conversations?threadId=`, without a readiness check or a
+   * report: each caller decides what a failure means. `offered` is how many
+   * items the server sent before decoding.
+   */
+  private static async _pull(threadId: string): Promise<Pulled> {
     try {
       const response = await PgSession.fetchAuthed(
         `/api/conversations?threadId=${encodeURIComponent(threadId)}`,
         { credentials: "include", cache: "no-store" }
       );
-      // A thread this browser started and has not pushed yet does not exist
-      // on the server, and saying so is the honest answer rather than a
-      // fault: there is simply nothing to merge in.
-      if (response.status === 404) return "missing";
-      if (!response.ok) {
-        report(`pull ${threadId}: HTTP ${response.status}`, null);
-        return null;
-      }
-
+      if (response.status === 404) return { kind: "missing" };
+      if (!response.ok) return { kind: "refused", status: response.status };
       const body = await response.json();
-      const fromServer = decodeThread(body?.items);
-
-      // The server's own count, before decoding. A message that reached
-      // Postgres and then failed to decode here is invisible everywhere else:
-      // the thread simply looks shorter than it is.
-      const offered = Array.isArray(body?.items) ? body.items.length : 0;
-      if (fromServer.length < offered) {
-        report(
-          `pull ${threadId}: dropped ${
-            offered - fromServer.length
-          } of ${offered} server item(s) as unreadable`,
-          null
-        );
-      }
-
-      return fromServer;
-    } catch (e) {
-      report(`pull ${threadId}`, e);
-      return null;
+      return {
+        kind: "items",
+        items: decodeThread(body?.items),
+        offered: Array.isArray(body?.items) ? body.items.length : 0,
+      };
+    } catch (error) {
+      return { kind: "failed", error };
     }
   }
 
@@ -590,6 +639,97 @@ export class PgChatSync {
       handedOver,
       complete: handedOver.length === threadIds.length,
     };
+  }
+
+  /**
+   * The threads the server already holds, read without pushing anything: an
+   * account deletion's hand-over, whose result goes to `forget` once the
+   * server has deleted the account. Pushing first would make work the
+   * account never held "saved" seconds before it is deleted.
+   *
+   * The threads are those `pushAll` would push, and a thread is in only when
+   * the server's copy (`GET /api/conversations`, as a pull reads it) holds
+   * every local item -- the truncation notice aside, which `push` never
+   * uploads -- at a version at least as new (`isHeldBy`). A thread the server
+   * lacks or has deleted (404), a read that fails, a local copy that cannot
+   * be read, a thread a fence names, and every thread while another account
+   * owns the folder, stay on this device: logged, not reported, since each
+   * is an answer this hand-over expects. An empty thread is in, as `push`
+   * counts it pushed.
+   *
+   * Hashed from the copy compared, as `pushAll` hashes before its push, so a
+   * write landing afterwards leaves the stored copy newer than the hash and
+   * `forget` keeps it.
+   *
+   * Runs while `PgSession.isEnding` holds pushes off, so its readiness is
+   * the session and the sync service alone.
+   *
+   * @returns as `pushAll`, `null` when this device could not enumerate its
+   * threads or sync is unavailable
+   */
+  static async syncedThreads(): Promise<HandOver | null> {
+    const userId = PgSession.get()?.id;
+    // eslint-disable-next-line unicorn/no-null -- `HandOver | null`, the contract `pushAll` and `forget` share: "could not look"
+    if (!userId || !(await PgSyncClient.available())) return null;
+
+    const indexed = Object.values(await PgThreadIndex.all());
+    const stored = await PgChatStorage.threadIds();
+    // eslint-disable-next-line unicorn/no-null -- as above
+    if (stored === null) return null;
+    const threadIds = [...new Set([...indexed, ...stored])];
+
+    // Another account's threads are not this one's to drop
+    if (await PgThreadFence.isOwnedByAnother(userId)) {
+      log.info("chats kept: the folder is another account's", {
+        context: { threads: threadIds.length },
+      });
+      return { handedOver: [], complete: threadIds.length === 0 };
+    }
+
+    const outcomes = await Promise.all(
+      threadIds.map((id) => PgChatSync._syncedThread(id))
+    );
+    const handedOver = outcomes.filter(
+      (o): o is HandedThread => o !== undefined
+    );
+    return {
+      handedOver,
+      complete: handedOver.length === threadIds.length,
+    };
+  }
+
+  /** One thread of `syncedThreads`: its hash when the server holds it, else why not, logged */
+  private static async _syncedThread(
+    threadId: string
+  ): Promise<HandedThread | undefined> {
+    const keep = (why: string) => {
+      log.info("chat kept: not known to be on the server", {
+        context: { threadId, why },
+      });
+      return undefined;
+    };
+    if (await PgThreadFence.isFenced(threadId)) return keep("fenced");
+
+    const local = await PgChatStorage.read(threadId);
+    if (local === null) return keep("unreadable here");
+    // `_hashOf`'s hash, of the very copy compared below
+    const hash = await sha256(JSON.stringify(local));
+    const owed = withoutTruncationNotice(local);
+    if (!owed.length) return { id: threadId, hash };
+
+    const pulled = await PgChatSync._pull(threadId);
+    switch (pulled.kind) {
+      case "missing":
+        return keep("not on the server");
+      case "refused":
+        return keep(`HTTP ${pulled.status}`);
+      case "failed":
+        return keep(`read failed: ${String(pulled.error)}`);
+      case "items":
+        return isHeldBy(pulled.items, owed)
+          ? { id: threadId, hash }
+          : keep("an item is missing or newer here");
+    }
   }
 
   /**
@@ -1746,6 +1886,172 @@ if (import.meta.vitest) {
           "/api/conversations",
           expect.anything()
         );
+      });
+    });
+
+    describe("handing conversations over at account deletion", () => {
+      let getFailures: typeof import("./diagnostics").getFailures;
+      beforeAll(async () => {
+        ({ getFailures } = await import("./diagnostics"));
+      });
+
+      /** A thread the index can place */
+      let threadId: string;
+
+      beforeEach(async () => {
+        await PgChatStorage.clear();
+        await PgThreadFence.clearOwner();
+        await PgThreadIndex.clear();
+        PgSession.reset();
+        PgSyncClient.reset();
+        threadId = await PgThreadIndex.ensure("w1");
+      });
+
+      /** The server holds `held` for each thread id; any other is a 404 */
+      const serverHolds = (held: Map<string, ChatItem[]>) =>
+        respondingWith((url) => {
+          const id = new URL(url, "https://playground.test").searchParams.get(
+            "threadId"
+          );
+          const items = id ? held.get(id) : undefined;
+          return Promise.resolve(
+            items
+              ? { ok: true, status: 200, json: async () => ({ items }) }
+              : { ok: false, status: 404, json: async () => ({}) }
+          );
+        });
+
+      /** `item(n)`, changed at second `at` */
+      const changed = (n: number, at: number): ChatItem => ({
+        kind: "user",
+        id: item(n).id,
+        createdAt: item(n).createdAt,
+        updatedAt: new Date(at * 1000).toISOString(),
+        text: `m${n} edited`,
+      });
+
+      const posted = () =>
+        fetchMock.mock.calls.filter(([, init]) => init?.method === "POST");
+
+      it("hands over a thread the server holds whole, and forget drops it", async () => {
+        await signedIn();
+        await PgChatStorage.write(threadId, [item(1), item(2)]);
+        serverHolds(new Map([[threadId, [item(1), item(2), item(3)]]]));
+
+        const handed = await PgChatSync.syncedThreads();
+
+        expect(handed?.handedOver.map(({ id }) => id)).toEqual([threadId]);
+        expect(handed?.complete).toBe(true);
+        expect(posted()).toEqual([]);
+        await PgChatSync.forget(handed);
+        expect(await PgChatStorage.threadIds()).toEqual([]);
+      });
+
+      it("keeps a thread with a local item the server lacks", async () => {
+        await signedIn();
+        await PgChatStorage.write(threadId, [item(1), item(2)]);
+        serverHolds(new Map([[threadId, [item(1)]]]));
+
+        const handed = await PgChatSync.syncedThreads();
+
+        expect(handed).toEqual({ handedOver: [], complete: false });
+        await PgChatSync.forget(handed);
+        expect(await PgChatStorage.read(threadId)).toEqual([item(1), item(2)]);
+      });
+
+      it("keeps a thread whose local copy of an item is newer than the server's", async () => {
+        await signedIn();
+        await PgChatStorage.write(threadId, [changed(1, 50)]);
+        serverHolds(new Map([[threadId, [changed(1, 40)]]]));
+
+        expect(await PgChatSync.syncedThreads()).toEqual({
+          handedOver: [],
+          complete: false,
+        });
+      });
+
+      it("hands over a thread whose server copy is newer", async () => {
+        await signedIn();
+        await PgChatStorage.write(threadId, [changed(1, 40)]);
+        serverHolds(new Map([[threadId, [changed(1, 50)]]]));
+
+        expect(
+          (await PgChatSync.syncedThreads())?.handedOver.map(({ id }) => id)
+        ).toEqual([threadId]);
+      });
+
+      it.each([
+        ["the server has never seen it", () => serverHolds(new Map())],
+        [
+          "the read fails",
+          () => respondingWith(() => Promise.reject(new Error("offline"))),
+        ],
+        [
+          "the server answers an error",
+          () =>
+            respondingWith(() =>
+              Promise.resolve({
+                ok: false,
+                status: 500,
+                json: async () => ({}),
+              })
+            ),
+        ],
+      ])("keeps a thread when %s, and reports nothing", async (_, arrange) => {
+        await signedIn();
+        await PgChatStorage.write(threadId, [item(1)]);
+        arrange();
+        const failures = getFailures().length;
+
+        const handed = await PgChatSync.syncedThreads();
+
+        expect(handed).toEqual({ handedOver: [], complete: false });
+        expect(getFailures()).toHaveLength(failures);
+        await PgChatSync.forget(handed);
+        expect(await PgChatStorage.read(threadId)).toEqual([item(1)]);
+      });
+
+      it("keeps a thread written to between the read and forget", async () => {
+        // The deletion request runs between the two, with the panel open
+        await signedIn();
+        await PgChatStorage.write(threadId, [item(1)]);
+        serverHolds(new Map([[threadId, [item(1)]]]));
+
+        const handed = await PgChatSync.syncedThreads();
+        await PgChatStorage.write(threadId, [item(1), item(2)]);
+        await PgChatSync.forget(handed);
+
+        expect(await PgChatStorage.read(threadId)).toEqual([item(1), item(2)]);
+      });
+
+      it("keeps every thread while the folder is another account's", async () => {
+        await signedIn();
+        await PgChatStorage.write(threadId, [item(1)]);
+        await PgThreadFence.clearOwner();
+        await PgThreadFence.settle("someone-else");
+        await PgSession.refreshWith({
+          id: "u1",
+          name: undefined,
+          image: undefined,
+          login: undefined,
+        });
+        serverHolds(new Map([[threadId, [item(1)]]]));
+
+        const handed = await PgChatSync.syncedThreads();
+        await PgThreadFence.clearOwner();
+
+        expect(handed?.handedOver).toEqual([]);
+      });
+
+      it("reads even while a deletion holds pushes off", async () => {
+        await signedIn();
+        await PgChatStorage.write(threadId, [item(1)]);
+        serverHolds(new Map([[threadId, [item(1)]]]));
+        vi.spyOn(PgSession, "isEnding", "get").mockReturnValue(true);
+
+        expect(
+          (await PgChatSync.syncedThreads())?.handedOver.map(({ id }) => id)
+        ).toEqual([threadId]);
       });
     });
 

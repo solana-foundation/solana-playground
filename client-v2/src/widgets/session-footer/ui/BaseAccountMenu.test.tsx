@@ -4,7 +4,11 @@ import { expect, it, vi } from "vitest";
 
 import { DropdownMenu, DropdownMenuTrigger } from "@/shared/ui/dropdown-menu";
 
-import type { AccountView, SignOutState } from "../model/account";
+import type {
+  AccountView,
+  DeleteAccountState,
+  SignOutState,
+} from "../model/account";
 import BaseAccountMenu from "./BaseAccountMenu";
 
 const UP = { name: "devnet", down: false };
@@ -26,6 +30,7 @@ const view = (fields: Partial<AccountView>): AccountView => ({
 });
 
 const IDLE: SignOutState = { status: "idle" };
+const IDLE_DELETE: DeleteAccountState = { status: "idle" };
 
 const open = async (
   account: AccountView,
@@ -48,6 +53,10 @@ const open = async (
         signOut={signOut.state ?? IDLE}
         onSignOutConfirm={signOut.onConfirm ?? vi.fn(async () => {})}
         onSignOutCancel={signOut.onCancel ?? vi.fn()}
+        deleteAccount={IDLE_DELETE}
+        onDeleteAccountConfirm={vi.fn()}
+        onDeleteAccountCancel={vi.fn()}
+        onExportProject={vi.fn()}
       />
     </DropdownMenu>
   );
@@ -66,6 +75,7 @@ it("offers sign-in, settings, docs, feedback and the wallet when signed out", as
     "SigninwithGitHub",
     "Settings⌘,",
     "Docs",
+    "Privacypolicy",
     "Reportabug",
     "Connectwallet",
   ]);
@@ -382,6 +392,10 @@ const openPage = async (account: AccountView, onPick = vi.fn()) => {
         signOut={IDLE}
         onSignOutConfirm={vi.fn(async () => {})}
         onSignOutCancel={vi.fn()}
+        deleteAccount={IDLE_DELETE}
+        onDeleteAccountConfirm={vi.fn()}
+        onDeleteAccountCancel={vi.fn()}
+        onExportProject={vi.fn()}
       />
     </DropdownMenu>
   );
@@ -435,4 +449,162 @@ it("as a phone's page, does not sign in on the release of the press that opened 
   fireEvent.pointerUp(signIn, { pointerType: "touch" });
   expect(onPick).not.toHaveBeenCalled();
   expect(screen.getByRole("menu")).toBeTruthy();
+});
+
+it("links the privacy policy in a new tab, signed out beside Sign in, and reports the pick", async () => {
+  const onPick = await open(view({}));
+  const policy = screen.getByRole("menuitem", { name: "Privacy policy" });
+  expect(policy.getAttribute("href")).toBe("https://solana.com/privacy-policy");
+  expect(policy.getAttribute("target")).toBe("_blank");
+  expect(policy.getAttribute("rel")).toBe("noopener noreferrer");
+  // The same menu as Sign in with GitHub
+  expect(policy.closest('[role="menu"]')).toBe(
+    screen
+      .getByRole("menuitem", { name: "Sign in with GitHub" })
+      .closest('[role="menu"]')
+  );
+  await userEvent.click(policy);
+  expect(onPick).toHaveBeenCalledExactlyOnceWith("privacy-policy");
+});
+
+it("links the privacy policy signed in too", async () => {
+  await open(view({ session: { status: "signed-in", user: TESTER } }));
+  expect(
+    screen
+      .getByRole("menuitem", { name: "Privacy policy" })
+      .getAttribute("href")
+  ).toBe("https://solana.com/privacy-policy");
+});
+
+it("offers Delete account signed in only, asking in place", async () => {
+  const onPick = await open(
+    view({ session: { status: "signed-in", user: TESTER } })
+  );
+  await userEvent.click(
+    screen.getByRole("menuitem", { name: "Delete account" })
+  );
+  expect(onPick).toHaveBeenCalledExactlyOnceWith("delete-account");
+  expect(screen.getByRole("menu")).toBeTruthy();
+});
+
+it("offers no Delete account signed out", async () => {
+  await open(view({}));
+  expect(screen.queryByRole("menuitem", { name: "Delete account" })).toBeNull();
+});
+
+/** The menu, signed in, with the deletion question at `state` */
+const openDeleteQuestion = async (state: DeleteAccountState) => {
+  const handlers = {
+    onConfirm: vi.fn(),
+    onCancel: vi.fn(),
+    onExport: vi.fn(),
+  };
+  render(
+    <DropdownMenu>
+      <DropdownMenuTrigger>Open</DropdownMenuTrigger>
+      <BaseAccountMenu
+        account={signedIn}
+        feedback={<div role="menuitem">Report a bug</div>}
+        side="top"
+        settingsShortcut="⌘,"
+        onPick={vi.fn()}
+        signOut={IDLE}
+        onSignOutConfirm={vi.fn(async () => {})}
+        onSignOutCancel={vi.fn()}
+        deleteAccount={state}
+        onDeleteAccountConfirm={handlers.onConfirm}
+        onDeleteAccountCancel={handlers.onCancel}
+        onExportProject={handlers.onExport}
+      />
+    </DropdownMenu>
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Open" }));
+  return handlers;
+};
+
+it("asks Delete your Playground account? in place, Export first, focus on Cancel", async () => {
+  const { onCancel, onConfirm } = await openDeleteQuestion({
+    status: "asking",
+  });
+  expect(screen.getByText("Delete your Playground account?")).toBeTruthy();
+  expect(
+    screen.getByText(
+      "Your projects and chats saved to the account are deleted, here and on every device. This cannot be undone."
+    )
+  ).toBeTruthy();
+  expect(items()).toEqual(["Exportthisproject", "Cancel", "Deleteaccount"]);
+  const destructive = screen.getByRole("menuitem", { name: "Delete account" });
+  expect(destructive.getAttribute("data-variant")).toBe("destructive");
+  const cancel = screen.getByRole("menuitem", { name: "Cancel" });
+  await waitFor(() => expect(document.activeElement).toBe(cancel));
+
+  await userEvent.click(cancel);
+  expect(onCancel).toHaveBeenCalledOnce();
+  expect(onConfirm).not.toHaveBeenCalled();
+  expect(screen.getByRole("menu")).toBeTruthy();
+});
+
+it("deletes on the destructive item, keeping the menu open", async () => {
+  const { onConfirm } = await openDeleteQuestion({ status: "asking" });
+  await userEvent.click(
+    screen.getByRole("menuitem", { name: "Delete account" })
+  );
+  expect(onConfirm).toHaveBeenCalledOnce();
+  expect(screen.getByRole("menu")).toBeTruthy();
+});
+
+it("stays busy while the deletion runs, and a press starts nothing", async () => {
+  const { onConfirm, onCancel } = await openDeleteQuestion({
+    status: "running",
+  });
+  const confirm = screen.getByRole("menuitem", { name: /^Delete account/ });
+  expect(confirm.getAttribute("aria-busy")).toBe("true");
+  await userEvent.click(confirm);
+  await userEvent.click(screen.getByRole("menuitem", { name: "Cancel" }));
+  expect(onConfirm).not.toHaveBeenCalled();
+  expect(onCancel).not.toHaveBeenCalled();
+});
+
+it("keeps the question after a refusal, saying it could not delete and why", async () => {
+  await openDeleteQuestion({
+    status: "failed",
+    reason: "Check your connection and try again.",
+  });
+  expect(screen.getByText("Delete your Playground account?")).toBeTruthy();
+  expect(screen.getByRole("alert").textContent).toBe(
+    "Couldn't delete your account. Check your connection and try again."
+  );
+  expect(
+    screen
+      .getByRole("menuitem", { name: "Delete account" })
+      .getAttribute("aria-busy")
+  ).toBeNull();
+});
+
+it("opens the export once the menu has closed", async () => {
+  const { onExport } = await openDeleteQuestion({ status: "asking" });
+  await userEvent.click(
+    screen.getByRole("menuitem", { name: "Export this project" })
+  );
+  await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+  expect(onExport).toHaveBeenCalledOnce();
+});
+
+it("says the account was deleted, and where to remove the app when GitHub kept the grant", async () => {
+  await openDeleteQuestion({ status: "done", githubRevoked: false });
+  expect(screen.getByText("Your account was deleted.")).toBeTruthy();
+  const github = screen.getByRole("link", {
+    name: "Remove Playground from your GitHub settings too.",
+  });
+  expect(github.getAttribute("href")).toBe(
+    "https://github.com/settings/applications"
+  );
+  expect(github.getAttribute("target")).toBe("_blank");
+  expect(github.getAttribute("rel")).toBe("noopener noreferrer");
+});
+
+it("says only that the account was deleted when GitHub revoked the grant", async () => {
+  await openDeleteQuestion({ status: "done", githubRevoked: true });
+  expect(screen.getByText("Your account was deleted.")).toBeTruthy();
+  expect(screen.queryByText(/GitHub settings/)).toBeNull();
 });

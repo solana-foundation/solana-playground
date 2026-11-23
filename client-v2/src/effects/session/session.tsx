@@ -309,6 +309,66 @@ export const session = (): Disposable => {
     };
   };
 
+  /**
+   * Read what the account holds, and return how to forget it once the server
+   * has deleted it: the sign-out's two halves (`relinquish`) with a read in
+   * place of the upload (`PgSession.deleteAccount`), so only what the server
+   * held identically leaves this browser.
+   *
+   * The read half runs while the cookie is valid and `PgSession.isEnding`
+   * holds pushes off. It pushes nothing: `PgChatSync.syncedThreads` asks the
+   * server for each thread and hands over those it holds whole; a thread it
+   * cannot vouch for stays, and so does every thread when the read fails.
+   *
+   * The teardown is the sign-out's: the panel closes, `forget` drops the
+   * handed-over threads still as they were read, and `releaseLocalProjects`
+   * removes only projects whose files match this account's sync mark, so an
+   * unpushed edit or a project never synced stays. What stays is owned by the
+   * deleted account (`claimUnowned` names it over a folder nobody owns), so
+   * the next account's sign-in fences it rather than uploading it.
+   */
+  const releaseDeletedAccount = async () => {
+    PgAccountList.forget();
+    // One step failing is no reason to skip the next: each reports its own
+    const runReportingFor = (what: string) => async (fn: () => unknown) => {
+      try {
+        await fn();
+      } catch (e) {
+        report(what, e);
+      }
+    };
+
+    // eslint-disable-next-line unicorn/no-null -- `forget`'s "nothing known, keep every thread"
+    let handed: HandOver | null = null;
+    try {
+      const userId = PgSession.get()?.id;
+      if (userId) await PgThreadFence.claimUnowned(userId);
+      handed = await PgChatSync.syncedThreads();
+    } catch (e) {
+      report("read conversations the account holds", e);
+    }
+
+    return async () => {
+      await runReportingFor("stop turn")(() => PgAssistant.stopTurn());
+      await runReportingFor("close thread")(() => PgAssistant.closeThread());
+      await runReportingFor("drop unsaved messages")(() => PgAssistant.clear());
+      // A write the panel queued before closing lands now, so `forget` sees it
+      await runReportingFor("wait for chat writes")(() =>
+        PgAssistant.whenPersisted()
+      );
+      await runReportingFor("forget conversations")(() =>
+        PgChatSync.forget(handed)
+      );
+      await runReportingFor("release local projects")(() =>
+        releaseLocalProjects()
+      );
+      await runReportingFor("close thread")(() => PgAssistant.closeThread());
+      await runReportingFor("forget account")(() =>
+        PgProjectSync.forgetAccount()
+      );
+    };
+  };
+
   // Held from here, before anything can fire, and released the moment the
   // reconcile is done. The editor's own push is debounced by seconds and the
   // reconcile is several round trips -- without this, whichever won decided
@@ -375,6 +435,7 @@ export const session = (): Disposable => {
   if (PgSession.hasRead) onSessionChange();
 
   PgSession.setOnSignOut(relinquish);
+  PgSession.setOnAccountDeleted(releaseDeletedAccount);
 
   void PgSession.refresh().then(() => {
     // A failed read restores nothing: the read that later answers does
@@ -389,6 +450,7 @@ export const session = (): Disposable => {
       onChange.dispose();
       otherTabs.dispose();
       PgSession.setOnSignOut(undefined);
+      PgSession.setOnAccountDeleted(undefined);
       // Nothing is left to release the gate once this is gone
       releaseHold();
     },

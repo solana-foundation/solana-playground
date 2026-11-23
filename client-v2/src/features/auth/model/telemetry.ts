@@ -23,6 +23,11 @@ type AuthEvents = {
    * when that state starts.
    */
   auth_session_expired: NoParams;
+  /**
+   * The server accepted the user's account deletion; a failed one tracks
+   * nothing, and neither does it track `auth_signed_out`.
+   */
+  auth_account_deleted: NoParams;
 };
 
 export const authTelemetry = createTracker<AuthEvents>();

@@ -8,8 +8,10 @@ export type AccountItem =
   | "cancel-sign-in"
   | "github-profile"
   | "sign-out"
+  | "delete-account"
   | "settings"
   | "docs"
+  | "privacy-policy"
   | "cluster-down"
   | "connect-wallet"
   | "wallet"
@@ -111,6 +113,61 @@ export const leftoversText = (kept: number) => {
   }
   return `${kept} projects stayed in this browser because they weren't saved to your account.`;
 };
+
+/**
+ * Where the account deletion question stands inside the account menu. While
+ * `running` the question stays, busy; a `failed` deletion keeps it open with
+ * the reason, and the person is still signed in
+ */
+export type DeleteAccountState =
+  | { status: "idle" }
+  | { status: "asking" }
+  | { status: "running" }
+  | { status: "failed"; reason: string }
+  /** Deleted; `githubRevoked` false asks the person to remove the app at GitHub */
+  | { status: "done"; githubRevoked: boolean };
+
+/**
+ * What the menu shows of the deletion question, given the session now: as
+ * `shownSignOutState`, a question with no session left (another tab signed
+ * out) is not asked unless its own deletion runs, and the done lines belong
+ * to the signed-out menu
+ */
+export const shownDeleteAccountState = (
+  state: DeleteAccountState,
+  now: { signedIn: boolean }
+): DeleteAccountState => {
+  if (
+    (state.status === "asking" || state.status === "failed") &&
+    !now.signedIn
+  ) {
+    return { status: "idle" };
+  }
+  if (state.status === "done" && now.signedIn) return { status: "idle" };
+  return state;
+};
+
+export const DELETE_ACCOUNT_QUESTION = "Delete your Playground account?";
+
+export const DELETE_ACCOUNT_CONSEQUENCE =
+  "Your projects and chats saved to the account are deleted, here and on every device. This cannot be undone.";
+
+export const DELETE_ACCOUNT_FAILED = "Couldn't delete your account.";
+
+/** The reason a deletion failed when the failure carried none */
+export const DELETE_ACCOUNT_RETRY = "Try again.";
+
+export const ACCOUNT_DELETED = "Your account was deleted.";
+
+export const REVOKE_AT_GITHUB =
+  "Remove Playground from your GitHub settings too.";
+
+/** Where a person removes an OAuth app they authorized */
+export const GITHUB_APPLICATIONS_URL =
+  "https://github.com/settings/applications";
+
+/** The Solana Foundation's privacy policy, which covers Playground */
+export const PRIVACY_POLICY_URL = "https://solana.com/privacy-policy";
 
 export const DOCS_URL = "https://solana.com/docs";
 
@@ -513,6 +570,41 @@ if (import.meta.vitest) {
         expect(
           shownSignOutState(DONE, { signedIn: false, running: false })
         ).toBe(DONE);
+      });
+    });
+
+    describe("shownDeleteAccountState", () => {
+      const ASKING = { status: "asking" } as const;
+      const RUNNING = { status: "running" } as const;
+      const FAILED = { status: "failed", reason: "Try again." } as const;
+      const DONE = { status: "done", githubRevoked: false } as const;
+
+      it("drops a question, asked or failed, whose session ended elsewhere", () => {
+        expect(shownDeleteAccountState(ASKING, { signedIn: false })).toEqual({
+          status: "idle",
+        });
+        expect(shownDeleteAccountState(FAILED, { signedIn: false })).toEqual({
+          status: "idle",
+        });
+      });
+
+      it("keeps a running deletion and a signed-in question", () => {
+        expect(shownDeleteAccountState(RUNNING, { signedIn: false })).toBe(
+          RUNNING
+        );
+        expect(shownDeleteAccountState(ASKING, { signedIn: true })).toBe(
+          ASKING
+        );
+        expect(shownDeleteAccountState(FAILED, { signedIn: true })).toBe(
+          FAILED
+        );
+      });
+
+      it("drops the done lines once a session is back", () => {
+        expect(shownDeleteAccountState(DONE, { signedIn: true })).toEqual({
+          status: "idle",
+        });
+        expect(shownDeleteAccountState(DONE, { signedIn: false })).toBe(DONE);
       });
     });
 

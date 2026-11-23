@@ -101,6 +101,47 @@ export type SignOutTeardown = () => Promise<void>;
 export type SignOutHook = () => Promise<SignOutTeardown | undefined>;
 
 /**
+ * Local cleanup after the server deleted the account; see
+ * `PgSession.setOnAccountDeleted`
+ */
+export type AccountDeletedTeardown = () => Promise<void>;
+
+/**
+ * Runs before the deletion request and uploads nothing; see
+ * `PgSession.setOnAccountDeleted`
+ */
+export type AccountDeletionHook = () => Promise<
+  AccountDeletedTeardown | undefined
+>;
+
+/** What `PgSession.deleteAccount` resolves with once the server deleted the account */
+export interface AccountDeleted {
+  /**
+   * Whether GitHub revoked Playground's grant. When it did not, the person
+   * removes the app in their GitHub settings themselves.
+   */
+  githubRevoked: boolean;
+}
+
+/**
+ * How long the browser waits for the deletion to answer, in milliseconds.
+ * The server runs a transaction and then asks GitHub to revoke the grant, so
+ * it gets longer than a sign-out. A request that times out after the server
+ * committed leaves this tab signed in with everything kept; its next request
+ * finds the session gone.
+ */
+const DELETE_ACCOUNT_TIMEOUT_MS = 30_000;
+
+/** Why a deletion did not happen, by the status the route answered */
+const DELETION_REFUSED: Record<number, string> = {
+  401: "Your session ended. Sign in again, then delete the account.",
+  503: "Accounts are not available right now. Try again later.",
+};
+const DELETION_FAILED = "Try again.";
+const DELETION_OFFLINE = "Check your connection and try again.";
+const DELETION_BLOCKED_BY_SIGN_OUT = "A sign-out is under way.";
+
+/**
  * Where the last sign-in stands. Held here, not by the control that started
  * it: the session footer unmounts when the rail swaps it for its own and when
  * the window crosses `LAYOUT_BREAKPOINTS.phone`, and a sign-in outlives both.
@@ -742,6 +783,9 @@ export class PgSession {
    * keyed by their id. Nothing may go to the network on their behalf, though:
    * the cookie is gone, every request answers 401, and each one was reported
    * as a sync failure on an ordinary sign-out.
+   *
+   * An account deletion sets it from before its request (`deleteAccount`):
+   * nothing may upload into an account about to be deleted.
    */
   static get isEnding(): boolean {
     return PgSession._ending;
@@ -823,6 +867,134 @@ export class PgSession {
     PgSession._onSignOut = hook;
   }
 
+  /**
+   * Delete the signed-in account (`DELETE /api/account`), then end the session
+   * here as a sign-out does.
+   *
+   * Never runs the sign-out hook: its upload half would make work the account
+   * never held "saved" seconds before the server deletes it, and the teardown
+   * would then remove it from the browser. Instead `isEnding` holds from
+   * before the hook registered with `setOnAccountDeleted`, so no push starts
+   * while it reads what the server holds or while the request is out, and
+   * only once the server answers `200` does the hook's teardown run. Any
+   * other answer, or none, leaves the user signed in with nothing torn down,
+   * and rejects with the reason, in words for the person.
+   *
+   * Shares the sign-out's latch: a deletion while a sign-out runs is refused,
+   * a sign-out while a deletion runs joins it, and a second deletion joins
+   * the first.
+   */
+  static deleteAccount(): Promise<AccountDeleted> {
+    if (PgSession._deleting) return PgSession._deleting;
+    if (PgSession._signingOut) {
+      return Promise.reject(new Error(DELETION_BLOCKED_BY_SIGN_OUT));
+    }
+    const deleting = PgSession._deleteAccount().finally(() => {
+      PgSession._deleting = undefined;
+      PgSession._signingOut = undefined;
+    });
+    PgSession._deleting = deleting;
+    const latch = deleting.then(() => undefined);
+    // Handled here so a deletion nobody joined is no unhandled rejection;
+    // a sign-out that joins it still sees the rejection
+    latch.catch(() => undefined);
+    PgSession._signingOut = latch;
+    return deleting;
+  }
+
+  private static async _deleteAccount(): Promise<AccountDeleted> {
+    // Before the request: a push that started now could land before the
+    // server's delete, mark the project as held, and have the teardown remove
+    // the only copy of work the person never saw saved
+    PgSession._ending = true;
+    // While the cookie is valid: what the server holds is read now, and only
+    // what it held then may leave the browser. A hook that throws returns no
+    // teardown, so nothing local is removed
+    let teardown: AccountDeletedTeardown | undefined;
+    try {
+      teardown = await PgSession._onAccountDeleted?.();
+    } catch (error) {
+      log.error(error, { report: true, context: { step: "delete-read" } });
+    }
+
+    let res: Response;
+    try {
+      res = await fetch("/api/account", {
+        method: "DELETE",
+        credentials: "include",
+        signal: timeoutSignal(DELETE_ACCOUNT_TIMEOUT_MS),
+      });
+    } catch (error) {
+      PgSession._ending = false;
+      // Offline, or timed out: the user's network, not a defect to report
+      log.warn("account deletion request failed; still signed in", {
+        context: {
+          step: "delete-request",
+          error: String(error),
+          name: (error as Error | undefined)?.name,
+        },
+      });
+      throw new Error(DELETION_OFFLINE);
+    }
+    // Only a 200 says the account is gone. Any other answer, a 2xx included,
+    // keeps everything: a session that did end is found by the next request
+    if (res.status !== 200) {
+      PgSession._ending = false;
+      log.error(new Error(`account deletion answered ${res.status}`), {
+        report: true,
+        context: { step: "delete-request", status: res.status },
+      });
+      throw new Error(DELETION_REFUSED[res.status] ?? DELETION_FAILED);
+    }
+
+    // The account is gone whatever the body says; one that cannot be read
+    // reads as a grant still standing, so the person is told to remove it
+    let githubRevoked = false;
+    try {
+      const body: unknown = await res.json();
+      githubRevoked =
+        typeof body === "object" &&
+        body !== null &&
+        (body as { githubRevoked?: unknown }).githubRevoked === true;
+    } catch (error) {
+      log.error(error, { report: true, context: { step: "delete-body" } });
+    }
+
+    removeRememberedUser();
+    PgSession._expiredUser = undefined;
+    try {
+      // While the user is still readable: what it removes is keyed by their id
+      try {
+        await teardown?.();
+      } catch (error) {
+        // The deleted account's data may be left on this browser
+        log.error(error, {
+          report: true,
+          context: { step: "delete-teardown" },
+        });
+      }
+      PgSession._set(undefined);
+    } finally {
+      PgSession._ending = false;
+    }
+    authTelemetry.track("auth_account_deleted", {});
+    return { githubRevoked };
+  }
+
+  /**
+   * Register what must happen around an account deletion: the sign-out's two
+   * halves, with a read in place of the upload (see `deleteAccount`).
+   *
+   * The hook runs before the request, while it is still authenticated and
+   * `isEnding` holds pushes off, and must push nothing; it may return a
+   * teardown. The teardown runs only after the server answered `200`, while
+   * `get` still answers the deleted user. Wired by the session effect, as
+   * `setOnSignOut` is.
+   */
+  static setOnAccountDeleted(hook: AccountDeletionHook | undefined) {
+    PgSession._onAccountDeleted = hook;
+  }
+
   static onDidChange(cb: () => void): Disposable {
     PgSession._listeners.add(cb);
     return { dispose: () => PgSession._listeners.delete(cb) };
@@ -847,12 +1019,14 @@ export class PgSession {
     isRememberedUserUnwritten = false;
     removeRememberedUser();
     PgSession._onSignOut = undefined;
+    PgSession._onAccountDeleted = undefined;
     PgSession._listeners.clear();
     PgSession._cancel = undefined;
     PgSession._channel = undefined;
     PgSession._openChannelImpl = openPopupChannel;
     PgSession._signingInFrom = undefined;
     PgSession._signingOut = undefined;
+    PgSession._deleting = undefined;
     PgSession._ending = false;
     PgSession._pending = undefined;
     PgSession._pendingScopes = [];
@@ -862,7 +1036,10 @@ export class PgSession {
     PgSession._reading = undefined;
   }
 
+  /** A sign-out or an account deletion under way: one at a time, see `deleteAccount` */
   private static _signingOut: Promise<void> | undefined;
+  /** The account deletion under way, joined by a second `deleteAccount` */
+  private static _deleting: Promise<AccountDeleted> | undefined;
   private static _ending = false;
   private static _user: SessionUser | undefined;
   private static _expiredUser: SessionUser | undefined;
@@ -870,6 +1047,7 @@ export class PgSession {
   private static _isReadQueued = false;
   private static _signingInFrom: SignInOrigin | undefined;
   private static _onSignOut: SignOutHook | undefined;
+  private static _onAccountDeleted: AccountDeletionHook | undefined;
   private static readonly _listeners = new Set<() => void>();
 
   private static _pending: Promise<void> | undefined;
@@ -2751,6 +2929,279 @@ if (import.meta.vitest) {
             context: { step: "teardown" },
           }),
         ]);
+      });
+
+      describe("deleteAccount", () => {
+        /** The route answers `status` with `body`; every request is recorded in `order` */
+        const deletionAnswers = (
+          order: string[],
+          answer: { status: number; body?: unknown }
+        ) =>
+          vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+            order.push(
+              `request ${String(input)}, ending ${PgSession.isEnding}`
+            );
+            return {
+              ok: answer.status >= 200 && answer.status < 300,
+              status: answer.status,
+              json: async () => {
+                if (answer.body === undefined) throw new SyntaxError("no body");
+                return answer.body;
+              },
+            } as Response;
+          });
+
+        it("deletes through the account route and clears the user", async () => {
+          await PgSession.refreshWith(ada);
+          const request = deletionAnswers([], {
+            status: 200,
+            body: { githubRevoked: true },
+          });
+
+          expect(await PgSession.deleteAccount()).toEqual({
+            githubRevoked: true,
+          });
+
+          expect(request).toHaveBeenCalledExactlyOnceWith(
+            "/api/account",
+            expect.objectContaining({
+              method: "DELETE",
+              credentials: "include",
+              signal: expect.any(AbortSignal),
+            })
+          );
+          expect(PgSession.get()).toBeUndefined();
+          expect(PgSession.isEnding).toBe(false);
+        });
+
+        it("never runs the sign-out hook, so nothing is uploaded first", async () => {
+          await PgSession.refreshWith(ada);
+          const signOutTeardown = vi.fn().mockResolvedValue(undefined);
+          const upload = vi.fn(async () => signOutTeardown);
+          PgSession.setOnSignOut(upload);
+          const order: string[] = [];
+          deletionAnswers(order, {
+            status: 200,
+            body: { githubRevoked: true },
+          });
+
+          await PgSession.deleteAccount();
+
+          expect(upload).not.toHaveBeenCalled();
+          expect(signOutTeardown).not.toHaveBeenCalled();
+          // The one request is the deletion's: no sign-out request either
+          expect(order).toEqual(["request /api/account, ending true"]);
+        });
+
+        it("reads before the request and tears down only after the server's 200, as the user, ending", async () => {
+          await PgSession.refreshWith(ada);
+          const order: string[] = [];
+          PgSession.setOnAccountDeleted(async () => {
+            order.push(
+              `read as ${PgSession.get()?.id}, ending ${PgSession.isEnding}`
+            );
+            return async () => {
+              order.push(
+                `teardown as ${PgSession.get()?.id}, ending ${
+                  PgSession.isEnding
+                }`
+              );
+            };
+          });
+          deletionAnswers(order, {
+            status: 200,
+            body: { githubRevoked: true },
+          });
+
+          await PgSession.deleteAccount();
+
+          expect(order).toEqual([
+            // Ending already: no push may start while it reads or the
+            // request is out
+            "read as u1, ending true",
+            "request /api/account, ending true",
+            "teardown as u1, ending true",
+          ]);
+          expect(PgSession.get()).toBeUndefined();
+        });
+
+        it("still deletes, removing nothing here, when the read half throws, and reports it", async () => {
+          await PgSession.refreshWith(ada);
+          const logged = memoryProvider();
+          initLogger({ providers: [logged] });
+          const failure = new Error("index unreadable");
+          PgSession.setOnAccountDeleted(async () => {
+            throw failure;
+          });
+          deletionAnswers([], { status: 200, body: { githubRevoked: true } });
+
+          await PgSession.deleteAccount();
+
+          expect(PgSession.get()).toBeUndefined();
+          expect(
+            // This module's own: the collector may also say it dropped the event
+            logged.entries.filter(({ ns }) => ns === "auth:session")
+          ).toEqual([
+            expect.objectContaining({
+              ns: "auth:session",
+              level: "error",
+              error: failure,
+              report: true,
+              context: { step: "delete-read" },
+            }),
+          ]);
+        });
+
+        it.each([401, 403, 405, 500, 503, 204])(
+          "keeps the user and everything local when the server answers %i",
+          async (status) => {
+            await PgSession.refreshWith(ada);
+            const logged = memoryProvider();
+            initLogger({ providers: [logged] });
+            const teardown = vi.fn().mockResolvedValue(undefined);
+            PgSession.setOnAccountDeleted(async () => teardown);
+            deletionAnswers([], { status, body: { error: "x" } });
+
+            await expect(PgSession.deleteAccount()).rejects.toThrow(Error);
+
+            expect(teardown).not.toHaveBeenCalled();
+            expect(PgSession.get()?.id).toBe("u1");
+            expect(PgSession.isEnding).toBe(false);
+            expect(logged.entries).toEqual([
+              expect.objectContaining({
+                ns: "auth:session",
+                level: "error",
+                report: true,
+                context: { step: "delete-request", status },
+              }),
+            ]);
+          }
+        );
+
+        it("says why a refused deletion did not happen, in words for the person", async () => {
+          await PgSession.refreshWith(ada);
+          initLogger({ providers: [memoryProvider()] });
+
+          deletionAnswers([], { status: 401 });
+          await expect(PgSession.deleteAccount()).rejects.toThrow(
+            "Your session ended. Sign in again, then delete the account."
+          );
+          deletionAnswers([], { status: 500 });
+          await expect(PgSession.deleteAccount()).rejects.toThrow("Try again.");
+        });
+
+        it("keeps the user and everything local when the request fails on the network", async () => {
+          await PgSession.refreshWith(ada);
+          const teardown = vi.fn().mockResolvedValue(undefined);
+          PgSession.setOnAccountDeleted(async () => teardown);
+          vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
+
+          await expect(PgSession.deleteAccount()).rejects.toThrow(
+            "Check your connection and try again."
+          );
+
+          expect(teardown).not.toHaveBeenCalled();
+          expect(PgSession.get()?.id).toBe("u1");
+          expect(PgSession.isEnding).toBe(false);
+        });
+
+        it("reads an unreadable body as a grant still standing, and still deletes", async () => {
+          await PgSession.refreshWith(ada);
+          initLogger({ providers: [memoryProvider()] });
+          const teardown = vi.fn().mockResolvedValue(undefined);
+          PgSession.setOnAccountDeleted(async () => teardown);
+          deletionAnswers([], { status: 200 });
+
+          expect(await PgSession.deleteAccount()).toEqual({
+            githubRevoked: false,
+          });
+          expect(teardown).toHaveBeenCalledOnce();
+          expect(PgSession.get()).toBeUndefined();
+        });
+
+        it("joins a deletion already running, and a sign-out joins it too", async () => {
+          await PgSession.refreshWith(ada);
+          const teardown = vi.fn().mockResolvedValue(undefined);
+          PgSession.setOnAccountDeleted(async () => teardown);
+          const signOutHook = vi.fn(async () => undefined);
+          PgSession.setOnSignOut(signOutHook);
+          const request = deletionAnswers([], {
+            status: 200,
+            body: { githubRevoked: false },
+          });
+
+          const [first, second] = await Promise.all([
+            PgSession.deleteAccount(),
+            PgSession.deleteAccount(),
+            PgSession.signOut(),
+          ]);
+
+          expect(first).toEqual({ githubRevoked: false });
+          expect(second).toBe(first);
+          expect(request).toHaveBeenCalledOnce();
+          expect(teardown).toHaveBeenCalledOnce();
+          expect(signOutHook).not.toHaveBeenCalled();
+        });
+
+        it("refuses to start while a sign-out runs", async () => {
+          await PgSession.refreshWith(ada);
+          let answer: (response: Response) => void = () => {};
+          const request = vi
+            .spyOn(globalThis, "fetch")
+            .mockReturnValue(
+              new Promise<Response>((resolve) => (answer = resolve))
+            );
+          const signingOut = PgSession.signOut();
+          await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
+
+          await expect(PgSession.deleteAccount()).rejects.toThrow(
+            "A sign-out is under way."
+          );
+
+          answer({ ok: true, status: 200 } as Response);
+          await signingOut;
+          expect(request).toHaveBeenCalledOnce();
+        });
+
+        it("can delete again after a failed attempt", async () => {
+          await PgSession.refreshWith(ada);
+          initLogger({ providers: [memoryProvider()] });
+          const teardown = vi.fn().mockResolvedValue(undefined);
+          PgSession.setOnAccountDeleted(async () => teardown);
+          deletionAnswers([], { status: 500 });
+          await expect(PgSession.deleteAccount()).rejects.toThrow();
+
+          deletionAnswers([], { status: 200, body: { githubRevoked: true } });
+          await PgSession.deleteAccount();
+
+          expect(teardown).toHaveBeenCalledOnce();
+          expect(PgSession.get()).toBeUndefined();
+        });
+
+        it("still ends the session when the teardown fails, and reports it", async () => {
+          await PgSession.refreshWith(ada);
+          const logged = memoryProvider();
+          initLogger({ providers: [logged] });
+          const failure = new Error("quota");
+          PgSession.setOnAccountDeleted(async () => async () => {
+            throw failure;
+          });
+          deletionAnswers([], { status: 200, body: { githubRevoked: true } });
+
+          await PgSession.deleteAccount();
+
+          expect(PgSession.get()).toBeUndefined();
+          expect(PgSession.isEnding).toBe(false);
+          expect(logged.entries).toEqual([
+            expect.objectContaining({
+              ns: "auth:session",
+              level: "error",
+              error: failure,
+              report: true,
+              context: { step: "delete-teardown" },
+            }),
+          ]);
+        });
       });
     });
   });
