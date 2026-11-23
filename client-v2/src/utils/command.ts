@@ -73,6 +73,12 @@ export const OFFLINE_LINE = "You're offline. This command needs a connection.";
 const takesValueOf = (cmd: { options?: Option[] }, token: string) =>
   valueOptionOf(cmd.options ?? [])(token) !== undefined;
 
+const isHelpToken = (token: string) => token === "--help" || token === "-h";
+
+/** Whether the parser reads arguments or options of the command's own, `help` aside */
+const hasArgsOrOpts = (cmd: { args?: Arg[]; options?: Option[] }) =>
+  Boolean(cmd.args?.length) || (cmd.options?.length ?? 0) > 1;
+
 /** The end of a refused value's line: what it could have been, if anything */
 const possibleValues = (values: string[]) =>
   values.length
@@ -431,7 +437,7 @@ export class PgCommandManager {
       // Before the start event and the pre-checks: no wallet question first,
       // and nothing has run, so nothing finishes. Asking for a command's help
       // reaches no server, so it stays available
-      const asksForHelp = tokens.includes("--help") || tokens.includes("-h");
+      const asksForHelp = tokens.some(isHelpToken);
       if (topCmd.needsConnection && !asksForHelp && !navigator.onLine) {
         throw new TonedLineError("error", OFFLINE_LINE);
       }
@@ -472,6 +478,24 @@ export class PgCommandManager {
         const args = [];
         const opts = [];
 
+        // The command the tokens end at only prints when it has no handler
+        // or is asked for its help, so no pre-check on the way to it asks
+        // anything: a wallet question before a help or a usage is noise
+        let deepest = topCmd;
+        let deepestAt = 0;
+        for (const token of tokens.slice(1)) {
+          const next = deepest.subcommands?.find(
+            (candidate) => candidate.name === token
+          );
+          if (!next) break;
+          deepest = next;
+          deepestAt++;
+        }
+        const shouldOnlyPrint =
+          !deepest.handle ||
+          (hasArgsOrOpts(deepest) &&
+            tokens.slice(deepestAt + 1).some(isHelpToken));
+
         for (const i in tokens) {
           const token = tokens[i];
           const nextIndex = +i + 1;
@@ -482,7 +506,7 @@ export class PgCommandManager {
           if (subcmd) cmd = subcmd;
 
           // Handle checks
-          if (cmd.preChecks) {
+          if (cmd.preChecks && !shouldOnlyPrint) {
             const preChecks = PgCommon.toArray(cmd.preChecks);
             for (const preCheck of preChecks) await preCheck(tokens);
           }
@@ -507,10 +531,10 @@ ${PgTerminal.formatList(cmd.subcommands!)}`);
             break;
           }
 
-          const hasArgsOrOpts = cmd.args?.length || cmd.options!.length > 1;
-          if (hasArgsOrOpts) {
-            // Handle `help` option
-            if (nextToken === "--help" || nextToken === "-h") {
+          if (hasArgsOrOpts(cmd)) {
+            // Help anywhere behind the command: `close --buffers --help`
+            // prints the help and closes nothing
+            if (tokens.slice(nextIndex).some(isHelpToken)) {
               const usagePrefix = `Usage: ${[
                 ...tokens.slice(0, +i),
                 cmd.name,

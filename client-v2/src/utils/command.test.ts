@@ -604,6 +604,31 @@ describe("PgCommandManager.execute, a command with options and subcommands", () 
     expect(top.mock.calls[0][0].options).toEqual({ url: "d" });
   });
 
+  it("prints the help of a command asked for it behind an option, running nothing", async () => {
+    vi.spyOn(PgTerminal, "println").mockResolvedValue(undefined as never);
+    const { sub, nestCheck } = installTree();
+
+    await PgCommandManager.execute(["probe", "nest", "sub", "-u", "d", "-h"]);
+
+    expect(sub).not.toHaveBeenCalled();
+    expect(nestCheck).not.toHaveBeenCalled();
+  });
+
+  it.each([[["probe", "nest"]], [["probe", "nest", "bogus"]]])(
+    "lists the subcommands of a command without a handler, without its pre-check: %j",
+    async (tokens) => {
+      const println = vi
+        .spyOn(PgTerminal, "println")
+        .mockResolvedValue(undefined as never);
+      const { nestCheck } = installTree();
+
+      await PgCommandManager.execute(tokens);
+
+      expect(println).toHaveBeenCalledTimes(1);
+      expect(nestCheck).not.toHaveBeenCalled();
+    }
+  );
+
   it("runs a pre-check of a nested subcommand only on the path through it", async () => {
     const { leaf, sub, nestCheck } = installTree();
 
