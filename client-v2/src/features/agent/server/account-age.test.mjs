@@ -14,7 +14,7 @@ import {
   initServerLogger,
   resetServerLogger,
 } from "../../../shared/lib/logger/server.mjs";
-import { learnAccountAge } from "./account-age.mjs";
+import { learnAccountAge, learnAccountAgeWith } from "./account-age.mjs";
 
 // `yarn test-api` loads `.env`; without a database this suite skips rather
 // than fails, which is what lets the unit suites run on their own.
@@ -33,12 +33,6 @@ describe("learnAccountAge", { skip: !DB && "DATABASE_URL not set" }, () => {
     await query(
       `insert into "user" (id, name, email, "emailVerified")
        values ($1, 'Test', 'account-age@example.com', false)
-       on conflict (id) do nothing`,
-      [USER]
-    );
-    await query(
-      `insert into account (id, "accountId", "providerId", "userId", "accessToken", "updatedAt")
-       values ('test-account-age', '42', 'github', $1, 'gho_token', now())
        on conflict (id) do nothing`,
       [USER]
     );
@@ -63,12 +57,17 @@ describe("learnAccountAge", { skip: !DB && "DATABASE_URL not set" }, () => {
 
   const github = (answer) => mock.method(global, "fetch", answer);
 
+  /** Only `USER` holds a token, as Better Auth would hand it back decrypted */
+  const readToken = async (userId) =>
+    userId === USER ? "gho_token" : undefined;
+  const deps = { query, readToken };
+
   it("stores the creation date GitHub reports, read with the user's token", async () => {
     const fetched = github(async () =>
       Response.json({ login: "ada", created_at: "2011-01-25T18:44:36Z" })
     );
 
-    const result = await learnAccountAge(query, USER);
+    const result = await learnAccountAge(deps, USER);
 
     assert.equal(result.outcome, "stored");
     assert.deepEqual(await stored(), new Date("2011-01-25T18:44:36Z"));
@@ -80,7 +79,7 @@ describe("learnAccountAge", { skip: !DB && "DATABASE_URL not set" }, () => {
   it("stores nothing when GitHub refuses the read", async () => {
     github(async () => new Response("Bad credentials", { status: 401 }));
 
-    assert.deepEqual(await learnAccountAge(query, USER), {
+    assert.deepEqual(await learnAccountAge(deps, USER), {
       outcome: "skipped",
       reason: "refused",
     });
@@ -97,7 +96,7 @@ describe("learnAccountAge", { skip: !DB && "DATABASE_URL not set" }, () => {
         )
     );
 
-    assert.deepEqual(await learnAccountAge(query, USER, { timeoutMs: 20 }), {
+    assert.deepEqual(await learnAccountAgeWith(20)(deps, USER), {
       outcome: "skipped",
       reason: "unreachable",
     });
@@ -107,7 +106,7 @@ describe("learnAccountAge", { skip: !DB && "DATABASE_URL not set" }, () => {
   it("stores nothing for a date GitHub sends malformed", async () => {
     github(async () => Response.json({ created_at: "soon" }));
 
-    assert.equal((await learnAccountAge(query, USER)).reason, "malformed");
+    assert.equal((await learnAccountAge(deps, USER)).reason, "malformed");
     assert.equal(await stored(), null);
   });
 
@@ -117,7 +116,7 @@ describe("learnAccountAge", { skip: !DB && "DATABASE_URL not set" }, () => {
     t.after(resetServerLogger);
     github(async () => new Response('{"email": "private@example.com"'));
 
-    assert.equal((await learnAccountAge(query, USER)).reason, "malformed");
+    assert.equal((await learnAccountAge(deps, USER)).reason, "malformed");
     assert.deepEqual(entries[0].context, {
       userId: USER,
       reason: "malformed",
@@ -129,7 +128,7 @@ describe("learnAccountAge", { skip: !DB && "DATABASE_URL not set" }, () => {
   it("asks GitHub nothing for a user with no GitHub token", async () => {
     const fetched = github(async () => Response.json({}));
 
-    const result = await learnAccountAge(query, "test-user-account-age-none");
+    const result = await learnAccountAge(deps, "test-user-account-age-none");
 
     assert.equal(result.reason, "no-token");
     assert.equal(fetched.mock.callCount(), 0);
@@ -137,13 +136,34 @@ describe("learnAccountAge", { skip: !DB && "DATABASE_URL not set" }, () => {
 
   it("never throws when the database fails", async () => {
     mock.method(console, "error", () => {});
+    github(async () => Response.json({ created_at: "2011-01-25T18:44:36Z" }));
     const failing = async () => {
       throw new Error("connection refused");
     };
 
-    assert.deepEqual(await learnAccountAge(failing, USER), {
-      outcome: "skipped",
-      reason: "database",
-    });
+    assert.deepEqual(
+      await learnAccountAge({ query: failing, readToken }, USER),
+      {
+        outcome: "skipped",
+        reason: "database",
+      }
+    );
+  });
+
+  it("never throws when the token cannot be read", async () => {
+    mock.method(console, "error", () => {});
+    const fetched = github(async () => Response.json({}));
+    const failing = async () => {
+      throw new Error("connection refused");
+    };
+
+    assert.deepEqual(
+      await learnAccountAge({ query, readToken: failing }, USER),
+      {
+        outcome: "skipped",
+        reason: "token-unreadable",
+      }
+    );
+    assert.equal(fetched.mock.callCount(), 0);
   });
 });

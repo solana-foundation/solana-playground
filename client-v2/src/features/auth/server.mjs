@@ -7,12 +7,18 @@
  * reasoning in full.
  */
 export {
+  ACCOUNT_OPTIONS,
   getAuth,
   isAllowedOrigin,
   missingConfig,
   readSession,
   requireUser,
 } from "./model/auth.mjs";
+export {
+  NoGithubGrant,
+  readGithubToken,
+  readGithubTokenWith,
+} from "./model/github-token.mjs";
 export {
   AUTH_CHANNEL_NAME,
   AUTH_MESSAGE_TYPE,

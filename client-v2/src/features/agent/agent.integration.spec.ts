@@ -152,10 +152,6 @@ const db = vi.hoisted(() => {
       }
       return { rows: [{ ended: 1 }] };
     }
-    if (text.includes('"accessToken"')) {
-      const token = state.users.get(params[0] as string)?.token;
-      return { rows: token ? [{ accessToken: token }] : [] };
-    }
     if (text.includes('update "user"')) {
       const user = state.users.get(params[0] as string);
       if (user && !user.githubCreatedAt)
@@ -179,17 +175,30 @@ vi.mock("@/features/persistence/server.mjs", async (importOriginal) => {
   };
 });
 
+/** Stands in for the Better Auth instance the route reads the token with */
+const AUTH = vi.hoisted(() => ({ auth: "fake" }));
+
 vi.mock("@/features/auth/server.mjs", async (importOriginal) => {
   const real = await importOriginal<
     typeof import("@/features/auth/server.mjs")
   >();
   return {
     SIGNED_OUT_REASON: real.SIGNED_OUT_REASON,
+    NoGithubGrant: real.NoGithubGrant,
     isAllowedOrigin: real.isAllowedOrigin,
-    // Building auth can throw (the pool), so the route must never call it outside `readSession`
-    getAuth: () => {
-      throw new Error("getAuth called outside readSession");
-    },
+    // The route builds auth only to read the token, once the answer has
+    // ended; `learnAccountAge` catches what building it throws
+    getAuth: async () => AUTH,
+    // The token as Better Auth hands it back, decrypted, read over the
+    // instance the route's own `getAuth` resolves to
+    readGithubTokenWith:
+      (loadAuth: () => Promise<unknown>) => async (userId: string) => {
+        if (!Object.is(await loadAuth(), AUTH))
+          throw new Error("token read without getAuth's instance");
+        const token = db.state.users.get(userId)?.token;
+        if (!token) throw new real.NoGithubGrant("no-account", undefined);
+        return token;
+      },
     missingConfig: () =>
       session.state === "unconfigured" ? ["AUTH_SECRET"] : [],
     readSession: async () =>
