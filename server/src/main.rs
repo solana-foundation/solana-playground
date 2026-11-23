@@ -152,7 +152,6 @@ mod tests {
                 "GET",
                 "/unstable/deploy/0b9f4d3e-6c1a-4f7e-9a2b-3c4d5e6f7a8b",
             ),
-            ("POST", "/unstable/bundle"),
         ] {
             assert_eq!(
                 status(method, path, None).await,

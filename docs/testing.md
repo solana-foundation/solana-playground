@@ -821,7 +821,7 @@ U-1 to U-3 run the unstable server as a native binary. This is the one exception
 cargo build --manifest-path server/Cargo.toml --release --features unstable
 ```
 
-Expect: exit code 0; binaries `solpg-server`, `build-program`, and `bundle` in `server/target/release/`.
+Expect: exit code 0; binaries `solpg-server` and `build-program` in `server/target/release/`.
 
 ### U-2. unstable routes
 
@@ -833,17 +833,13 @@ PG_PORT=8081 server/target/release/solpg-server
 
 Run it from `server/` so it finds `templates/` and `images/`. `PG_PORT` avoids a clash with the compose server.
 
-Steps: point a client at `http://localhost:8081`; in client-v2, turn `experimental.unstable` on. Build a program, then
-bundle a package.
+Steps: point a client at `http://localhost:8081`; in client-v2, turn `experimental.unstable` on. Build a program.
 
 Expect:
 
-- [ ] start-up builds one `program-<template>` image per directory in `server/templates/` and a bundle image. A cold
-      build takes several minutes.
-- [ ] `POST /unstable/build` and `POST /unstable/bundle` return 200.
-
-Known issue: `sandbox.rs` clears the environment before `docker exec`, which drops `PATH`; on macOS the bundle route
-then fails with "No such file or directory". Linux is unaffected.
+- [ ] start-up builds one `program-<template>` image per directory in `server/templates/`. A cold build takes
+      several minutes.
+- [ ] `POST /unstable/build` returns 200.
 
 ### U-3. sandbox templates
 
@@ -866,7 +862,7 @@ the Rust-side settings, `images/`, and `src/` stay the image's.
 ```sh
 docker compose --profile v2-unstable up --build -d
 tries=60
-until [ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d '{}' "http://localhost:${PG_PORT:-8080}/unstable/bundle")" = 422 ]; do
+until [ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d '{}' "http://localhost:${PG_PORT:-8080}/unstable/build")" = 422 ]; do
   if [ -n "$(docker compose --profile v2-unstable ps --status exited -q server-unstable)" ]; then
     echo 'server-unstable exited: read `docker compose --profile v2-unstable logs server-unstable`'; break
   fi
@@ -878,17 +874,6 @@ docker compose --profile v2-unstable logs server-unstable | grep 'naming to'
 docker compose --profile v2-unstable exec server-unstable docker version
 ```
 
-client-v2 has no caller for `/unstable/bundle`, so the bundle route is checked with `curl` and a minimal manifest:
-
-```sh
-curl -s -o /dev/null -w '%{http_code}\n' -H 'Content-Type: application/json' \
-  -d '{"manifest":"{\"dependencies\":{\"@coral-xyz/anchor\":\"^0.29.0\"}}"}' \
-  "http://localhost:${PG_PORT:-8080}/unstable/bundle"
-curl -s -f -H 'Content-Type: application/json' \
-  -d '{"manifest":"{\"dependencies\":{\"@coral-xyz/anchor\":\"^0.29.0\"}}"}' \
-  "http://localhost:${PG_PORT:-8080}/unstable/bundle" | jq -c 'keys'
-```
-
 Steps: once the `until` loop ends without a message (the route exists and answers the empty request with `422`), open
 the client and build a program. The profile sets `REACT_APP_SERVER_UNSTABLE=true`, so `experimental.unstable` is on
 in a browser profile that has not stored it; in one that has, run `setting set experimental.unstable true` in the
@@ -896,11 +881,10 @@ client's terminal first.
 
 Expect:
 
-- [ ] the log names `solpg-server-sandbox-bundle` and one `solpg-server-sandbox-program-<template>` image per
-      template in `get_all_templates` (`server/src/templates/mod.rs`).
+- [ ] the log names one `solpg-server-sandbox-program-<template>` image per template in `get_all_templates`
+      (`server/src/templates/mod.rs`).
 - [ ] `docker version` prints a `Server` section: the container reaches the host's daemon.
 - [ ] the build from the client sends `POST /unstable/build`, which returns 200.
-- [ ] the first `curl` prints `200`; the second prints keys that include `bundle` and `types`.
 
 ```sh
 docker compose --profile v2-unstable down
