@@ -107,21 +107,19 @@ const BaseSessionFooter = ({
                     </span>
                   )}
                 </span>
-                {/* While signing in, Cancel is the row's only trailing item:
-                    the menu still opens on the row, and a send in flight
-                    still shows on the avatar */}
-                {!pending &&
-                  (account.sending ? (
-                    <Spinner
-                      aria-label="Sending feedback"
-                      className="ml-auto"
-                    />
-                  ) : (
+                {/* While signing in, Cancel is the row's trailing item: no
+                    chevron under it. A send in flight keeps its spinner, which
+                    sits left of the room kept for Cancel */}
+                {account.sending ? (
+                  <Spinner aria-label="Sending feedback" className="ml-auto" />
+                ) : (
+                  !pending && (
                     <ChevronsUpDown
                       aria-hidden
                       className="ml-auto text-muted-foreground"
                     />
-                  ))}
+                  )
+                )}
               </SidebarMenuButton>
             </DropdownMenuTrigger>
             {menu}

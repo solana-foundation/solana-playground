@@ -184,7 +184,7 @@ it("offers Cancel beside the row while signing in", async () => {
 });
 
 // Cancel is the row's only trailing item while signing in: the menu's
-// chevron sat under it (HOO-2961)
+// chevron sat under it
 it("draws no chevron while signing in, only Cancel", () => {
   draw({ account: view({ session: { status: "pending" } }) });
   const row = screen.getByRole("button", { name: /^Account/ });
@@ -192,12 +192,12 @@ it("draws no chevron while signing in, only Cancel", () => {
   expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
 });
 
-it("keeps a send in flight on the avatar while signing in, nothing under Cancel", () => {
+it("keeps a send in flight on the row while signing in", () => {
   draw({ account: view({ session: { status: "pending" }, sending: true }) });
   const row = screen.getByRole("button", { name: /^Account/ });
   expect(row.getAttribute("aria-busy")).toBe("true");
-  expect(row.querySelector('[data-slot="feedback-pulse"]')).toBeTruthy();
-  expect(screen.queryByRole("status", { name: "Sending feedback" })).toBeNull();
+  expect(screen.getByRole("status", { name: "Sending feedback" })).toBeTruthy();
+  expect(row.querySelector(".lucide-chevrons-up-down")).toBeNull();
 });
 
 it("keeps the chevron on the row when no sign-in is pending", () => {
