@@ -1,12 +1,12 @@
 /**
  * Characters that change how code reads without changing what runs: the
- * Unicode direction controls ("Trojan Source", CVE-2021-42574) and the
- * characters that draw nothing. A link is anyone's to write, so the question
+ * Unicode direction controls ("Trojan Source", CVE-2021-42574) and every
+ * default-ignorable character, which draws nothing (zero-width spaces,
+ * Hangul fillers, variation selectors, tag characters). A link is anyone's to write, so the question
  * before its first Run shows each one as a marker instead of rendering it.
  * Written as escapes, so this file holds none of them itself.
  */
-const HIDDEN =
-  /[\u00AD\u061C\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g;
+const HIDDEN = /[\p{Default_Ignorable_Code_Point}\p{Bidi_Control}]/gu;
 
 /** A piece of a line: text as written, or one hidden character */
 export type LinePart = { text: string } | { hidden: string };
@@ -73,6 +73,21 @@ if (import.meta.vitest) {
         "e",
         "f",
       ]);
+    });
+
+    it("marks blank-drawing letters and characters past U+FFFF", () => {
+      // A Hangul filler is a legal identifier that draws nothing; a tag
+      // character sits outside the Basic Multilingual Plane
+      expect(partsOf("a\u3164b")).toEqual([
+        { text: "a" },
+        { hidden: "U+3164" },
+        { text: "b" },
+      ]);
+      expect(partsOf("x\u{E0041}")).toEqual([
+        { text: "x" },
+        { hidden: "U+E0041" },
+      ]);
+      expect(countHidden("\uFE0F\u115F")).toBe(2);
     });
 
     it("counts every hidden character, bidi and zero-width alike", () => {

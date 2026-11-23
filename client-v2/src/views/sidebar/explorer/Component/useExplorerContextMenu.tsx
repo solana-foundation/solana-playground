@@ -28,7 +28,8 @@ const reportMenuActionFailure = (action: string, err: unknown) => {
 
 /**
  * Ask before a run from the menu, as Run does, when a link opened the code.
- * A run already going refuses it, and the toast says why nothing happened.
+ * While a run is going, a question still owed is refused, and the toast says
+ * why nothing happened; with none owed, the command answers as it always did.
  *
  * @returns whether to run
  */
