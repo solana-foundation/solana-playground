@@ -2,6 +2,9 @@
 
 ## Purpose
 
+**Area:** the `/open` route and the callout above the code it opens
+(client-v2 UI)
+
 How a docs page's "Open in Playground" link opens one file in Playground, and
 how much of what the link says Playground shows as fact: the source is only
 the link's claim, and the SOL it may ask for is capped.

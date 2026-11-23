@@ -158,13 +158,15 @@ export const useExplorerContextMenu = () => {
     );
   }, []);
 
-  // A run from the menu asks first, as Run does, when a link opened the code
+  // A run or a test from the menu asks first, as Run does, when a link
+  // opened the code: a link may name its file `example.test.ts`
   const addClient = useCallback(async () => {
     if (!(await PgClientRun.askFirst())) return;
     await PgCommand.run.execute();
   }, []);
 
   const addTests = useCallback(async () => {
+    if (!(await PgClientRun.askFirst())) return;
     await PgCommand.test.execute();
   }, []);
 
@@ -182,6 +184,7 @@ export const useExplorerContextMenu = () => {
   }, [getPath]);
 
   const runTest = useCallback(async () => {
+    if (!(await PgClientRun.askFirst())) return;
     await PgCommand.test.execute(getPath());
   }, [getPath]);
 
@@ -191,6 +194,7 @@ export const useExplorerContextMenu = () => {
   }, []);
 
   const runTestFolder = useCallback(async () => {
+    if (!(await PgClientRun.askFirst())) return;
     await PgCommand.test.execute();
   }, []);
 

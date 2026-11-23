@@ -284,6 +284,16 @@ test.describe("client-run", () => {
     );
   });
 
+  test("client-run: Test asks first too", async ({ page }) => {
+    await page.goto(docsLink({ name: "hello.ts", code: 'console.log("hi")' }));
+    await page.getByRole("button", { name: "Test", exact: true }).click(LONG);
+
+    const dialog = confirmDialog(page);
+    await expect(dialog).toContainText('console.log("hi")', LONG);
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toHaveCount(0);
+  });
+
   test("client-run: Cancel", async ({ page }) => {
     await page.goto(docsLink({ name: "hello.ts", code: 'console.log("hi")' }));
     await page.locator("#flow-run").click(LONG);

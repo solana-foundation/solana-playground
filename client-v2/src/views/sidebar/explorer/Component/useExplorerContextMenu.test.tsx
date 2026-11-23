@@ -25,6 +25,7 @@ const run = vi.hoisted(() => {
   return {
     answer,
     execute: vi.fn(async () => undefined),
+    test: vi.fn(async () => undefined),
     askFirst: vi.fn(async () => answer.isAgreed),
   };
 });
@@ -32,7 +33,7 @@ vi.mock("@/features/docs-link", () => ({
   PgClientRun: { askFirst: run.askFirst },
 }));
 vi.mock("../../../../utils", () => ({
-  PgCommand: { run: { execute: run.execute } },
+  PgCommand: { run: { execute: run.execute }, test: { execute: run.test } },
   PgCommon: { keys: Object.keys },
   PgExplorer: {
     getItemTypeFromEl: explorer.getItemTypeFromEl,
@@ -143,7 +144,15 @@ describe("useExplorerContextMenu modal actions", () => {
 
 describe("useExplorerContextMenu Run", () => {
   // A link's code must not run from the menu before the user agreed to it
-  it.each(["runClient", "runClientFolder", "addClient"] as const)(
+  // A test file runs too: a link may name its file `example.test.ts`
+  it.each([
+    "runClient",
+    "runClientFolder",
+    "addClient",
+    "runTest",
+    "runTestFolder",
+    "addTests",
+  ] as const)(
     "%s asks before the first run of a link's code",
     async (action) => {
       run.answer.isAgreed = false;
@@ -153,6 +162,7 @@ describe("useExplorerContextMenu Run", () => {
 
       expect(run.askFirst).toHaveBeenCalledTimes(1);
       expect(run.execute).not.toHaveBeenCalled();
+      expect(run.test).not.toHaveBeenCalled();
     }
   );
 

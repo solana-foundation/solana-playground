@@ -9,7 +9,8 @@ with the Playground wallet. Run in the dialog runs the project; Cancel and
 closing the dialog run nothing and leave the callout as it was. Once
 confirmed, Run does not ask again for that link; a new link or another opened
 project asks again. A project that switches while the dialog shows runs
-nothing. A run from the explorer's menu asks the same question. A project no
+nothing. A run or a test from the explorer's menu, and the stage row's Test, ask the
+same question. A project no
 docs link opened never shows the dialog.
 
 #### Scenario: The Quickstart after one confirmation

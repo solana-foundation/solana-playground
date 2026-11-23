@@ -26,6 +26,10 @@ off as an official docs example.
   another link or project opens. A `run` typed in the terminal is the user's
   own command and is not asked about.
 
+Events: none added, renamed or removed. The `docs_link_*` events are kept;
+a Run the user confirms still sends `docs_link_run_started` and
+`docs_link_run_finished`, and a cancelled question sends nothing.
+
 ## Impact
 
 - `client-v2/src/features/docs-link`: `lib/link.ts` (cap), `model/run.ts`
@@ -36,3 +40,8 @@ off as an official docs example.
   `PgClientRun.askFirst()`.
 - `client-v2/e2e/docs-open-link.e2e.spec.ts`: Run now confirms first.
 - `docs/open-in-playground-link.md`: the cap.
+- `client-v2/src/widgets/client-project-bar`: the stage row's Test asks too.
+
+Out of scope: verifying a link's code against a list the docs site publishes
+(no such list exists); asking before a `run` or `test` typed in the terminal,
+which is the user's own command; the link format itself (`v=1` stays).

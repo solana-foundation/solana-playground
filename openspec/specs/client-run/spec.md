@@ -2,6 +2,9 @@
 
 ## Purpose
 
+**Area:** the stage row's Run and Test, the explorer's Run and Test, and the
+callout above the code of a client project (client-v2 UI)
+
 How a client project's scripts run from the stage row: Run, the callout above
 the code that says how the run went, and the question Run asks before the
 first run of code a docs link opened.
@@ -17,7 +20,8 @@ with the Playground wallet. Run in the dialog runs the project; Cancel and
 closing the dialog run nothing and leave the callout as it was. Once
 confirmed, Run does not ask again for that link; a new link or another opened
 project asks again. A project that switches while the dialog shows runs
-nothing. A run from the explorer's menu asks the same question. A project no
+nothing. A run or a test from the explorer's menu, and the stage row's Test, ask the
+same question. A project no
 docs link opened never shows the dialog.
 
 #### Scenario: The Quickstart after one confirmation
