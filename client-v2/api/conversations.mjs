@@ -20,7 +20,10 @@ import {
   listThreads,
   MAX_BATCH_BYTES,
   MAX_BATCH_ITEMS,
+  NO_PROJECT_REASON,
+  NoProject,
   NotYours,
+  OverChatLimit,
   ThreadDeleted,
 } from "../src/features/persistence/server.mjs";
 import { createServerLogger } from "../src/shared/lib/logger/server.mjs";
@@ -135,7 +138,7 @@ export const readBody = async (req) => {
 /**
  * What to answer when a write throws.
  *
- * Two failures are a client's to act on and get a status of their own. An id
+ * Four failures are a client's to act on and get a status of their own. An id
  * that is somebody else's reads the same as one that does not exist:
  * confirming which would turn this route into an oracle for guessed uuids. A
  * thread deleted with its project is 410, and the distinction matters at the
@@ -145,6 +148,13 @@ export const readBody = async (req) => {
  * `scope` says which tombstone it was, and the client acts on it: a thread
  * deleted under a live project is replaced on the spot; one under a deleted
  * project waits for the user's answer about the project.
+ *
+ * A project the account holds no row for is 409 `no-project` (HOO-2882): a
+ * push no longer creates one, and the client keeps the thread until its
+ * project's upload lands. Not a 404, which is a stranger's thread, and no
+ * oracle either way: projects are keyed by account. A push past an account
+ * cap is 413 with the cap named, the same status and shape as the project
+ * cap's `too-many-projects` in `api/projects.mjs`.
  *
  * Anything else is ours, so the client gets a generic 500 and the driver's
  * own text stays server side -- it names columns, constraints and sometimes
@@ -158,6 +168,15 @@ export const readBody = async (req) => {
 export const describeFailure = (e) => {
   if (e instanceof NotYours) {
     return { status: 404, body: { error: "No such thread" } };
+  }
+  if (e instanceof NoProject) {
+    return {
+      status: 409,
+      body: { error: e.message, reason: NO_PROJECT_REASON },
+    };
+  }
+  if (e instanceof OverChatLimit) {
+    return { status: 413, body: { error: e.message, ...e.limit } };
   }
   if (e instanceof ThreadDeleted) {
     return {

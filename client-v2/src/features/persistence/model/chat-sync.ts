@@ -5,6 +5,11 @@ import { timeoutSignal } from "@/shared/lib/timeout-signal";
 import type { ChatItem } from "../../../views/sidebar/assistant/store";
 import { batchPush, MAX_BATCH_BYTES } from "./chat-batch.mjs";
 import { decodeThread, encodeThread, mergeThreads } from "./chat-codec";
+import {
+  type ChatLimitExceeded,
+  NO_PROJECT_REASON,
+  readChatLimitExceeded,
+} from "./chat-limits.mjs";
 import { PgChatStorage, withoutTruncationNotice } from "./chat-storage";
 import { DELETED_REASON, isDeletedScope } from "./deleted.mjs";
 import { report } from "./diagnostics";
@@ -46,6 +51,12 @@ interface HandedThread {
  *   under it can be pushed. The caller leaves it for the user's answer about
  *   the project (`SyncBanner`): "keep as new" carries the conversation,
  *   "delete" drops it.
+ * - `no-project`: the account holds no row for the thread's project yet: a
+ *   project made while signed out, whose thread the sign-in dump uploads
+ *   before the project. The thread stays, owed, and is pushed again once the
+ *   server accepts its project (`awaiting`).
+ * - `over-limit`: the account is at a cap in `CHAT_LIMITS`. The thread stays,
+ *   owed, and `limit()` names the cap for the panel.
  * - `failed`: nothing is known; the thread stays and is tried again. Also a
  *   thread pushed whole but for items too large for any batch: those stay on
  *   this device, so a sign-out must not drop the thread, and the retry sends
@@ -58,6 +69,8 @@ export type PushOutcome =
   | "pushed"
   | "thread-deleted"
   | "project-deleted"
+  | "no-project"
+  | "over-limit"
   | "failed";
 
 /**
@@ -70,6 +83,13 @@ export type PushOutcome =
  */
 export const isHandedOver = (outcome: PushOutcome) =>
   outcome === "pushed" || outcome === "thread-deleted";
+
+/** `PgChatSync.limit`, for the layers above through `index.ts` */
+export const chatSyncLimit = () => PgChatSync.limit();
+
+/** `PgChatSync.onDidChangeLimit`, for the layers above through `index.ts` */
+export const onDidChangeChatSyncLimit = (cb: () => void) =>
+  PgChatSync.onDidChangeLimit(cb);
 
 /**
  * Mirror local threads to Postgres.
@@ -239,8 +259,13 @@ export class PgChatSync {
 
     for (const body of bodies) {
       const outcome = await PgChatSync._post(threadId, body);
+      if (outcome === "no-project")
+        PgChatSync._awaiting.set(threadId, projectId);
       if (outcome !== "pushed") return outcome;
     }
+    PgChatSync._awaiting.delete(threadId);
+    // The server took a whole batch, so the account was under every cap it grew
+    PgChatSync._setLimit(undefined);
     // The rest is on the server, but not the whole thread: a sign-out drops
     // only what the server holds, so this one must not read as `pushed`
     return oversized.length ? "failed" : "pushed";
@@ -258,6 +283,50 @@ export class PgChatSync {
 
   /** Every reason `_reportRefusal` has reported */
   private static _refusalsReported = new Set<string>();
+
+  /**
+   * The cap the last push was refused for, or `undefined` once a push is accepted
+   * again: what the assistant panel says while it holds.
+   */
+  static limit(): ChatLimitExceeded | undefined {
+    return PgChatSync._limit;
+  }
+
+  /** Fires whenever `limit()` changes */
+  static onDidChangeLimit(cb: () => void): { dispose: () => void } {
+    PgChatSync._limitListeners.add(cb);
+    return { dispose: () => PgChatSync._limitListeners.delete(cb) };
+  }
+
+  /**
+   * The threads refused with `no-project` for a project, to push again once
+   * the server accepts that project. In memory: a reload pushes every thread
+   * again anyway, on the next sign-in dump or turn.
+   */
+  static awaiting(projectId: string): string[] {
+    return [...PgChatSync._awaiting]
+      .filter(([, waitsOn]) => waitsOn === projectId)
+      .map(([threadId]) => threadId);
+  }
+
+  private static _setLimit(limit: ChatLimitExceeded | undefined) {
+    const was = PgChatSync._limit;
+    if (
+      was?.reason === limit?.reason &&
+      was?.limit === limit?.limit &&
+      was?.count === limit?.count
+    ) {
+      return;
+    }
+    PgChatSync._limit = limit;
+    for (const cb of PgChatSync._limitListeners) cb();
+  }
+
+  private static _limit: ChatLimitExceeded | undefined;
+  private static readonly _limitListeners = new Set<() => void>();
+
+  /** Thread id to the project id it waits on */
+  private static readonly _awaiting = new Map<string, string>();
 
   /** `<threadId>:<itemId>` of every item `push` has reported as too large */
   private static _oversizedReported = new Set<string>();
@@ -290,11 +359,39 @@ export class PgChatSync {
         report(`push ${threadId}: ${scope} deleted on the server`, null);
         return scope === "project" ? "project-deleted" : "thread-deleted";
       }
+      // Expected, not a failure: a project made while signed out is uploaded
+      // after its thread (HOO-2882). Unreported; the caller keeps it owed.
+      if (response.status === 409) {
+        const said = await PgChatSync._body(response);
+        if (said?.reason === NO_PROJECT_REASON) return "no-project";
+      }
+      // An account cap, named for the panel. The body cap's 413 carries
+      // `too-large` and no figure, and stays an ordinary failure.
+      if (response.status === 413) {
+        const limit = readChatLimitExceeded(await PgChatSync._body(response));
+        if (limit) {
+          PgChatSync._setLimit(limit);
+          PgChatSync._reportRefusal(`account cap: ${limit.reason}`);
+          return "over-limit";
+        }
+      }
       report(`push ${threadId}: HTTP ${response.status}`, null);
       return "failed";
     } catch (e) {
       report(`push ${threadId}`, e);
       return "failed";
+    }
+  }
+
+  /** A refusal's JSON body, or `undefined` when it has none that parses */
+  private static async _body(
+    response: Response
+  ): Promise<{ reason?: unknown } | undefined> {
+    try {
+      return await response.json();
+    } catch {
+      // The caller reads a missing body as "not ours"
+      return undefined;
     }
   }
 
@@ -862,6 +959,81 @@ if (import.meta.vitest) {
 
           expect(await PgChatSync.push(threadId)).toBe("failed");
           expect(posts()).toHaveLength(2);
+        });
+
+        describe("an account refusal (HOO-2882)", () => {
+          const capped = {
+            reason: "too-many-messages",
+            limit: 20_000,
+            count: 20_001,
+          };
+          const answering = (status: number, body: unknown) =>
+            respondingWith(() =>
+              Promise.resolve(
+                status === 200
+                  ? { ok: true, json: async () => ({ written: 1 }) }
+                  : { ok: false, status, json: async () => body }
+              )
+            );
+
+          it("names the cap a 413 carries, until a push is taken again", async () => {
+            await signedIn();
+            await PgChatStorage.write(threadId, [item(1)]);
+            const changed = vi.fn();
+            const sub = PgChatSync.onDidChangeLimit(changed);
+
+            answering(413, {
+              error: "over",
+              reason: capped.reason,
+              limit: capped.limit,
+              count: capped.count,
+            });
+            expect(await PgChatSync.push(threadId)).toBe("over-limit");
+            expect(PgChatSync.limit()).toEqual(capped);
+            expect(changed).toHaveBeenCalledTimes(1);
+
+            answering(200, {});
+            expect(await PgChatSync.push(threadId)).toBe("pushed");
+            expect(PgChatSync.limit()).toBeUndefined();
+            expect(changed).toHaveBeenCalledTimes(2);
+            sub.dispose();
+          });
+
+          it("keeps the body cap's 413 an ordinary failure", async () => {
+            await signedIn();
+            await PgChatStorage.write(threadId, [item(1)]);
+
+            answering(413, { error: "too big", reason: "too-large" });
+
+            expect(await PgChatSync.push(threadId)).toBe("failed");
+            expect(PgChatSync.limit()).toBeUndefined();
+          });
+
+          it("keeps a thread refused for no-project waiting on its project", async () => {
+            await signedIn();
+            await PgChatStorage.write(threadId, [item(1)]);
+
+            answering(409, { error: "No such project", reason: "no-project" });
+            const outcome = await PgChatSync.push(threadId);
+
+            expect(outcome).toBe("no-project");
+            expect(isHandedOver(outcome)).toBe(false);
+            expect(PgChatSync.awaiting("w1")).toEqual([threadId]);
+
+            answering(200, {});
+            expect(await PgChatSync.push(threadId)).toBe("pushed");
+            expect(PgChatSync.awaiting("w1")).toEqual([]);
+          });
+
+          it("reads a 409 without the reason as a failure", async () => {
+            await signedIn();
+            await PgChatStorage.write(threadId, [item(1)]);
+
+            answering(409, { error: "something else" });
+
+            expect(await PgChatSync.push(threadId)).toBe("failed");
+            expect(PgChatSync.awaiting("w1")).toEqual([]);
+          });
         });
 
         it("still posts a thread holding only the truncation notice, empty", async () => {

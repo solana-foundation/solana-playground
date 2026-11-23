@@ -1,5 +1,7 @@
 import { PgSession } from "../../features/auth";
+import { PgChatSync } from "../../features/persistence/model/chat-sync";
 import { report } from "../../features/persistence/model/diagnostics";
+import { PgProjectSync } from "../../features/persistence/model/project-sync";
 import { PgThreadFence } from "../../features/persistence/model/thread-fence";
 import { PgThreadIndex } from "../../features/persistence/model/thread-index";
 // Deep import rather than the `utils` barrel: the barrel reaches `settings.ts`,
@@ -207,6 +209,13 @@ export const chatThread = (): Disposable => {
     }),
     PgAssistant.onDidChange(onChange),
     PgSession.onDidChange(onSessionChange),
+    // A thread refused for `no-project` follows its project up (HOO-2882):
+    // the sign-in dump uploads threads before the projects they belong to
+    PgProjectSync.onDidAccept((projectId) => {
+      for (const threadId of PgChatSync.awaiting(projectId)) {
+        void pushThread(threadId);
+      }
+    }),
   ];
 
   document.addEventListener("visibilitychange", onVisibilityChange);

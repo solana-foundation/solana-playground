@@ -11,6 +11,7 @@ import { assistantKeyTelemetry } from "../../../views/sidebar/assistant/model/te
 import { useMcpSources } from "../../../views/sidebar/assistant/model/use-mcp-sources";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import { aiOff } from "../model/ai-off";
+import { useChatLimit } from "../model/chat-limit";
 import { modelShown } from "../model/choice";
 import { connectLabel } from "../model/connection";
 import { useDefaultBackend } from "../model/default-backend";
@@ -19,6 +20,7 @@ import type { ConnectOpener } from "../model/use-turn";
 import { useTurn } from "../model/use-turn";
 import { AssistantComposer } from "./AssistantComposer";
 import { BaseAssistantHead } from "./BaseAssistantHead";
+import { BaseChatLimitRow } from "./BaseChatLimitRow";
 import { Thread } from "./Thread";
 
 /** What the panel shows under its head */
@@ -86,6 +88,8 @@ export function Assistant({ widen, onHide, openConnect }: AssistantProps) {
   const project = useProjectName() ?? tutorial;
   const defaultBackend = useDefaultBackend();
   const signedIn = useSignedIn();
+  // A push refused for an account cap (HOO-2882): the thread goes on here
+  const chatLimit = useChatLimit();
   // The head names the connected model, so a change of connection redraws it
   const [, render] = useReducer((n: number) => n + 1, 0);
   useEffect(() => PgAssistant.onDidChange(render).dispose, []);
@@ -161,6 +165,7 @@ export function Assistant({ widen, onHide, openConnect }: AssistantProps) {
       {view === "chat" && (
         <>
           <Thread turn={turn} project={project} />
+          {chatLimit && <BaseChatLimitRow limit={chatLimit} />}
           <AssistantComposer
             turn={turn}
             onSources={openSources}

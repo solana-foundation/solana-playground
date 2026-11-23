@@ -9,6 +9,7 @@
  * message id. That is what lets a project hold more than one conversation,
  * and what makes a repeated push a no-op rather than a second thread.
  */
+import { CHAT_LIMIT_ORDER, CHAT_LIMITS } from "./chat-limits.mjs";
 import { getPool, query, run } from "./db.mjs";
 import { isDeletedScope } from "./deleted.mjs";
 
@@ -58,13 +59,97 @@ export class ThreadDeleted extends Error {
   }
 }
 
+/**
+ * A push whose project id names no project row of the account.
+ *
+ * A push used to insert that row, so a client could mint any number of
+ * project rows outside the project cap, which counts only rows holding files
+ * (HOO-2882). A project row now comes only from `PUT /api/projects`. Its own
+ * type so the route can answer 409 `no-project`: the client keeps the thread
+ * and pushes it again once its project is accepted.
+ */
+export class NoProject extends Error {
+  constructor() {
+    super("No such project");
+    this.name = "NoProject";
+  }
+}
+
+/**
+ * A push that would take the account past a cap in `CHAT_LIMITS`. `limit` is
+ * the refusal's body: which cap, its figure, and the measure the push would
+ * have made.
+ */
+export class OverChatLimit extends Error {
+  /** @param {import("./chat-limits.mjs").ChatLimitExceeded} limit */
+  constructor(limit) {
+    super(`Over the account's conversation cap: ${limit.reason}`);
+    this.name = "OverChatLimit";
+    this.limit = limit;
+  }
+}
+
+/**
+ * Serialises one account's pushes, so two that race at the cap cannot each
+ * measure the other's absence and both pass. Transaction-scoped. A statement
+ * of its own, before the first `MEASURE`: under READ COMMITTED a statement's
+ * snapshot is taken when it starts, so a measure in the same statement would
+ * read from before the wait.
+ *
+ * Taken first, before any row lock: `deleteProject` locks rows and never this,
+ * so nothing holding a row ever waits here. Not the project cap's key
+ * (`projects-cap:` in `projects.mjs`): a push and a project write of one
+ * account do not need to queue behind each other.
+ */
+const LOCK_ACCOUNT = `
+  select pg_advisory_xact_lock(hashtextextended('conversations-cap:' || $1, 0))`;
+
+/**
+ * The account's three measures, over its live conversations. A deleted
+ * conversation has had its messages erased (`deleteProject`), so only the
+ * thread count needs the filter, and the join keeps the other two honest
+ * should one survive. `messages_bytes_idx` and `conversations_user_live_idx`
+ * keep it to index scans: no payload is read.
+ */
+const MEASURE = `
+  select (select count(*) from conversations
+           where user_id = $1 and deleted_at is null)::int as threads,
+         count(m.conversation_id)::int as messages,
+         coalesce(sum(m.bytes), 0)::bigint as bytes
+    from conversations c
+    join messages m on m.conversation_id = c.id
+   where c.user_id = $1 and c.deleted_at is null`;
+
+const measure = async (client, userId) => {
+  const { rows } = await run(client, MEASURE, [userId]);
+  return { ...rows[0], bytes: Number(rows[0].bytes) };
+};
+
+/**
+ * Throw `OverChatLimit` for the first cap, in `CHAT_LIMIT_ORDER`, that the
+ * push took the account past. Only a measure the push grew can refuse it: a
+ * re-push of stored messages, or any push under a cap lowered beneath what
+ * the account already holds, still goes through.
+ */
+const refuseOverLimit = (limits) => (before, after) => {
+  for (const [reason, key] of CHAT_LIMIT_ORDER) {
+    if (after[key] > limits[key] && after[key] > before[key]) {
+      throw new OverChatLimit({
+        reason,
+        limit: limits[key],
+        count: after[key],
+      });
+    }
+  }
+};
+
 /** Columns a thread listing returns. Never the messages. */
 const THREAD_COLUMNS = `id, project_id as "projectId", title,
   created_at as "createdAt", updated_at as "updatedAt"`;
 
 /**
- * Ensure the project row and the thread row exist, are this user's, and are
- * live.
+ * Ensure the thread row exists, is this user's, and is live, under a live
+ * project row of this user's.
  *
  * The insert is `on conflict (id) do nothing` rather than an upsert: a thread
  * row is identity, not state, and every push after the first would otherwise
@@ -72,29 +157,24 @@ const THREAD_COLUMNS = `id, project_id as "projectId", title,
  * `payload.origin`. Messages are the other way round: they are state, and
  * `appendMessages` replaces one when a newer copy arrives.
  *
- * The project is checked before the thread is inserted. Its insert is
- * `do nothing` too, so a tombstone stays one -- and a thread row created
- * beneath it would be a live thread on a dead project, which the next list
- * by project hands out as the account's conversation. An ordering, not a
- * lock: under READ COMMITTED a `deleteProject` committing between the two
- * statements still leaves such a thread, and the next push to it is what
- * tells the device.
+ * The project row is read, never created (HOO-2882): a push that created it
+ * let a client mint project rows outside the project cap. Read before the
+ * thread is inserted, because a thread row created beneath a tombstone would
+ * be a live thread on a dead project, which the next list by project hands
+ * out as the account's conversation.
  *
  * @param {import("pg").PoolClient} client
  * @param {{threadId: string, projectId: string, title?: string|null}} thread
  * @returns {Promise<string>} the thread id
+ * @throws {NoProject} when the account has no row for the project
  * @throws {NotYours} when the id is already somebody else's thread
  * @throws {ThreadDeleted} when the project, or the thread, was deleted
  */
 const ensureThread = async (client, userId, thread) => {
   const { threadId, projectId, title = null } = thread;
-  const kind = projectId.startsWith("tut:") ? "tutorial" : "project";
 
   // `(user_id, id)`, not `id`: a tutorial's id is derived, so every user who
   // starts the same one produces the same string.
-  //
-  // The select reads the statement's snapshot, which is from before the
-  // insert: no row means the insert just made one, which is live.
   //
   // `for share` holds the row until this push commits, and `deleteProject`
   // updates that row first. So a delete either waits for the push and then
@@ -103,16 +183,12 @@ const ensureThread = async (client, userId, thread) => {
   // check could write its messages after the delete had erased the thread.
   const { rows: project } = await run(
     client,
-    `with ensured as (
-       insert into projects (id, user_id, name, kind)
-       values ($1, $2, $1, $3)
-       on conflict (user_id, id) do nothing
-     )
-     select deleted_at from projects where user_id = $2 and id = $1
+    `select deleted_at from projects where user_id = $2 and id = $1
         for share`,
-    [projectId, userId, kind]
+    [projectId, userId]
   );
-  if (project[0]?.deleted_at) throw new ThreadDeleted("project");
+  if (!project.length) throw new NoProject();
+  if (project[0].deleted_at) throw new ThreadDeleted("project");
 
   await run(
     client,
@@ -224,16 +300,27 @@ const VERSION_OF = (row, cast = "") =>
  * Repeatable *within a conversation*, which is as far as a client-minted id
  * can be trusted -- see the `on conflict` below.
  *
+ * The account is measured before and after, under a per-account lock, and a
+ * push that takes it past a cap in `CHAT_LIMITS` is rolled back whole
+ * (HOO-2882): what the account stored before it stays.
+ *
  * @param {{threadId: string, projectId: string, title?: string|null}} thread
+ * `appendMessagesWith(limits)` takes other caps, for tests, which cannot
+ * fill 20,000 messages per case; `appendMessages` holds the real ones.
+ *
  * @returns {Promise<number>} how many rows were written: inserted, or
  * replaced by a newer copy. A copy that lost to the stored one is not counted.
+ * @throws {NoProject} when the account has no row for the project
  * @throws {NotYours} when the thread id is somebody else's
  * @throws {ThreadDeleted} when the thread, or its project, was deleted
+ * @throws {OverChatLimit} when the push takes the account past a cap
  */
-export const appendMessages = async (userId, thread, items) => {
+export const appendMessagesWith = (limits) => async (userId, thread, items) => {
   const client = await (await getPool()).connect();
   try {
     await client.query("begin");
+    await run(client, LOCK_ACCOUNT, [userId]);
+    const before = await measure(client, userId);
     const conversationId = await ensureThread(client, userId, thread);
 
     // One copy per id, the newest. A thread can hold an id twice -- it lives
@@ -305,6 +392,7 @@ export const appendMessages = async (userId, thread, items) => {
       "update conversations set updated_at = now() where id = $1",
       [conversationId]
     );
+    refuseOverLimit(limits)(before, await measure(client, userId));
     await client.query("commit");
     return rowCount;
   } catch (e) {
@@ -314,3 +402,6 @@ export const appendMessages = async (userId, thread, items) => {
     client.release();
   }
 };
+
+/** `appendMessagesWith` under the account caps in `CHAT_LIMITS` */
+export const appendMessages = appendMessagesWith(CHAT_LIMITS);

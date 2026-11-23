@@ -31,6 +31,10 @@ import { openThread } from "./open-thread";
  *   last: a tutorial restarted on this device revives its project with the
  *   project push, and the thread then has to follow it.
  *
+ * Two refusals keep it owed as well (HOO-2882): `no-project`, which the
+ * chat effect answers by pushing it again once its project is accepted, and
+ * `over-limit`, which the panel names.
+ *
  * @returns whether the thread is settled: on the server, or closed by it
  * and forgotten here. `false` means it is still owed and the caller should
  * try again.
@@ -44,6 +48,8 @@ export const pushThread = async (threadId: string): Promise<boolean> => {
     case "thread-deleted":
       return replaceDeleted(threadId);
     case "project-deleted":
+    case "no-project":
+    case "over-limit":
     case "failed":
       return false;
   }

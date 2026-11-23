@@ -22,9 +22,13 @@ export {
   getThread,
   listMessages,
   listThreads,
+  NoProject,
   NotYours,
+  OverChatLimit,
   ThreadDeleted,
 } from "./model/conversations.mjs";
+
+export { CHAT_LIMITS, NO_PROJECT_REASON } from "./model/chat-limits.mjs";
 
 export {
   batchPush,
