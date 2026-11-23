@@ -71,6 +71,10 @@ const METHODS: { value: IdlBuildMethod; label: string; needs: string }[] = [
   },
 ];
 
+/** Under the picker, so it reads for either method: the build compiles and runs the project, imported ones included */
+const TRUST_NOTE =
+  "The build runs this project's code: build only code you trust, and use Docker for someone else's project.";
+
 /** The dialog's gutter, shared by its header, steps and foot */
 const GUTTER = "px-5";
 
@@ -293,6 +297,7 @@ const Guide = ({ p }: { p: BaseIdlBuildGuideProps }) => (
             </label>
           ))}
         </RadioGroup>
+        <p className="text-xs text-muted-foreground">{TRUST_NOTE}</p>
       </div>
       <ol
         aria-label="Steps"

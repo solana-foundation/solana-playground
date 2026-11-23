@@ -169,6 +169,19 @@ describe("features/idl-build-guide", () => {
   });
 
   it.each(["Docker", "Local toolchain"] as const)(
+    "warns under %s that the build runs the project's code",
+    (method) => {
+      const dialog = openFrom("build");
+      pick(dialog, method);
+      expect(
+        within(dialog).getByText(
+          "The build runs this project's code: build only code you trust, and use Docker for someone else's project."
+        )
+      ).toBeTruthy();
+    }
+  );
+
+  it.each(["Docker", "Local toolchain"] as const)(
     "ends %s at the IDL's drop zone",
     (method) => {
       const dialog = openFrom("build");
