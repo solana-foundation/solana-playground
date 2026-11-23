@@ -145,6 +145,7 @@ All Unmasked in Doppler: none is a secret, and `migrate-production-db` reads the
 | `GITHUB_CLIENT_ID` | The production OAuth app's Client ID (step 5) | Unmasked | Step 6 |
 | `GITHUB_CLIENT_SECRET` | The production OAuth app's client secret (step 5) | Masked | Step 6 |
 | `AUTH_OAUTH_PROXY_SECRET`, `AUTH_OAUTH_PROXY_URL` | Never on Production: they let previews sign in through production, and this project has no previews | | |
+| `CRON_SECRET` | `openssl rand -base64 32`, generated for production and used nowhere else. Vercel Cron sends it to `/api/retention` once a day. Unset, the route answers `503` and no expired data is removed ([Retention and account deletion](#retention-and-account-deletion)) | Masked | Step 6 |
 
 ### Assistant default backend (Nous Research)
 
@@ -171,7 +172,7 @@ spend](deploy-client-vercel.md#default-backend-spend)); do not set it up for the
 | `SENTRY_AUTH_TOKEN` | A Sentry auth token that may upload source maps to that project. Read by the build only | **Unmasked**: a local build pulls a Vercel Secret as empty, and then fails | Step 6 |
 | `SENTRY_TRACES_SAMPLE_RATE` | `0` to `1`. Unset traces every API request | Unmasked | |
 | `SENTRY_PREVIEW_ENABLED`, `SOURCEMAPS_PREVIEW_ENABLED` | Never on Production: Preview only | | |
-| `REACT_APP_GA_MEASUREMENT_ID` | `G-...`, the Google Analytics 4 measurement id, if the Foundation uses Google Analytics. Unset, the page carries no tag | Unmasked | Step 6 |
+| `REACT_APP_GA_MEASUREMENT_ID` | `G-...`, the Google Analytics 4 measurement id, if the Foundation uses Google Analytics. Unset, the page carries no tag. Set, the tag loads only for a visitor who allows analytics, in the consent banner or in Settings, so Google Analytics counts only those visitors | Unmasked | Step 6 |
 | `REACT_APP_LOG_LEVEL` | Unset logs `warn` in production | Unmasked | |
 
 ### Solana RPC and deploys
@@ -389,7 +390,7 @@ Then ask `<BUILD_SERVER_CONTACT>` for this deployment's entry of the build serve
 `PG_BUILD_SERVER_API_KEY`) and to add `https://<VERCEL_APP_DOMAIN>` to `PG_CLIENT_URLS` on the build server.
 
 **Check:** `npx vercel@62.7.0 env ls production` lists the step 3 variables, `SYNC_ENABLED`, `AUTH_SECRET`,
-`AUTH_BASE_URL`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `PG_AI_API_KEY`, `PG_AI_NEWCOMER_API_KEY`,
+`AUTH_BASE_URL`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `CRON_SECRET`, `PG_AI_API_KEY`, `PG_AI_NEWCOMER_API_KEY`,
 `REACT_APP_SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, `REACT_APP_SERVER_URL`, `PG_BUILD_SERVER_URL` and `PG_BUILD_SERVER_API_KEY`, plus any optional ones you set,
 with no `AGENT_*`, `DATABASE_URL` or `AUTH_OAUTH_PROXY_*` name. Only the Masked ones carry the Secret badge in the
 dashboard.
@@ -790,6 +791,20 @@ merges after that. Migrations are written so the code already deployed keeps wor
   credits are added, and Sentry receives the `api:agent` error `upstream credit balance is empty`.
 - **A leaked key:** create a new one in Nous with the same limits, replace it in `<DOPPLER_CONFIG>` (the sync
   redeploys), check the new deployment is Current, then revoke the old one.
+
+### Retention and account deletion
+
+- **The retention job** runs once a day: Vercel Cron calls `GET /api/retention` with `CRON_SECRET`
+  (`client-v2/vercel.json`, `crons`). It deletes expired sessions and `build_audit` rows older than 90 days, and
+  clears the names of deleted projects. Vercel → Settings → Cron Jobs lists it, with a Run button for a run by hand.
+- **Check a run:** Logs, filtered to `/api/retention`. A `200` carries the counts
+  `{"sessions":n,"buildAudit":n,"projectNames":n}`. A `500` means one step failed: Sentry has the `api:retention`
+  error, and the other steps still ran. A `503` means `CRON_SECRET` is missing from the deployment: set it in
+  `<DOPPLER_CONFIG>` ([Production environment](#production-environment)).
+- **Account deletion** is the user's own action, in the account menu. It removes the account's projects, chats,
+  sessions and AI usage, and clears their GitHub login and id from `build_audit`. If GitHub could not revoke the app's
+  access, the menu tells the user to remove it at `https://github.com/settings/applications`.
+- **A deletion request by email**, from someone who cannot sign in: tell Alexander. Do not delete rows by hand.
 
 ### Adding an operator
 

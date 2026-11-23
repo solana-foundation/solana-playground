@@ -38,6 +38,9 @@ as soon as the Root Directory points at `client-v2`.
      `api/conversations.mjs` answer its writes with `403`. A production build with `PG_AI_API_KEY` fails
      without it (`scripts/check-agent-env.mjs`).
    - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — see step 3.
+   - `CRON_SECRET` — generated for production; without it the daily
+     retention job answers `503`
+     ([Conversation and project sync](#conversation-and-project-sync)).
    - `SENTRY_AUTH_TOKEN`: a production build fails without it
      (`scripts/upload-sourcemaps.mjs`). A local `vercel build` pulls a
      Sensitive variable as an empty value, which fails the same way, so a
@@ -643,6 +646,7 @@ before this existed.
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | The OAuth app. Its callback URL must match `AUTH_BASE_URL`; previews carry the host's pair |
 | `AUTH_OAUTH_PROXY_URL` | Previews only: the origin of the host, the deployment whose callback is on the GitHub app |
 | `AUTH_OAUTH_PROXY_SECRET` | The OAuth proxy's encryption key. The same value on the host and every preview, never `AUTH_SECRET`'s. Unset, the proxy is off |
+| `CRON_SECRET` | Production only. Vercel Cron sends it as `Authorization: Bearer` to `/api/retention`, the daily job that deletes expired sessions and old `build_audit` rows and clears deleted projects' names. Unset, the route answers `503` and nothing is removed. Vercel runs crons on production deployments only |
 
 ### GitHub tokens at rest
 
