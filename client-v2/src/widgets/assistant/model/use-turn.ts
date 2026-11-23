@@ -407,7 +407,7 @@ interface HeldProvider {
 }
 
 /** Every mounted hook's provider, so a test can see what still holds a key */
-const heldProviders = new Set<{ current: HeldProvider | null }>();
+const heldProviders = new Set<{ current: HeldProvider | undefined }>();
 
 /**
  * The connections mounted hooks still hold a provider for. Delete my key must
@@ -477,7 +477,7 @@ export const useTurn = ({ open, draftKey }: TurnOptions): Turn => {
   // connect and be stored with the thread
   const [promptWaiting, setPromptWaiting] = useState(false);
 
-  const provider = useRef<HeldProvider | null>(null);
+  const provider = useRef<HeldProvider | undefined>(undefined);
   // A provider for a connection the store no longer holds is never sent on
   // again (a send rebuilds on any other connection), so it is dropped at once:
   // otherwise Delete my key leaves the key here until the next send. A turn
@@ -486,7 +486,7 @@ export const useTurn = ({ open, draftKey }: TurnOptions): Turn => {
     heldProviders.add(provider);
     const changes = PgAssistant.onDidChange(() => {
       if (provider.current?.connection !== PgAssistant.connection) {
-        provider.current = null;
+        provider.current = undefined;
       }
     });
     return () => {
