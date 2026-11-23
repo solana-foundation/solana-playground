@@ -480,7 +480,7 @@ export const useTurn = ({ open, draftKey }: TurnOptions): Turn => {
   // A provider for a connection the store no longer holds is never sent on
   // again (a send rebuilds on any other connection), so it is dropped at once:
   // otherwise Delete my key leaves the key here until the next send. A turn
-  // still running keeps its own copy until it ends (this hook's `runTurn`)
+  // still running keeps its own copy until it ends (this hook's `runTurn`, not `shared/lib/ai`'s)
   useEffect(() => {
     heldProviders.add(provider);
     const changes = PgAssistant.onDidChange(() => {

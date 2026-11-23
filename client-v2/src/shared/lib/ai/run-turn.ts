@@ -228,13 +228,13 @@ const toTurnError = (error: unknown, apiKey: string | undefined) => {
   // Spec 08: the status and the server's words stay in the log. Not when the
   // provider refused the user's key or its access: its words may echo part of
   // the key, which `redactKey` cannot match, and every `warn` rides along as a
-  // breadcrumb of a later Sentry report. The hosted backend sends no user key,
-  // so its words stay
-  const aboutTheKey =
-    apiKey !== undefined && (kind === "key-refused" || kind === "forbidden");
+  // breadcrumb of a later Sentry report. The hosted backend sends no user key
+  // (its connection's is empty), so its words stay
+  const isAboutTheKey =
+    !!apiKey && (kind === "key-refused" || kind === "forbidden");
   log.warn("model request failed", {
     report: isReportedFailure(kind, status),
-    context: aboutTheKey ? { status } : { status, detail },
+    context: isAboutTheKey ? { status } : { status, detail },
   });
   return new AiTurnError(FAILURE_MESSAGE[kind], {
     kind,

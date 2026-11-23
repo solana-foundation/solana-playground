@@ -304,9 +304,12 @@ describe("runTurn", () => {
 
       it("keeps the words of a 401 from the hosted backend, which sends no user key", async () => {
         const { fetch } = fakeFetch(openAiError(401, "Deployment protected"));
-        await runTurn({ model: openAi(fetch), messages: USER }).catch(
-          (e: unknown) => e
-        );
+        // The hosted connection's key is empty, as `DEFAULT_CONNECTION` holds it
+        await runTurn({
+          model: openAi(fetch),
+          messages: USER,
+          apiKey: "",
+        }).catch((e: unknown) => e);
 
         expect(failedRequests().map((entry) => entry.context)).toEqual([
           {
