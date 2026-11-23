@@ -391,6 +391,33 @@ const unconnectedPreset = (): ConnectPreset | undefined => {
  */
 const restored = new WeakSet<Connection>();
 
+/** What a mounted hook keeps to send on: one provider per connection and conversation */
+interface HeldProvider {
+  connection: Connection;
+  /** The conversation its history was seeded from */
+  threadId: string | null;
+  /** `PgAssistant.conversation` when it was seeded */
+  conversation: number;
+  /**
+   * Every file in the context at a send since it was seeded: what its
+   * history may hold the content of
+   */
+  context: ReadonlySet<string>;
+  instance: Provider;
+}
+
+/** Every mounted hook's provider, so a test can see what still holds a key */
+const heldProviders = new Set<{ current: HeldProvider | null }>();
+
+/**
+ * The connections mounted hooks still hold a provider for. Delete my key must
+ * leave none: the connection carries the key.
+ */
+export const heldTurnConnections = (): Connection[] =>
+  [...heldProviders].flatMap((held) =>
+    held.current ? [held.current.connection] : []
+  );
+
 export const useTurn = ({ open, draftKey }: TurnOptions): Turn => {
   const [, render] = useReducer((n: number) => n + 1, 0);
   useEffect(() => PgAssistant.onDidChange(render).dispose, []);
@@ -450,19 +477,23 @@ export const useTurn = ({ open, draftKey }: TurnOptions): Turn => {
   // connect and be stored with the thread
   const [promptWaiting, setPromptWaiting] = useState(false);
 
-  const provider = useRef<{
-    connection: Connection;
-    /** The conversation its history was seeded from */
-    threadId: string | null;
-    /** `PgAssistant.conversation` when it was seeded */
-    conversation: number;
-    /**
-     * Every file in the context at a send since it was seeded: what its
-     * history may hold the content of
-     */
-    context: ReadonlySet<string>;
-    instance: Provider;
-  } | null>(null);
+  const provider = useRef<HeldProvider | null>(null);
+  // A provider for a connection the store no longer holds is never sent on
+  // again (a send rebuilds on any other connection), so it is dropped at once:
+  // otherwise Delete my key leaves the key here until the next send. A turn
+  // still running keeps its own copy until it ends (`runTurn`)
+  useEffect(() => {
+    heldProviders.add(provider);
+    const changes = PgAssistant.onDidChange(() => {
+      if (provider.current?.connection !== PgAssistant.connection) {
+        provider.current = null;
+      }
+    });
+    return () => {
+      changes.dispose();
+      heldProviders.delete(provider);
+    };
+  }, []);
   const turn = liveTurn;
   // Set from the first `send` until its turn starts, so a second send in the
   // meantime (a double Enter, a suggestion clicked twice) cannot start another

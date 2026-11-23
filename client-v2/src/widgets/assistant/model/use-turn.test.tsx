@@ -40,7 +40,7 @@ import {
 } from "../../../views/sidebar/assistant/store";
 import { resetDefaultBackendProbe } from "./default-backend";
 import type { ConnectOpener } from "./use-turn";
-import { useTurn } from "./use-turn";
+import { heldTurnConnections, useTurn } from "./use-turn";
 
 // The real providers stream from the network; a turn here is whatever the
 // stub's `send` does
@@ -840,6 +840,21 @@ describe("useTurn", () => {
     // Seeded from what is rendered: the first exchange is on screen
     const seed = vi.mocked(createProvider).mock.calls[1][1];
     expect(seed?.length).toBeGreaterThan(0);
+  });
+
+  it("lets go of the key on Delete my key, not at the next send", async () => {
+    PgAssistant.connect({
+      id: "anthropic",
+      apiKey: "k",
+      settings: { model: "claude-sonnet-5-5", effort: "high" },
+    });
+    const { result } = renderHook(() => useTestTurn());
+    await act(() => result.current.send("one"));
+    expect(heldTurnConnections()).toHaveLength(1);
+
+    act(() => PgAssistant.disconnect());
+
+    expect(heldTurnConnections()).toEqual([]);
   });
 
   it("rebuilds the provider once what is rendered is dropped, with no thread open", async () => {

@@ -225,10 +225,12 @@ const toTurnError = (error: unknown, apiKey: string | undefined) => {
   const status = error.statusCode;
   const detail = redactKey(apiCallDetail(error, body), apiKey);
   const kind = failureKindOf(status, body);
-  // Spec 08: the status and the server's words stay in the log
+  // Spec 08: the status and the server's words stay in the log. Not for a
+  // refused key: a provider may echo part of it, which `redactKey` cannot
+  // match, and every `warn` rides along as a breadcrumb of a later Sentry report
   log.warn("model request failed", {
     report: isReportedFailure(kind, status),
-    context: { status, detail },
+    context: kind === "key-refused" ? { status } : { status, detail },
   });
   return new AiTurnError(FAILURE_MESSAGE[kind], {
     kind,

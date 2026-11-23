@@ -240,6 +240,19 @@ describe("runTurn", () => {
       expect(reported()).toEqual([]);
     });
 
+    // Every `warn` is a Sentry breadcrumb, and `redactKey` catches only the
+    // whole key: a provider that echoes part of it would put that in a later report
+    it("logs only the status for a refused key, not the provider's words", async () => {
+      const failure = await failOn(
+        openAiError(401, "Incorrect API key provided: test-k*******-123")
+      );
+
+      expect(failure.kind).toBe("key-refused");
+      const logged = entries.filter((entry) => entry.level === "warn");
+      expect(logged.map((entry) => entry.context)).toEqual([{ status: 401 }]);
+      expect(JSON.stringify(logged)).not.toContain("Incorrect API key");
+    });
+
     it("a 400 the provider could not read is reported, and not resent", async () => {
       const failure = await failOn(openAiError(400, "Invalid 'messages[0]'"));
 
