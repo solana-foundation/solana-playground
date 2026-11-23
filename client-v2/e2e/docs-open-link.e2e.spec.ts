@@ -232,13 +232,17 @@ test.describe("client-run", () => {
     page,
   }) => {
     await page.goto(
-      docsLink({ name: "hello.ts", code: 'console.log("hi")', from: DOCS_PAGE })
+      docsLink({
+        name: "hello.ts",
+        code: 'console.log("ran-" + "once")',
+        from: DOCS_PAGE,
+      })
     );
     await page.locator("#flow-run").click(LONG);
 
     const dialog = confirmDialog(page);
     await expect(dialog).toContainText("hello.ts");
-    await expect(dialog).toContainText('console.log("hi")');
+    await expect(dialog).toContainText('console.log("ran-" + "once")');
     await expect(dialog).toContainText(
       "The link says this code comes from solana.com"
     );
@@ -249,7 +253,10 @@ test.describe("client-run", () => {
     await page.locator("#flow-run").click();
     await expect(callout(page)).toHaveAttribute("data-state", "done", LONG);
     await expect(confirmDialog(page)).toHaveCount(0);
-    await expect(page.locator(".xterm-rows")).toContainText(/hi[\s\S]*hi/);
+    // The source holds "ran-" + "once" apart: only the script's output joins it
+    await expect(page.locator(".xterm-rows")).toContainText(
+      /ran-once[\s\S]*ran-once/
+    );
   });
 
   test("client-run: Cancel", async ({ page }) => {

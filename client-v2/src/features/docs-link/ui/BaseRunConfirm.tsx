@@ -89,7 +89,14 @@ const BaseRunConfirm: FC<BaseRunConfirmProps> = ({
                 {link.code.split("\n").map((line, index) => (
                   // A line has no identity beyond its place in the file
                   // eslint-disable-next-line react/no-array-index-key
-                  <CodeBlockLine key={index}>{line}</CodeBlockLine>
+                  // Wrapped, so a crafted line cannot hide its end past the
+                  // right edge; the number stays in the gutter's first row
+                  <CodeBlockLine
+                    key={index}
+                    className="whitespace-pre-wrap break-all"
+                  >
+                    {line}
+                  </CodeBlockLine>
                 ))}
               </CodeBlockContent>
             </CodeBlock>

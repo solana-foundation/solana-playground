@@ -6,7 +6,7 @@ export interface DocsLink {
   name: string;
   /** The file's text */
   code: string;
-  /** Shown above the code, as "From {host}: {title}" */
+  /** Shown above the code, as "Opened from a link: {title}" */
   title: string;
   /** The `https:` page on `solana.com` the link came from */
   from?: string;

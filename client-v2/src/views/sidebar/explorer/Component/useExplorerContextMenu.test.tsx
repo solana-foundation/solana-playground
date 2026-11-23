@@ -20,8 +20,19 @@ const explorer = vi.hoisted(() => ({
   getSelectedEl: vi.fn(),
 }));
 const view = vi.hoisted(() => ({ setModal: vi.fn(), setToast: vi.fn() }));
+const run = vi.hoisted(() => {
+  const answer = { isAgreed: true };
+  return {
+    answer,
+    execute: vi.fn(async () => undefined),
+    askFirst: vi.fn(async () => answer.isAgreed),
+  };
+});
+vi.mock("@/features/docs-link", () => ({
+  PgClientRun: { askFirst: run.askFirst },
+}));
 vi.mock("../../../../utils", () => ({
-  PgCommand: {},
+  PgCommand: { run: { execute: run.execute } },
   PgCommon: { keys: Object.keys },
   PgExplorer: {
     getItemTypeFromEl: explorer.getItemTypeFromEl,
@@ -128,4 +139,29 @@ describe("useExplorerContextMenu modal actions", () => {
       });
     }
   );
+});
+
+describe("useExplorerContextMenu Run", () => {
+  // A link's code must not run from the menu before the user agreed to it
+  it.each(["runClient", "runClientFolder", "addClient"] as const)(
+    "%s asks before the first run of a link's code",
+    async (action) => {
+      run.answer.isAgreed = false;
+      const { result } = renderHook(() => useExplorerContextMenu());
+
+      await result.current[action]();
+
+      expect(run.askFirst).toHaveBeenCalledTimes(1);
+      expect(run.execute).not.toHaveBeenCalled();
+    }
+  );
+
+  it("runs once agreed", async () => {
+    run.answer.isAgreed = true;
+    const { result } = renderHook(() => useExplorerContextMenu());
+
+    await result.current.runClientFolder();
+
+    expect(run.execute).toHaveBeenCalledTimes(1);
+  });
 });

@@ -213,6 +213,8 @@ const listen = () => {
 const isAgreed = async (since: number): Promise<boolean> => {
   const link = PgDocsLink.opened;
   if (!link || link === confirmedLink) return true;
+  // One question at a time: a second asker would orphan the first's answer
+  if (answer) return false;
   const isYes = await new Promise<boolean>((resolve) => {
     answer = resolve;
     set({ kind: "confirm", link, previous: restingOf(state) });
@@ -371,6 +373,17 @@ export const PgClientRun = {
       isStarting = false;
     }
     await runScripts();
+  },
+
+  /**
+   * Ask before a run that does not start from Run, such as the explorer's
+   * menu: the same question, once per link.
+   *
+   * @returns whether to run: no link, a link already agreed to, or Run
+   */
+  askFirst() {
+    listen();
+    return isAgreed(switches);
   },
 
   /** The question's Run: the user read the link's code and runs it */

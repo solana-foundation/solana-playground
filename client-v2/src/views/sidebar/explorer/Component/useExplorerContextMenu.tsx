@@ -1,5 +1,6 @@
 import { MouseEvent, useCallback, useState } from "react";
 
+import { PgClientRun } from "@/features/docs-link";
 import { createLogger } from "@/shared/lib/logger";
 
 import { useRenderOnChange } from "../../../../hooks";
@@ -157,7 +158,9 @@ export const useExplorerContextMenu = () => {
     );
   }, []);
 
+  // A run from the menu asks first, as Run does, when a link opened the code
   const addClient = useCallback(async () => {
+    if (!(await PgClientRun.askFirst())) return;
     await PgCommand.run.execute();
   }, []);
 
@@ -174,6 +177,7 @@ export const useExplorerContextMenu = () => {
   }, []);
 
   const runClient = useCallback(async () => {
+    if (!(await PgClientRun.askFirst())) return;
     await PgCommand.run.execute(getPath());
   }, [getPath]);
 
@@ -182,6 +186,7 @@ export const useExplorerContextMenu = () => {
   }, [getPath]);
 
   const runClientFolder = useCallback(async () => {
+    if (!(await PgClientRun.askFirst())) return;
     await PgCommand.run.execute();
   }, []);
 

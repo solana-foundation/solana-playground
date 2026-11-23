@@ -1,4 +1,12 @@
-## ADDED Requirements
+# docs-open-link Specification
+
+## Purpose
+
+How a docs page's "Open in Playground" link opens one file in Playground, and
+how much of what the link says Playground shows as fact: the source is only
+the link's claim, and the SOL it may ask for is capped.
+
+## Requirements
 
 ### Requirement: A link's source is shown as its claim
 
@@ -16,10 +24,10 @@ verified.
 - **AND** no text in it starts with "From solana.com"
 - **AND** its line says the link says it comes from solana.com
 
-#### Scenario: A link with no source
+#### Scenario: No title
 
-- **WHEN** a link has no `from`
-- **THEN** the line says the code came from a link, with no host named
+- **WHEN** a link has no `from` and no `title`, with `name=hello.ts`
+- **THEN** the callout reads "Opened from a link: hello", with no host named
 
 ### Requirement: A link asks for at most 1 SOL
 
@@ -31,7 +39,7 @@ the reason `sol`, as any other invalid value does.
 - **WHEN** a link carries `sol=2`
 - **THEN** "This link is broken" shows and `docs_link_failed` has reason `sol`
 
-#### Scenario: The Quickstart
+#### Scenario: The Quickstart link
 
 - **WHEN** a link carries `sol=0.02`
 - **THEN** it opens

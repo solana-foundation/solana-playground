@@ -66,4 +66,27 @@ describe("BaseRunConfirm", () => {
     confirmFor(undefined);
     expect(screen.queryByRole("dialog")).toBeNull();
   });
+
+  it("cancels from the close button", () => {
+    const { onCancel, onRun } = confirm();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onRun).not.toHaveBeenCalled();
+  });
+
+  it("on a phone, draws no Cancel and leaves the focus off Run", () => {
+    const onRun = vi.fn();
+    const onCancel = vi.fn();
+    render(
+      <BaseRunConfirm link={LINK} isPhone onRun={onRun} onCancel={onCancel} />
+    );
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    expect(document.activeElement?.textContent).not.toBe("Run");
+  });
+
+  it("wraps long lines, so nothing hides past the right edge", () => {
+    confirmFor({ name: LINK.name, code: "x".repeat(400) });
+    const line = document.querySelector("[data-slot=code-block-line]");
+    expect(line?.className).toContain("whitespace-pre-wrap");
+  });
 });

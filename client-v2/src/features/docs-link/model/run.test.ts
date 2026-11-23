@@ -672,5 +672,54 @@ describe("PgClientRun", () => {
       });
       expect(utils.PgCommand.run.execute).not.toHaveBeenCalled();
     });
+
+    it("asks for a run from elsewhere, such as the explorer's menu", async () => {
+      const { PgClientRun, PgDocsLink } = await loadAsking();
+      PgDocsLink.open(QUICKSTART);
+
+      const asked = PgClientRun.askFirst();
+      await Promise.resolve();
+      expect(PgClientRun.state.kind).toBe("confirm");
+      PgClientRun.confirmRun();
+
+      await expect(asked).resolves.toBe(true);
+      await expect(PgClientRun.askFirst()).resolves.toBe(true);
+    });
+
+    it("says no to a second question while one is open", async () => {
+      const { PgClientRun, PgDocsLink } = await loadAsking();
+      PgDocsLink.open(QUICKSTART);
+      const first = PgClientRun.askFirst();
+      await Promise.resolve();
+
+      await expect(PgClientRun.askFirst()).resolves.toBe(false);
+      PgClientRun.confirmRun();
+      await expect(first).resolves.toBe(true);
+    });
+
+    it.each([
+      ["a new link opens", "open"],
+      ["the link clears", "clear"],
+    ] as const)("runs nothing when %s while it asks", async (_, change) => {
+      const { PgClientRun, PgDocsLink } = await loadAsking();
+      PgDocsLink.open(QUICKSTART);
+      const started = PgClientRun.start();
+      await Promise.resolve();
+
+      if (change === "open") {
+        PgDocsLink.open({
+          name: "other.ts",
+          code: "console.log(3)",
+          title: "Other",
+          from: undefined,
+          sol: undefined,
+        });
+      } else PgDocsLink.clear();
+      PgClientRun.confirmRun();
+      await started;
+
+      expect(PgClientRun.state.kind).toBe("idle");
+      expect(utils.PgCommand.run.execute).not.toHaveBeenCalled();
+    });
   });
 });

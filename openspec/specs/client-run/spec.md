@@ -1,4 +1,12 @@
-## ADDED Requirements
+# client-run Specification
+
+## Purpose
+
+How a client project's scripts run from the stage row: Run, the callout above
+the code that says how the run went, and the question Run asks before the
+first run of code a docs link opened.
+
+## Requirements
 
 ### Requirement: The first Run of a link's code asks first
 
@@ -8,7 +16,9 @@ the file's name and code, the source the link claims, and that the code runs
 with the Playground wallet. Run in the dialog runs the project; Cancel and
 closing the dialog run nothing and leave the callout as it was. Once
 confirmed, Run does not ask again for that link; a new link or another opened
-project asks again. A project no docs link opened never shows the dialog.
+project asks again. A project that switches while the dialog shows runs
+nothing. A run from the explorer's menu asks the same question. A project no
+docs link opened never shows the dialog.
 
 #### Scenario: The Quickstart after one confirmation
 
@@ -23,8 +33,3 @@ project asks again. A project no docs link opened never shows the dialog.
 
 - **WHEN** the user presses Cancel in the dialog
 - **THEN** nothing runs and no wallet setup opens
-
-#### Scenario: A project that switched while the dialog was open
-
-- **WHEN** another project opens while the dialog shows
-- **THEN** the dialog closes and nothing runs
