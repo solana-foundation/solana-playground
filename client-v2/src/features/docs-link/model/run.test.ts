@@ -37,6 +37,7 @@ const utils = vi.hoisted(() => {
     PgWallet: {
       state: "pg" as string,
       current: { publicKey: address, isPg: true } as unknown,
+      untilCurrent: async () => undefined,
     },
     PgExplorer: {
       onDidSwitchWorkspace: (cb: () => void) => {

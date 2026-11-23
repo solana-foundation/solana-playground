@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Solana Playground runtime</title>
+    <% for (const src of htmlWebpackPlugin.files.js) { %>
+    <script defer crossorigin="anonymous" src="<%= src %>"></script>
+    <% } %>
+  </head>
+  <body></body>
+</html>

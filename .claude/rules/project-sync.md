@@ -20,7 +20,7 @@ when a session reads a file matching the `paths` in the frontmatter.
 
 - **Chat threads share the code's IndexedDB volume**, as files under
   `/.config/chats/<threadId>.json` via `PgFs`, not in `localStorage`, which is
-  already near its origin budget with `settings`, `wallet`, `theme` and
+  already near its origin budget with `settings`, `theme` and
   `flow.deploys`. A thread has an id of its own. `/.config/chats/index.json`
   (`PgThreadIndex`) maps the stable workspace id to the thread open on that
   workspace, so a rename keeps the conversation. Anything that acts on a

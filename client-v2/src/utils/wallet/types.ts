@@ -2,8 +2,13 @@ import type { PgWeb3 } from "../web3";
 
 /** Wallet state */
 export interface WalletState {
-  /** Wallet connection state */
-  state: "setup" | "disconnected" | "pg" | "sol";
+  /**
+   * Wallet connection state. `unavailable`: a wallet may be stored but could
+   * not be read; it is never saved, so the stored wallet stays as it was.
+   * `loading`: under the key-origin provider, the page load's read waits for
+   * the key page; never saved either.
+   */
+  state: "setup" | "disconnected" | "pg" | "sol" | "unavailable" | "loading";
   /** All accounts */
   accounts: WalletAccount[];
   /** Current wallet index */
@@ -16,23 +21,32 @@ export interface WalletState {
   standardName: string | null;
 }
 
-/** Playground wallet accounts (with keypair) */
+/** Playground wallet accounts, addressed by their public key */
 export interface WalletAccount {
+  /** Name of the account */
+  name: string;
+  /** Base58 public key of the account, which names its key in the provider */
+  publicKey: string;
   /**
-   * ed25519 keypair of the account.
+   * ed25519 keypair of the account, held only where the page keeps the keys
+   * (the `local` signer provider).
    *
    * First 32 bytes are the private key, last 32 bytes are the public key.
    */
-  kp: number[];
-  /** Name of the account */
-  name: string;
+  kp?: number[];
 }
+
+/** The connection states a stored wallet can have: `unavailable` and `loading` are never saved */
+export type SavedWalletState = Exclude<
+  WalletState["state"],
+  "unavailable" | "loading"
+>;
 
 /** Serialized wallet that's used in storage */
 export type SerializedWalletState = Pick<
   WalletState,
-  "state" | "accounts" | "currentIndex" | "standardName"
->;
+  "accounts" | "currentIndex" | "standardName"
+> & { state: SavedWalletState };
 
 /** Legacy or versioned transaction */
 export type AnyTransaction = PgWeb3.Transaction | PgWeb3.VersionedTransaction;
@@ -44,16 +58,27 @@ export type AnyTransaction = PgWeb3.Transaction | PgWeb3.VersionedTransaction;
  * **NOTE:** If this is a Standard Wallet, it should always have its `publicKey`
  * field defined (non-nullable).
  */
-export type Wallet = PgWallet | StandardWallet<true>;
+export type Wallet = PlaygroundWallet | StandardWallet<true>;
 
 /** Playground Wallet props */
-type PgWallet = {
+export type PlaygroundWallet = {
   /** The wallet is Playground Wallet */
   isPg: true;
   /** Keypair of the Playground Wallet account */
   keypair: PgWeb3.Keypair;
   /** Name of the account */
   name: string;
+  /**
+   * Sign a transaction's serialized message, of any version: the signature
+   * goes over the message bytes, as Kit's signers sign. A v1 transaction,
+   * which web3.js cannot read, is signed this way (`signRequestWith`).
+   * It signs whatever it is given: a caller reads the bytes as a transaction
+   * message first, as `signRequestWith` does.
+   *
+   * @param bytes the transaction's message bytes
+   * @returns the account's signature of them
+   */
+  signTransactionBytes(bytes: Uint8Array): Promise<Uint8Array>;
 } & NonNullablePublicKeyProp &
   SignerWalletProps;
 

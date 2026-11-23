@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Solana Playground wallet keys</title>
+    <style>
+      /* The panel draws the design system's outline button from the tokens
+         the app sends (`--*`, set on <html>). The app sizes the frame to the
+         button plus the focus ring's width on each side, which is the body's
+         margin, so the ring is drawn whole. */
+      html,
+      body {
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+      }
+      body {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 3px;
+      }
+      button {
+        box-sizing: border-box;
+        width: 100%;
+        height: var(--height, 2rem);
+        padding: var(--padding, 0 0.625rem);
+        font-family: var(--font, system-ui, sans-serif);
+        font-size: var(--font-size, 0.875rem);
+        font-weight: var(--font-weight, 500);
+        line-height: 1.25rem;
+        white-space: nowrap;
+        color: var(--fg, CanvasText);
+        background: var(--bg, transparent);
+        background-clip: padding-box;
+        border: 1px solid var(--border, currentColor);
+        border-radius: var(--radius, 0.5rem);
+        outline: none;
+        cursor: pointer;
+        user-select: none;
+        transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      button:hover {
+        color: var(--hover-fg, var(--fg, CanvasText));
+        background: var(--hover-bg, var(--bg, transparent));
+        background-clip: padding-box;
+      }
+      button:active {
+        transform: translateY(1px);
+      }
+      button:focus-visible {
+        border-color: var(--focus, Highlight);
+        box-shadow: 0 0 0 3px var(--ring, Highlight);
+      }
+      button:disabled {
+        opacity: 0.5;
+        pointer-events: none;
+      }
+      button[aria-busy="true"] {
+        cursor: progress;
+      }
+    </style>
+    <% for (const src of htmlWebpackPlugin.files.js) { %>
+    <script defer crossorigin="anonymous" src="<%= src %>"></script>
+    <% } %>
+  </head>
+  <body></body>
+</html>

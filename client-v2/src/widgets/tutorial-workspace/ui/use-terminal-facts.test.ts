@@ -27,7 +27,7 @@ const h = vi.hoisted(() => ({
 
 vi.mock("@/utils", () => ({
   PgExplorer: { currentWorkspaceName: "Hello Anchor" },
-  PgProgramInfo: { idl: null },
+  PgProgramInfo: { idl: null, callableIdl: () => null },
 }));
 vi.mock("@/views/flow/state/stage", () => ({ PgFlow: {} }));
 vi.mock("@/features/tutorial-conversation", () => ({

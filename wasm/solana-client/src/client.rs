@@ -26,6 +26,7 @@ use solana_sdk::{
 
 use crate::{
     constants::{MAX_RETRIES, SLEEP_MS},
+    deferred_signer,
     methods::*,
     provider::Provider,
     utils::{
@@ -248,6 +249,8 @@ impl WasmClient {
         transaction: &Transaction,
         config: RpcSendTransactionConfig,
     ) -> ClientResult<Signature> {
+        // A key that signs asynchronously left a marker in its slot
+        let transaction = &deferred_signer::fill_deferred_signatures(transaction).await?;
         let request = SendTransactionRequest::new_with_config(transaction.to_owned(), config);
         let response: SendTransactionResponse = self.send(request).await?;
 

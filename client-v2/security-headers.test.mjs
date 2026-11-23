@@ -22,9 +22,10 @@ import { describe, it } from "node:test";
 
 import { platformRules } from "./scripts/serve-build.mjs";
 
-const { headers } = platformRules(
+const { headersFor } = platformRules(
   JSON.parse(readFileSync(new URL("./vercel.json", import.meta.url), "utf8"))
 );
+const headers = headersFor("/");
 
 /** A CSP header's directives, in header order, as `[name, sources]` */
 const directiveList = (value) =>
@@ -94,4 +95,20 @@ describe("vercel.json security headers", () => {
     assert.equal(headers["Cross-Origin-Embedder-Policy"], "require-corp");
     assert.equal(headers["Cross-Origin-Opener-Policy"], "same-origin");
   });
+});
+
+describe("vercel.json headers of the pages the app frames", () => {
+  // Each sets its own CSP after the app's rule, which replaces the app's
+  // `frame-ancestors 'none'`; a browser ignores `X-Frame-Options` once the
+  // enforced policy has `frame-ancestors`
+  for (const page of ["/runtime.html", "/wallet-keys.html"]) {
+    it(`lets the app frame ${page}`, () => {
+      const own = Object.fromEntries(
+        directiveList(headersFor(page)["Content-Security-Policy"])
+      );
+      assert.ok(own["frame-ancestors"], "frame-ancestors is enforced");
+      assert.ok(own["frame-ancestors"].includes("'self'"));
+      assert.ok(!own["frame-ancestors"].includes("'none'"));
+    });
+  }
 });
