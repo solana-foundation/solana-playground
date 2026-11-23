@@ -14,14 +14,12 @@ export interface BaseChatLimitRowProps {
  */
 export function BaseChatLimitRow({ limit }: BaseChatLimitRowProps) {
   return (
-    <Callout
-      id="assistant-chat-limit"
-      variant="warning"
-      role="status"
-      className="mx-2 mb-2 shrink-0"
-    >
-      <CalloutTitle>Conversations are not syncing</CalloutTitle>
-      <CalloutDescription>{chatLimitText(limit)}</CalloutDescription>
-    </Callout>
+    // The composer's own inset (`AssistantComposer`), so the two rows line up
+    <div className="shrink-0 px-3 pt-2">
+      <Callout id="assistant-chat-limit" variant="warning" role="status">
+        <CalloutTitle>Conversations are not syncing</CalloutTitle>
+        <CalloutDescription>{chatLimitText(limit)}</CalloutDescription>
+      </Callout>
+    </div>
   );
 }

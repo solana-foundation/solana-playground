@@ -31,7 +31,7 @@ export const chatLimitText = ({ reason, limit }: ChatLimitExceeded) =>
   "Delete a synced project you no longer need to remove its conversations " +
   "and make room.";
 
-/** The cap the last conversation push was refused for, or `null` */
+/** The cap a conversation push was last refused for, or `undefined` */
 export const useChatLimit = () => {
   const [limit, setLimit] = useState(chatSyncLimit);
   useEffect(

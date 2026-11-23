@@ -3,7 +3,7 @@ import { before, beforeEach, describe, it } from "node:test";
 import pg from "pg";
 
 import {
-  appendMessages,
+  appendMessages as appendToExisting,
   getThread,
   listThreads,
   ThreadDeleted,
@@ -17,6 +17,26 @@ import {
   saveProject,
   writeProject,
 } from "./projects.mjs";
+
+/**
+ * `appendMessages` as these fixtures knew it: a push used to create its
+ * project row, and no longer does (HOO-2882). The row is made first, the way
+ * a synced project would have it; an existing row, tombstone included, is
+ * left as it is.
+ */
+// eslint-disable-next-line max-params -- the signature of the function it stands in for
+const appendMessages = async (userId, thread, items) => {
+  await query(
+    `insert into projects (id, user_id, name, kind) values ($1, $2, $1, $3)
+     on conflict (user_id, id) do nothing`,
+    [
+      thread.projectId,
+      userId,
+      thread.projectId.startsWith("tut:") ? "tutorial" : "project",
+    ]
+  );
+  return appendToExisting(userId, thread, items);
+};
 
 // `yarn test-api` loads `.env`; without a database this suite skips rather
 // than fails, which is what lets the unit suites run on their own.

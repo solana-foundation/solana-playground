@@ -165,7 +165,7 @@ export function Assistant({ widen, onHide, openConnect }: AssistantProps) {
       {view === "chat" && (
         <>
           <Thread turn={turn} project={project} />
-          {chatLimit && <BaseChatLimitRow limit={chatLimit} />}
+          {signedIn && chatLimit && <BaseChatLimitRow limit={chatLimit} />}
           <AssistantComposer
             turn={turn}
             onSources={openSources}

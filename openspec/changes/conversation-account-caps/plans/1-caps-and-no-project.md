@@ -11,16 +11,17 @@ Goal: tasks 1.1-2.3 of `conversation-account-caps`, one PR into foundation
    `create index messages_bytes_idx on messages (conversation_id) include (bytes)`
    so the measure is an index-only scan. `yarn db-migrate`, `yarn db-dump`.
 2. **`model/chat-limits.mjs`**: `CHAT_LIMITS = {threads: 200, messages: 20000,
-   bytes: 32 MiB}`, `CHAT_LIMIT_REASONS`, `chatLimitExceeded(reason, count)`,
+   bytes: 32 MiB}`, `CHAT_LIMIT_ORDER`, `NO_PROJECT_REASON`,
    `readChatLimitExceeded(body)` (client side, checks every field).
 3. **`model/conversations.mjs`**:
-   - `appendMessages(userId, thread, items, {limits})`: after `begin`, take
+   - `appendMessagesWith(limits)(userId, thread, items)`, with
+     `appendMessages` bound to `CHAT_LIMITS`: after `begin`, take
      `pg_advisory_xact_lock(hashtextextended('conversations-cap:' || user))`
      in a statement of its own, measure, write, measure again, throw
      `OverChatLimit` for the first measure above its cap that grew.
    - `ensureThread`: `select deleted_at from projects ... for share`, no
      insert; no row throws `NoProject`.
-   - Tests (`model/conversations.test.mjs`, DB-backed, skip without
+   - Tests (`model/conversation-caps.test.mjs`, DB-backed, skip without
      `DATABASE_URL`): unknown project (no rows created), each cap with small
      injected limits (refused, earlier data kept), re-push at the cap passes,
      a happy path.
@@ -31,14 +32,19 @@ Goal: tasks 1.1-2.3 of `conversation-account-caps`, one PR into foundation
 
 5. **`chat-sync.ts`**: `_post` reads a 409 `no-project` into `"no-project"`
    (no failure report) and a 413 with a chat-limit body into `"over-limit"`;
-   `PgChatSync.limit()` + `onDidChangeLimit`; a `"pushed"` clears it.
-   Threads refused for `no-project` are kept per project;
-   `PgChatSync.pushAwaiting(projectId)` pushes them. In-source tests first.
+   `PgChatSync.limit()` + `onDidChangeLimit`, kept per thread so a push that
+   grew nothing does not hide another thread's refusal; a `"pushed"` clears
+   that thread's. Threads refused for `no-project` are kept per project and
+   listed by `PgChatSync.awaiting(projectId)`. `forgetAccountState()` clears
+   both on an account change. In-source tests first.
 6. **Re-push**: `PgProjectSync.onDidAccept(projectId)` fired where a push's
-   mark is written; the chat-thread effect subscribes and calls
-   `pushAwaiting`. `pushThread` maps both new outcomes to "still owed".
-7. **Panel**: a line under the thread from `PgChatSync.limit()`, wording in
-   one function with a unit test.
+   mark is written; the chat-thread effect subscribes and calls `pushThread`
+   for each of `awaiting(projectId)`. `pushThread` maps both new outcomes to
+   "still owed". Sign-out flushes the current project before handing the
+   conversations over, so a new project's row exists first.
+7. **Panel**: a callout above the composer from `chatSyncLimit()` (through
+   `features/persistence/index.ts`), shown only while signed in, wording in
+   `chatLimitText` with a component test.
 
 ## Gate
 

@@ -264,8 +264,9 @@ export class PgChatSync {
       if (outcome !== "pushed") return outcome;
     }
     PgChatSync._awaiting.delete(threadId);
-    // The server took a whole batch, so the account was under every cap it grew
-    PgChatSync._setLimit(undefined);
+    // This thread is on the server. Another one refused for a cap still holds
+    // the row: a push that grew nothing passes at the cap too.
+    PgChatSync._setLimit(threadId, undefined);
     // The rest is on the server, but not the whole thread: a sign-out drops
     // only what the server holds, so this one must not read as `pushed`
     return oversized.length ? "failed" : "pushed";
@@ -285,11 +286,12 @@ export class PgChatSync {
   private static _refusalsReported = new Set<string>();
 
   /**
-   * The cap the last push was refused for, or `undefined` once a push is accepted
-   * again: what the assistant panel says while it holds.
+   * The cap the latest refused push named, while any thread refused for a cap
+   * has not been taken since; otherwise `undefined`. What the assistant
+   * panel says while it holds.
    */
   static limit(): ChatLimitExceeded | undefined {
-    return PgChatSync._limit;
+    return [...PgChatSync._limited.values()].at(-1);
   }
 
   /** Fires whenever `limit()` changes */
@@ -309,20 +311,39 @@ export class PgChatSync {
       .map(([threadId]) => threadId);
   }
 
-  private static _setLimit(limit: ChatLimitExceeded | undefined) {
-    const was = PgChatSync._limit;
-    if (
-      was?.reason === limit?.reason &&
-      was?.limit === limit?.limit &&
-      was?.count === limit?.count
-    ) {
-      return;
+  /**
+   * Forget the caps and the waits this tab holds: they are one account's, and
+   * the next account's pushes say their own. Called on every session change.
+   */
+  static forgetAccountState() {
+    PgChatSync._awaiting.clear();
+    if (!PgChatSync._limited.size) return;
+    PgChatSync._limited.clear();
+    PgChatSync._emitLimit();
+  }
+
+  /** Record a thread refused for a cap, or `undefined` once it is taken */
+  private static _setLimit(
+    threadId: string,
+    limit: ChatLimitExceeded | undefined
+  ) {
+    const before = PgChatSync.limit();
+    if (limit) {
+      // Re-inserted, so the latest refusal is the one `limit()` names
+      PgChatSync._limited.delete(threadId);
+      PgChatSync._limited.set(threadId, limit);
+    } else {
+      PgChatSync._limited.delete(threadId);
     }
-    PgChatSync._limit = limit;
+    if (PgChatSync.limit() !== before) PgChatSync._emitLimit();
+  }
+
+  private static _emitLimit() {
     for (const cb of PgChatSync._limitListeners) cb();
   }
 
-  private static _limit: ChatLimitExceeded | undefined;
+  /** Thread id to the cap its latest push was refused for */
+  private static readonly _limited = new Map<string, ChatLimitExceeded>();
   private static readonly _limitListeners = new Set<() => void>();
 
   /** Thread id to the project id it waits on */
@@ -370,7 +391,7 @@ export class PgChatSync {
       if (response.status === 413) {
         const limit = readChatLimitExceeded(await PgChatSync._body(response));
         if (limit) {
-          PgChatSync._setLimit(limit);
+          PgChatSync._setLimit(threadId, limit);
           PgChatSync._reportRefusal(`account cap: ${limit.reason}`);
           return "over-limit";
         }
@@ -962,6 +983,9 @@ if (import.meta.vitest) {
         });
 
         describe("an account refusal (HOO-2882)", () => {
+          // Static state: each case starts with none of the last case's
+          beforeEach(() => PgChatSync.forgetAccountState());
+
           const capped = {
             reason: "too-many-messages",
             limit: 20_000,
@@ -996,6 +1020,50 @@ if (import.meta.vitest) {
             expect(await PgChatSync.push(threadId)).toBe("pushed");
             expect(PgChatSync.limit()).toBeUndefined();
             expect(changed).toHaveBeenCalledTimes(2);
+            sub.dispose();
+          });
+
+          it("keeps naming the cap while another thread is still refused", async () => {
+            // At the thread cap a push to an old thread grows nothing and
+            // passes, while the new thread still does not sync
+            await signedIn();
+            await PgChatStorage.write(threadId, [item(1)]);
+            const other = await PgThreadIndex.ensure("w2");
+            await PgChatStorage.write(other, [item(2)]);
+
+            answering(413, {
+              error: "over",
+              reason: capped.reason,
+              limit: capped.limit,
+              count: capped.count,
+            });
+            expect(await PgChatSync.push(threadId)).toBe("over-limit");
+            answering(200, {});
+            expect(await PgChatSync.push(other)).toBe("pushed");
+
+            expect(PgChatSync.limit()).toEqual(capped);
+          });
+
+          it("forgets the cap and the waits when the account changes", async () => {
+            await signedIn();
+            await PgChatStorage.write(threadId, [item(1)]);
+            answering(413, {
+              error: "over",
+              reason: capped.reason,
+              limit: capped.limit,
+              count: capped.count,
+            });
+            await PgChatSync.push(threadId);
+            answering(409, { error: "No such project", reason: "no-project" });
+            await PgChatSync.push(threadId);
+            const changed = vi.fn();
+            const sub = PgChatSync.onDidChangeLimit(changed);
+
+            PgChatSync.forgetAccountState();
+
+            expect(PgChatSync.limit()).toBeUndefined();
+            expect(PgChatSync.awaiting("w1")).toEqual([]);
+            expect(changed).toHaveBeenCalledTimes(1);
             sub.dispose();
           });
 

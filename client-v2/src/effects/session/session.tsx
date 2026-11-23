@@ -259,6 +259,19 @@ export const session = (): Disposable => {
     // Independently, not one `try` around both, here and in the teardown: the
     // conversations and the projects are separate data, and one failing is no
     // reason to skip the other.
+    // The editor's push is debounced by seconds, so the workspace in front of
+    // the user is the one most likely to hold something the server has not
+    // seen. Best effort: if this fails, that project fails `isClean` in
+    // `releaseLocalProjects` and is kept, which is the outcome we want anyway.
+    // Before the conversations: a project made since the last push has no
+    // row yet, and the server refuses its thread with `no-project` until it
+    // does (HOO-2882), which would keep the thread off the account.
+    try {
+      await PgProjectSync.pushCurrent();
+    } catch (e) {
+      report("flush before sign-out", e);
+    }
+
     let handed: HandOver | null = null;
     try {
       // A sign-in whose owner write failed left these threads unowned; a
@@ -269,16 +282,6 @@ export const session = (): Disposable => {
       handed = await PgChatSync.pushAll();
     } catch (e) {
       report("hand over conversations", e);
-    }
-
-    // The editor's push is debounced by seconds, so the workspace in front of
-    // the user is the one most likely to hold something the server has not
-    // seen. Best effort: if this fails, that project fails `isClean` in
-    // `releaseLocalProjects` and is kept, which is the outcome we want anyway.
-    try {
-      await PgProjectSync.pushCurrent();
-    } catch (e) {
-      report("flush before sign-out", e);
     }
 
     return async () => {

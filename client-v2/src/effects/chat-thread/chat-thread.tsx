@@ -201,6 +201,9 @@ export const chatThread = (): Disposable => {
     void openOrReport();
   };
 
+  // Whose caps and waits `PgChatSync` holds
+  let accountOfState = PgSession.get()?.id;
+
   const subscriptions = [
     PgExplorer.onDidSwitchWorkspace(() => {
       // The outgoing thread's, not the incoming one's
@@ -213,8 +216,15 @@ export const chatThread = (): Disposable => {
     // the sign-in dump uploads threads before the projects they belong to
     PgProjectSync.onDidAccept((projectId) => {
       for (const threadId of PgChatSync.awaiting(projectId)) {
-        void pushThread(threadId);
+        pushThread(threadId).catch((e) => report("push awaiting thread", e));
       }
+    }),
+    // A cap or a wait is one account's: the next account's pushes say their own
+    PgSession.onDidChange(() => {
+      const userId = PgSession.get()?.id;
+      if (userId === accountOfState) return;
+      accountOfState = userId;
+      PgChatSync.forgetAccountState();
     }),
   ];
 

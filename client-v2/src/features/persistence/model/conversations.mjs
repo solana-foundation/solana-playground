@@ -128,8 +128,8 @@ const measure = async (client, userId) => {
 /**
  * Throw `OverChatLimit` for the first cap, in `CHAT_LIMIT_ORDER`, that the
  * push took the account past. Only a measure the push grew can refuse it: a
- * re-push of stored messages, or any push under a cap lowered beneath what
- * the account already holds, still goes through.
+ * push that grows none, such as a re-push of stored messages, goes through
+ * even when the account already holds more than a cap (one lowered since).
  */
 const refuseOverLimit = (limits) => (before, after) => {
   for (const [reason, key] of CHAT_LIMIT_ORDER) {
