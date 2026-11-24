@@ -15,7 +15,7 @@ Playground SHALL open `/open#<params>`, where `<params>` is URL-encoded
 - `from`: the `https:` page the link came from, on `solana.com` or one of
   its subdomains; optional. Any other value SHALL be ignored, as if absent.
 - `sol`: a minimum devnet balance in SOL that the script needs, a positive
-  decimal; optional.
+  decimal of at most 1 (`open-link-trust`); optional.
 
 The file SHALL open as an unsaved client project holding `client/<name>`,
 with that file open in the editor. The project SHALL be unsaved, as a gist
@@ -30,7 +30,7 @@ server sees the code.
 
 #### Scenario: No title
 - **WHEN** a link has `name=hello.ts` and no `title`
-- **THEN** the callout reads "From a docs link: hello"
+- **THEN** the callout reads "Opened from a link: hello"
 
 #### Scenario: Gist and GitHub links (manual)
 - **WHEN** the user opens `/gist/<id>` or `/<github url>`
@@ -46,7 +46,7 @@ project, when the fragment:
 - has a `code` that is neither base64url nor base64, or does not inflate;
 - has a `code` that inflates to empty text or to more than 100 KiB;
 - has a `name` that breaks the rule above;
-- has a `sol` that is not a positive number.
+- has a `sol` that is not a positive number of at most 1.
 
 A `+` left unescaped in `code` SHALL read as `+`. Inflating SHALL stop as
 soon as the output passes 100 KiB, so a small crafted stream cannot exhaust

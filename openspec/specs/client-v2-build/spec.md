@@ -255,7 +255,8 @@ Rust, one for each name in `WASM_PACKAGES` (`client-v2/scripts/wasm-stubs.sh`):
 `yarn setup`, `yarn build`, the compose `v2` and `v2-prod` profiles, and
 the `client-v2.yml` workflow on pushes to `master` and on every pull request.
 That workflow SHALL fail when a job it requires was skipped, so a skipped wasm
-build cannot pass as success. `anchor-cli` SHALL NOT be one of the packages.
+build cannot pass as success. Neither `anchor-cli` nor `sugar-cli` SHALL be one of
+the packages.
 
 #### Scenario: Setting up a checkout (manual)
 
@@ -269,6 +270,14 @@ build cannot pass as success. `anchor-cli` SHALL NOT be one of the packages.
 - **WHEN** `yarn setup` has run in `client-v2/`
 - **THEN** no `wasm/anchor-cli` folder exists, and
   `client-v2/node_modules/@solana-playground` holds no `anchor-cli`
+
+#### Scenario: No sugar-cli package (manual)
+
+- **WHEN** `yarn setup` has run in `client-v2/`
+- **THEN** no `wasm/sugar-cli` folder exists,
+  `client-v2/node_modules/@solana-playground` holds no `sugar-cli`, and a
+  production build passes `node scripts/wasm-stubs.mjs check-build build`
+  without a `sugar_cli_wasm_bg` module
 
 #### Scenario: A pull request into master (manual)
 
@@ -383,3 +392,25 @@ lacks any of them, and the snapshot test SHALL be skipped, not failed, when
 - **WHEN** `yarn test-build` runs with `USE_WASM_STUBS=true`
 - **THEN** `scripts/bundle-info.build-test.mjs` reports its test as skipped
   and the other build tests run
+
+### Requirement: A build turned away as busy is counted as busy
+
+When the build server's answer is a `429` or `503` that carries
+`Retry-After`, the `build` command SHALL send, through the
+`features/program-build` tracker, `build_failed { framework, reason: "busy" }`
+in place of `reason: "server"`. `reason` thus takes one of `compile`,
+`network`, `server` or `busy`. `build_started` SHALL be sent as before, and
+no other event is added or renamed.
+
+#### Scenario: A build turned away by a build limit (manual)
+
+- **WHEN** an Anchor project's build is answered `429` with `Retry-After`
+- **THEN** the memory provider records `build_started` with
+  `{ framework: "anchor" }`, then `build_failed` with
+  `{ framework: "anchor", reason: "busy" }`
+
+#### Scenario: A 503 without Retry-After (manual)
+
+- **WHEN** a build is answered `503` without `Retry-After`
+- **THEN** the memory provider records `build_failed` with
+  `reason: "server"`

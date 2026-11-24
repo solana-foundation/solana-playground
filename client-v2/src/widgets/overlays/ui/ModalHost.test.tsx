@@ -8,6 +8,7 @@ import {
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useBusyPanels } from "@/components/Wallet/hooks/useBusyPanels";
 import {
   initLogger,
   memoryProvider as logMemory,
@@ -194,6 +195,43 @@ it("should not close on Escape while the submit runs, and answer once it settles
 
   await expect(answer).resolves.toBe("saved");
   expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+it("should stay undismissable while the submit runs after a key panel inside it goes idle", async () => {
+  let finish!: (value: string) => void;
+  let panelBusy!: (busy: boolean) => void;
+  const Setup = () => {
+    const { onBusy } = useBusyPanels();
+    panelBusy = onBusy;
+    return (
+      <ModalFrame
+        name="setup"
+        title="Setup"
+        buttonProps={{
+          text: "Continue",
+          onSubmit: () => new Promise<string>((resolve) => (finish = resolve)),
+        }}
+      />
+    );
+  };
+  render(<ModalHost />);
+  const answer = open(Setup);
+
+  // Continue waits, then an import starts in a panel and fails
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  });
+  act(() => panelBusy(true));
+  act(() => panelBusy(false));
+
+  act(() => {
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+  });
+  expect(screen.getByRole("dialog", { name: "Setup" })).toBeTruthy();
+
+  await act(async () => finish("added"));
+
+  await expect(answer).resolves.toBe("added");
 });
 
 it("should close a dialog that throws while rendering, report it, tell the user and answer null", async () => {

@@ -49,6 +49,7 @@ vi.mock("@/utils", () => ({
     accounts: [{}],
     currentIndex: 0,
     create: () => ({ publicKey: { toBase58: () => WALLET } }),
+    untilLoaded: async () => undefined,
   },
   PgProgramInfo: { pk: undefined, kp: undefined, uuid: "build-uuid" },
   PgExplorer: { currentWorkspaceName: "Hello Anchor", files: {} },
@@ -218,5 +219,40 @@ describe("features/tutorial-conversation/model/runners/real-deploy: realDeployPo
       ok: false,
       message: "The build failed. See the terminal.",
     });
+  });
+});
+
+describe("features/tutorial-conversation/model/runners/real-deploy: realDeployPort.createWallet", () => {
+  it("takes the account a loading wallet brings instead of making another", async () => {
+    const { PgWallet } = await import("@/utils");
+    const wallet = PgWallet as unknown as {
+      accounts: unknown[];
+      untilLoaded: () => Promise<void>;
+      addFirst: () => Promise<boolean>;
+    };
+    const loaded = wallet.accounts;
+    const untilLoaded = wallet.untilLoaded;
+    let finishLoad = () => {};
+    wallet.accounts = [];
+    wallet.untilLoaded = () =>
+      new Promise<void>((resolve) => {
+        finishLoad = () => {
+          wallet.accounts = loaded;
+          resolve();
+        };
+      });
+    const addFirst = vi.fn(async () => true);
+    wallet.addFirst = addFirst;
+
+    try {
+      const made = realDeployPort().createWallet();
+      finishLoad();
+
+      expect(await made).toBe(WALLET);
+      expect(addFirst).not.toHaveBeenCalled();
+    } finally {
+      wallet.accounts = loaded;
+      wallet.untilLoaded = untilLoaded;
+    }
   });
 });

@@ -202,6 +202,11 @@ const VALUE_SHAPES = [
     (name) => name === "REACT_APP_VERCEL_ENV",
     checkWith(/^(production|preview|development)$/, "a Vercel environment"),
   ],
+  // `loopback` or an origin, as `originFor` in src/utils/wallet/key-origin/origin.ts reads it
+  [
+    (name) => name.startsWith("REACT_APP_WALLET_") && name.endsWith("_ORIGIN"),
+    checkWith(/^(loopback|https?:\/\/[^/\s]+\/?)$/, "loopback or an origin"),
+  ],
   [
     (name) => name === "REACT_APP_VERCEL_GIT_COMMIT_SHA",
     checkWith(/^[0-9a-f]{7,40}$/, "a commit sha"),

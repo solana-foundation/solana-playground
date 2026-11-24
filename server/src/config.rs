@@ -1,8 +1,13 @@
-use std::str::FromStr;
+use std::{str::FromStr, time::Duration};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use dotenv::dotenv;
 use solpg_server::SandboxLimits;
+
+use crate::{
+    middlewares::ApiKeys,
+    routes::{QueueLimits, DEFAULT_MAX_WAITING, DEFAULT_MAX_WAIT_SECS},
+};
 
 /// Server configuration
 #[derive(Debug)]
@@ -17,6 +22,13 @@ pub struct Config {
     pub verbose: bool,
     /// Maximum amount of concurrent builds
     pub build_concurrency: usize,
+    /// How many build requests may wait for a slot, and for how long
+    pub build_queue: QueueLimits,
+    /// Keys the build, deploy and unstable routes accept in `x-api-key`, if
+    /// any: `PG_API_KEYS`, comma-separated, one per client, or, only when it
+    /// holds none, `PG_API_KEY`, a single key, which deployments set before
+    /// the list existed
+    pub api_keys: Option<ApiKeys>,
     /// Unstable build configuration
     pub unstable_build: BuildConfig,
     /// Unstable bundle configuration
@@ -42,7 +54,16 @@ impl Config {
             port: get_env("PORT", 8080u16),
             payload_limit: get_env("PAYLOAD_LIMIT", 1024usize * 1024),
             verbose: get_env("VERBOSE", false),
-            build_concurrency: get_env("BUILD_CONCURRENCY", 16usize),
+            // Same as `PG_BUILD_CONCURRENCY` in `app.yaml` and `BUILD_SLOTS` in the Dockerfile
+            build_concurrency: get_env("BUILD_CONCURRENCY", 10usize),
+            build_queue: QueueLimits {
+                max_waiting: get_env("BUILD_QUEUE_LIMIT", DEFAULT_MAX_WAITING),
+                max_wait: Duration::from_secs(get_env(
+                    "BUILD_QUEUE_WAIT_SECS",
+                    DEFAULT_MAX_WAIT_SECS,
+                )),
+            },
+            api_keys: api_keys_from(read_env)?,
             unstable_build: BuildConfig {
                 limits: Limits {
                     route: RouteLimits {
@@ -124,9 +145,94 @@ fn get_env<T: FromStr>(key: &str, default: impl Into<T>) -> T {
         .unwrap_or(default.into())
 }
 
+/// The API keys from `PG_API_KEYS` and `PG_API_KEY`, through `read`, which
+/// takes a name without the `PG_` prefix. Separate from [`Config::from_env`]
+/// so a test can check which variable is which without touching the process
+/// environment.
+fn api_keys_from(read: impl Fn(&str) -> Result<Option<String>>) -> Result<Option<ApiKeys>> {
+    let list = read("API_KEYS")?;
+    let key = read("API_KEY")?;
+    ApiKeys::new(list.as_deref(), key.as_deref()).map_err(|error| anyhow!(error))
+}
+
+/// Read the environment variable `PG_<key>`; `None` only when it is not set.
+///
+/// Unlike [`get_env_raw`], a value that is not valid UTF-8 is an error, not
+/// unset: for the API keys, unset means open. The error never holds the value.
+fn read_env(key: &str) -> Result<Option<String>> {
+    match dotenv::var(format!("PG_{key}")) {
+        Ok(value) => Ok(Some(value)),
+        Err(dotenv::Error::EnvVar(std::env::VarError::NotPresent)) => Ok(None),
+        Err(_) => Err(anyhow!("PG_{key} is set but is not valid UTF-8")),
+    }
+}
+
 /// Get the raw string environment variable.
 ///
 /// All environment variables are prefixed with `PG_` in order to prevent clashes.
 fn get_env_raw(key: &str) -> Option<String> {
     dotenv::var(format!("PG_{key}")).ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use super::*;
+
+    fn api_keys_with(vars: &[(&str, &str)]) -> Result<Option<ApiKeys>> {
+        let vars: HashMap<String, String> = vars
+            .iter()
+            .map(|(name, value)| (name.to_string(), value.to_string()))
+            .collect();
+        api_keys_from(|name| Ok(vars.get(name).cloned()))
+    }
+
+    #[test]
+    fn the_list_is_read_from_api_keys() {
+        let keys = api_keys_with(&[("API_KEYS", "a,b")]).unwrap().unwrap();
+        assert_eq!(keys.len(), 2);
+    }
+
+    #[test]
+    fn the_single_key_is_read_from_api_key_and_not_split() {
+        let keys = api_keys_with(&[("API_KEY", "a,b")]).unwrap().unwrap();
+        assert_eq!(keys.len(), 1);
+    }
+
+    #[test]
+    fn the_list_wins_over_the_single_key() {
+        let keys = api_keys_with(&[("API_KEYS", "a,b,c"), ("API_KEY", "d")])
+            .unwrap()
+            .unwrap();
+        assert_eq!(keys.len(), 3);
+    }
+
+    #[test]
+    fn neither_set_leaves_the_routes_open() {
+        assert!(api_keys_with(&[]).unwrap().is_none());
+    }
+
+    #[test]
+    fn a_blank_list_without_a_single_key_fails() {
+        let error = api_keys_with(&[("API_KEYS", " \n")]).unwrap_err();
+        assert!(error.to_string().contains("PG_API_KEYS"), "{error}");
+    }
+
+    #[test]
+    fn an_unreadable_variable_fails() {
+        assert!(
+            api_keys_from(|_| Err(anyhow!("PG_API_KEYS is set but is not valid UTF-8"))).is_err()
+        );
+    }
+
+    #[test]
+    fn the_logged_config_holds_no_key() {
+        let mut config = Config::from_env().unwrap();
+        config.api_keys = api_keys_with(&[("API_KEYS", "s3cret,other")]).unwrap();
+        let printed = format!("{config:#?}");
+        for key in ["s3cret", "other"] {
+            assert!(!printed.contains(key), "{printed}");
+        }
+    }
 }

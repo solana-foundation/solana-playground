@@ -8,9 +8,11 @@ use solana_cli_config_wasm::{Config, ConfigInput};
 use solana_cli_output_wasm::cli_output::{get_name_value_or, OutputFormat};
 use solana_client_wasm::utils::rpc_config::RpcSendTransactionConfig;
 use solana_extra_wasm::transaction_status::UiTransactionEncoding;
-use solana_playground_utils_wasm::js::{PgSettings, PgTerminal, PgWallet};
+use solana_playground_utils_wasm::{
+    js::{PgSettings, PgTerminal},
+    wallet::{wallet_signer, WalletSigner},
+};
 use solana_remote_wallet::remote_wallet::RemoteWalletManager;
-use solana_sdk::signature::Keypair;
 use wasm_bindgen::prelude::*;
 
 use crate::{
@@ -30,7 +32,7 @@ pub async fn run_solana(cmd: String) {
             let connection_settings = PgSettings::connection();
             let endpoint = connection_settings.endpoint();
             let commitment = connection_settings.commitment();
-            let keypair_bytes = PgWallet::keypair_bytes();
+            let wallet = wallet_signer();
 
             if !parse_settings(&matches, &endpoint, &commitment) {
                 // Config command
@@ -43,7 +45,7 @@ pub async fn run_solana(cmd: String) {
                 &mut wallet_manager,
                 &endpoint,
                 &commitment,
-                &keypair_bytes,
+                wallet,
             );
 
             let output = match parse_result {
@@ -225,7 +227,7 @@ fn parse_args<'a>(
     wallet_manager: &mut Option<Rc<RemoteWalletManager>>,
     endpoint: &str,
     commitment: &str,
-    keypair_bytes: &[u8],
+    wallet: WalletSigner,
 ) -> Result<(CliConfig<'a>, CliSigners), Box<dyn std::error::Error>> {
     let config = Config::new(endpoint, commitment);
 
@@ -256,7 +258,7 @@ fn parse_args<'a>(
 
     // TODO:
     // let default_signer = DefaultSigner::new(default_signer_arg_name, &default_signer_path);
-    let default_signer = Box::new(Keypair::from_bytes(keypair_bytes).unwrap());
+    let default_signer = Box::new(wallet);
 
     let CliCommandInfo { command, signers } =
         parse_command(matches, default_signer, wallet_manager)?;

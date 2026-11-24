@@ -240,6 +240,86 @@ describe("runTurn", () => {
       expect(reported()).toEqual([]);
     });
 
+    describe("the log of a failure about the user's key", () => {
+      // Every `warn` is a Sentry breadcrumb, and `redactKey` catches only the
+      // whole key: a provider that echoes part of it would put that in a later report
+      const ECHO = "test-k*******-123";
+      const failedRequests = () =>
+        entries.filter((entry) => entry.message === "model request failed");
+
+      it.each([
+        [
+          "a 401",
+          () => openAiError(401, `Incorrect API key provided: ${ECHO}`),
+          401,
+          "key-refused",
+        ],
+        [
+          "Gemini's 400",
+          () =>
+            new Response(
+              JSON.stringify({
+                error: {
+                  code: 400,
+                  message: `API key not valid: ${ECHO}`,
+                  status: "INVALID_ARGUMENT",
+                  details: [{ reason: "API_KEY_INVALID" }],
+                },
+              }),
+              { status: 400, headers: { "content-type": "application/json" } }
+            ),
+          400,
+          "key-refused",
+        ],
+        [
+          "a 403",
+          () => openAiError(403, `Key ${ECHO} has no access to the model`),
+          403,
+          "forbidden",
+        ],
+      ])(
+        "holds only the status for %s, not the provider's words",
+        // eslint-disable-next-line max-params -- `it.each` spreads each row of the table into the callback
+        async (_, response, status, kind) => {
+          const failure = await failOn(response());
+
+          expect(failure.kind).toBe(kind);
+          expect(failedRequests().map((entry) => entry.context)).toEqual([
+            { status },
+          ]);
+          expect(JSON.stringify(entries)).not.toContain("test-k");
+        }
+      );
+
+      it("keeps the words of any other failure", async () => {
+        await failOn(openAiError(404, "The model gpt-9 does not exist"));
+
+        expect(failedRequests().map((entry) => entry.context)).toEqual([
+          {
+            status: 404,
+            detail: expect.stringContaining("The model gpt-9 does not exist"),
+          },
+        ]);
+      });
+
+      it("keeps the words of a 401 from the hosted backend, which sends no user key", async () => {
+        const { fetch } = fakeFetch(openAiError(401, "Deployment protected"));
+        // The hosted connection's key is empty, as `DEFAULT_CONNECTION` holds it
+        await runTurn({
+          model: openAi(fetch),
+          messages: USER,
+          apiKey: "",
+        }).catch((e: unknown) => e);
+
+        expect(failedRequests().map((entry) => entry.context)).toEqual([
+          {
+            status: 401,
+            detail: expect.stringContaining("Deployment protected"),
+          },
+        ]);
+      });
+    });
+
     it("a 400 the provider could not read is reported, and not resent", async () => {
       const failure = await failOn(openAiError(400, "Invalid 'messages[0]'"));
 

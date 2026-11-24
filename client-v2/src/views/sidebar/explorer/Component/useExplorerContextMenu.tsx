@@ -1,5 +1,6 @@
 import { MouseEvent, useCallback, useState } from "react";
 
+import { PgClientRun } from "@/features/docs-link";
 import { createLogger } from "@/shared/lib/logger";
 
 import { useRenderOnChange } from "../../../../hooks";
@@ -23,6 +24,24 @@ const reportMenuActionFailure = (action: string, err: unknown) => {
       options: { name: "menu-action-failed" },
     }
   );
+};
+
+/**
+ * Ask before a run from the menu, as Run does, when a link opened the code.
+ * While a run is going, a question still owed is refused, and the toast says
+ * why nothing happened; with none owed, the command answers as it always did.
+ *
+ * @returns whether to run
+ */
+const mayRun = async () => {
+  const answer = await PgClientRun.askFirst();
+  if (answer === "busy") {
+    PgView.setToast(
+      () => <span>A run is going. Try again once it ends.</span>,
+      { options: { name: "menu-run-busy" } }
+    );
+  }
+  return answer === "run";
 };
 
 export type ItemData = {
@@ -157,7 +176,11 @@ export const useExplorerContextMenu = () => {
     );
   }, []);
 
+  // A run from the menu asks first, as Run does, when a link opened the
+  // code. So does Test on a file: a link may name its file `a.test.ts`. A
+  // bare `test` runs only `tests/`, which holds none of the link's code
   const addClient = useCallback(async () => {
+    if (!(await mayRun())) return;
     await PgCommand.run.execute();
   }, []);
 
@@ -174,14 +197,17 @@ export const useExplorerContextMenu = () => {
   }, []);
 
   const runClient = useCallback(async () => {
+    if (!(await mayRun())) return;
     await PgCommand.run.execute(getPath());
   }, [getPath]);
 
   const runTest = useCallback(async () => {
+    if (!(await mayRun())) return;
     await PgCommand.test.execute(getPath());
   }, [getPath]);
 
   const runClientFolder = useCallback(async () => {
+    if (!(await mayRun())) return;
     await PgCommand.run.execute();
   }, []);
 

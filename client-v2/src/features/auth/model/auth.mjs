@@ -264,6 +264,7 @@ export const getAuth = async () => {
       baseURL: resolveBaseURL(),
       secret: env.AUTH_SECRET,
       plugins: oauthProxyPlugins(),
+      account: ACCOUNT_OPTIONS,
       // The one endpoint that lets a signed-in user write their own user
       // fields. The panel never calls it, and `githubCreatedAt` must not be
       // the user's to set: it decides how much they may spend on
@@ -309,6 +310,20 @@ export const getAuth = async () => {
   }
   return instance;
 };
+
+/**
+ * How Better Auth stores the provider's tokens: encrypted with `AUTH_SECRET`,
+ * which lives in the deployment's environment and never in the database, so a
+ * row read through a leak, a backup or an operator holds no usable GitHub
+ * token (HOO-2881). Every sign-in rewrites the row's token under this option;
+ * rows written before it are encrypted by `scripts/db/encrypt-github-tokens.mjs`,
+ * and until then read back as they are. Rotating `AUTH_SECRET` makes every
+ * encrypted token unreadable: `readGithubToken` answers `NoGithubGrant` with
+ * reason `unreadable`, and the user's next sign-in stores a fresh one.
+ *
+ * Exported for tests.
+ */
+export const ACCOUNT_OPTIONS = Object.freeze({ encryptOAuthTokens: true });
 
 /**
  * Who a request is signed in as. Never throws: `unavailable` when building auth

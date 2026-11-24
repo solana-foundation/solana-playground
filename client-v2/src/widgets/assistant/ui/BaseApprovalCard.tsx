@@ -86,8 +86,36 @@ const cardTitle = (request: ApprovalItem["request"]) => {
   if (request.question) {
     return { text: request.question, className: QUESTION_TITLE };
   }
+  if (request.type === "tool") return { text: `wants to call ${request.tool}` };
   return { text: `wants to run ${request.name}` };
 };
+
+/** What a command or an MCP tool call runs: its name and an MCP call's arguments */
+const CommandBody = ({
+  request,
+}: {
+  request: Exclude<ApprovalItem["request"], PatchApproval>;
+}) => (
+  // A pre holds phrasing content only, so its lines are block spans
+  <span className="block px-3">
+    {request.type === "tool" ? (
+      <>
+        {/* No "$": an MCP call is not a terminal command */}
+        <code className="block text-warning [overflow-wrap:anywhere] whitespace-normal">
+          {request.tool}
+        </code>
+        <code
+          data-tool-input
+          className="block pt-1.5 text-foreground [overflow-wrap:anywhere] whitespace-pre-wrap"
+        >
+          {request.input}
+        </code>
+      </>
+    ) : (
+      <code className="block text-warning">$ {request.name}</code>
+    )}
+  </span>
+);
 
 /**
  * A change or a command the assistant wants to make, with the user's answer.
@@ -139,15 +167,17 @@ export const BaseApprovalCard = ({
         {patch ? (
           <PatchLines request={request} />
         ) : (
-          // A pre holds phrasing content only, so its lines are block spans
-          <span className="block px-3">
-            <code className="block text-warning">$ {request.name}</code>
-            <span className="block pt-1.5 font-sans text-xs whitespace-normal text-muted-foreground">
-              {request.effect}
-            </span>
-          </span>
+          <CommandBody request={request} />
         )}
       </DiffContent>
+
+      {/* Outside the scroll: long arguments must not push where they go, and
+          whether credentials go with them, out of view of Allow (A7) */}
+      {request.type !== "patch" && (
+        <p className="px-3 pt-1.5 pb-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+          {request.effect}
+        </p>
+      )}
 
       <DiffFooter>
         {pending ? (

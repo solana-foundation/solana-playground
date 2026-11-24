@@ -109,6 +109,69 @@ jobs:
       - name: Check clippy warnings
         run: cargo clippy --all-targets -- -D warnings
 
+  test_server:
+    name: Test server
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: format_server
+
+    defaults:
+      run:
+        working-directory: server
+
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Run tests
+        run: cargo test --locked
+
+  # Builds the image App Engine deploys, so a download whose pinned checksum
+  # no longer matches fails here before it fails a deploy. The last step
+  # proves the check bites: each of server/Dockerfile's checksums, set wrong,
+  # must stop the build.
+  image_server:
+    name: Image server
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Build image
+        run: docker build --tag solpg-server server
+
+      # The per-template images the server builds under its `unstable`
+      # feature: the stage that installs rustup, Solana, the platform tools and
+      # Criterion, for each Solana version a template pins.
+      - name: Build the template images' tool stage
+        run: |
+          for version in 1.17.25 3.1.10; do
+            docker build --file server/images/Dockerfile.program --target solana \
+              --build-arg "SOLANA_VERSION=$version" server
+          done
+
+      - name: Refuse a download whose checksum differs
+        run: |
+          zero=0000000000000000000000000000000000000000000000000000000000000000
+          for check in rust:RUSTUP_SHA256:rustup-init tools:SOLANA_SHA256:solana-release.tar.bz2 \
+            tools:PLATFORM_TOOLS_SHA256:platform-tools.tar.bz2 tools:CRITERION_SHA256:criterion.tar.bz2; do
+            IFS=: read -r target arg file <<<"$check"
+            if out=$(docker build --progress=plain --target "$target" \
+              --build-arg "$arg=$zero" server 2>&1); then
+              echo "::error::the image built with a wrong $arg"
+              exit 1
+            fi
+            if ! grep -q "/tmp/$file: FAILED" <<<"$out"; then
+              echo "$out"
+              echo "::error::the build with a wrong $arg failed, but not on the checksum"
+              exit 1
+            fi
+          done
+
   clippy_wasm:
     name: Clippy WASM
     runs-on: ubuntu-latest

@@ -5,6 +5,8 @@ import ReactMarkdown from "react-markdown";
 import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
 
+import { ImageAddress } from "@/shared/lib/image-address";
+import { isSameOrigin } from "@/shared/lib/same-origin";
 import { cn } from "@/shared/lib/utils";
 import { Icon } from "@/shared/ui/icon";
 
@@ -95,21 +97,27 @@ const Markdown: FC<React.PropsWithChildren<MarkdownProps>> = ({
         /** Links */
         a: (linkProps) => <Link {...(linkProps as unknown as LinkProps)} />,
 
-        /** Images */
-        img: (imgProps) => {
-          return (
-            <Img
-              {...imgProps}
-              src={
-                imgProps.src && !imgProps.src.startsWith("/")
-                  ? PgCommon.joinPaths(
-                      rootSrc ?? PgRouter.location.pathname,
-                      imgProps.src
-                    )
-                  : imgProps.src
-              }
-            />
-          );
+        /**
+         * Images. This component loads only images from the app's own
+         * origin: an assistant reply or an imported tutorial may come from
+         * outside the app, and an image from another host would be fetched,
+         * address and all, with no click. Both the address as written and
+         * the one the page loads are checked. Any other image shows as text,
+         * and so does one whose address react-markdown's `urlTransform`
+         * cleared (`data:`, for one). The raw-address check is what turns
+         * the schemes it keeps, such as `mailto:`, into text.
+         */
+        img: ({ src, alt, ...imgProps }) => {
+          if (!src) return <ImageAddress alt={alt} />;
+
+          const resolved = src.startsWith("/")
+            ? src
+            : PgCommon.joinPaths(rootSrc ?? PgRouter.location.pathname, src);
+          if (!isSameOrigin(src) || !isSameOrigin(resolved)) {
+            return <ImageAddress src={src} alt={alt} />;
+          }
+
+          return <Img {...imgProps} alt={alt} src={resolved} />;
         },
 
         /** Code blocks */

@@ -4,13 +4,13 @@ import {
   ChevronDown,
   Ellipsis,
   Folder,
-  Pin,
   Terminal,
 } from "lucide-react";
 import type { CSSProperties, FC, ReactNode, RefObject } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { COARSE_HIT } from "@/shared/lib/hit-area";
+import { DockPin, FILES_TOGGLE, TREE_SHEET } from "@/shared/lib/tree-dock";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import {
@@ -37,12 +37,6 @@ import BaseFileTreeList from "./BaseFileTreeList";
 
 /** The open tab on the code's own ground, without the coloured bar */
 const TAB = "before:hidden data-active:bg-(--code-ground)";
-
-/**
- * What opens the tree is marked, so a press on it while the popover is up
- * is not also a press outside it, which would close it and open it again
- */
-const FILES_TOGGLE = "data-files-toggle";
 
 export interface BaseWorkspaceHeadProps {
   /** The tabs, in the project's order, by path */
@@ -294,7 +288,7 @@ const BaseWorkspaceHead: FC<BaseWorkspaceHeadProps> = ({
           align="start"
           sideOffset={1}
           aria-label="Files"
-          className="relative w-64 gap-0 rounded-none rounded-br-lg border-r border-b border-border bg-surface-base p-1.5 ring-0 data-open:zoom-in-100 data-closed:zoom-out-100"
+          className={TREE_SHEET}
           onOpenAutoFocus={(e) => {
             // Focus lands on the open file, not on the pin
             e.preventDefault();
@@ -319,26 +313,7 @@ const BaseWorkspaceHead: FC<BaseWorkspaceHeadProps> = ({
             }
           }}
         >
-          {tree.canDock && (
-            <div className="absolute top-1.5 right-1.5 z-10">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label="Dock beside the editor"
-                    onClick={tree.onDock}
-                    className="rounded-md text-muted-foreground hover:text-foreground [&_svg]:size-4! [&_svg]:stroke-[1.5]"
-                  >
-                    <Pin />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  Dock beside the editor
-                </TooltipContent>
-              </Tooltip>
-            </div>
-          )}
+          {tree.canDock && <DockPin onDock={tree.onDock} />}
           <BaseFileTreeList
             rows={tree.rows}
             onPick={tree.onPick}

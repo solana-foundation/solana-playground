@@ -1,6 +1,10 @@
 import type { McpServerEntry } from "@/features/mcp";
 
-import { type PlaygroundBridge, realBridge } from "../bridge/playground-bridge";
+import {
+  type PlaygroundBridge,
+  realBridge,
+  type WalletKeys,
+} from "../bridge/playground-bridge";
 import assistantContext from "../content/assistant-context.md";
 import { describeCatalog } from "../grounding";
 import { PgAssistant } from "../store";
@@ -76,6 +80,23 @@ export const systemPrompt = () =>
     .filter((part) => part !== undefined)
     .join("\n\n---\n\n");
 
+/** Which of the wallets `signing` is, as the prompt says it */
+const signerLabel = ({ playground, signing }: WalletKeys) => {
+  if (signing === undefined) return "";
+  if (signing === playground) return " (the Playground wallet)";
+  return " (a connected wallet)";
+};
+
+/** The wallets' lines of the project state: public keys only */
+const describeWallets = (wallets: WalletKeys) => {
+  const { playground, connected, signing } = wallets;
+  return [
+    `Playground wallet: ${playground ?? "none"}`,
+    `Connected wallet: ${connected.join(", ") || "none"}`,
+    `Signing wallet: ${signing ?? "none"}${signerLabel(wallets)}`,
+  ];
+};
+
 /**
  * Describe the project as it stands right now.
  *
@@ -94,7 +115,7 @@ export const describeProjectWith = (bridge: PlaygroundBridge) => {
   const lines = [
     `Workspace: ${ctx.workspaceName ?? "none"}`,
     `Cluster: ${ctx.cluster}`,
-    `Wallet connected: ${ctx.walletConnected ? "yes" : "no"}`,
+    ...describeWallets(ctx.wallets),
     `Files in context (open tabs and files the user added; you can read only these): ${
       ctx.contextFiles.map((file) => file.path).join(", ") || "none"
     }`,

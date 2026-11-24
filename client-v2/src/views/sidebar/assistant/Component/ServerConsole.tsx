@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 
 import type { McpServerEntry, McpTool } from "@/features/mcp";
 import { callTool } from "@/features/mcp";
+import { ImageAddress } from "@/shared/lib/image-address";
 import { cn } from "@/shared/lib/utils";
 import { NativeSelect, NativeSelectOption } from "@/shared/ui/native-select";
 
@@ -209,7 +210,12 @@ const ServerConsole = ({ server, providerName, scope }: ServerConsoleProps) => {
                     "max-h-[4.75em] overflow-hidden [mask-image:linear-gradient(to_bottom,black_60%,transparent)]"
                 )}
               >
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  // A description is the MCP server's text: an image in it,
+                  // from any host, shows as text and is never fetched
+                  components={{ img: ImageAddress }}
+                >
                   {emphasiseLabels(description)}
                 </ReactMarkdown>
               </div>

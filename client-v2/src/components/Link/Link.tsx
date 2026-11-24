@@ -1,6 +1,7 @@
 import { ComponentPropsWithoutRef, forwardRef } from "react";
 import { Link as RouterLink } from "react-router";
 
+import { isSameOrigin } from "@/shared/lib/same-origin";
 import { cn } from "@/shared/lib/utils";
 import { Icon } from "@/shared/ui/icon";
 
@@ -25,7 +26,9 @@ const Link = forwardRef<HTMLAnchorElement, LinkProps>((props, ref) => {
     props.className
   );
 
-  if (props.href.startsWith("/")) {
+  // A leading slash is not enough: `//host` and `/\host` start with one yet
+  // name another site, so the URL parser confirms the origin
+  if (props.href.startsWith("/") && isSameOrigin(props.href)) {
     return (
       <RouterLink ref={ref} to={props.href} {...props} className={className} />
     );

@@ -101,6 +101,7 @@ vi.mock("@/utils", () => ({
     accounts: [] as unknown[],
     state: "setup",
     add: vi.fn(),
+    untilLoaded: async () => undefined,
     // `useWallet` and `useBalance` poll every 10 ms without these
     onDidChangeCurrent: () => ({ dispose: () => {} }),
     onDidChangeBalance: () => ({ dispose: () => {} }),

@@ -36,6 +36,8 @@ const connection = vi.hoisted(() => {
 });
 const wallet = vi.hoisted(() => ({
   current: null as null | undefined | { publicKey: { toBase58: () => string } },
+  state: "setup" as string,
+  refresh: vi.fn(),
 }));
 const assistant = vi.hoisted(() => ({ connected: false }));
 const connectWallet = vi.hoisted(() => vi.fn());
@@ -60,6 +62,13 @@ vi.mock("@/commands/connect/connect-wallet", () => ({ connectWallet }));
 vi.mock("@/utils", () => ({
   PgConnection: connection,
   PgView: { setToast },
+  PgWallet: {
+    get state() {
+      return wallet.state;
+    },
+    onDidChangeState: () => ({ dispose: () => {} }),
+    refresh: () => wallet.refresh(),
+  },
 }));
 vi.mock("@/views/sidebar/assistant/store", () => ({
   PgAssistant: {
@@ -88,6 +97,8 @@ afterEach(() => {
   connectWallet.mockReset();
   setToast.mockReset();
   wallet.current = null;
+  wallet.state = "setup";
+  wallet.refresh.mockReset();
   assistant.connected = false;
   health.isConnected = true;
   health.slotStalled = false;
@@ -219,6 +230,63 @@ it("ticks the wallet step with the short address", () => {
   wallet.current = { publicKey: { toBase58: () => ADDRESS } };
   draw();
   expect(screen.getByText("7Hq5…Xk2P")).toBeTruthy();
+});
+
+it("warns that the wallet is unavailable instead of offering a new one", () => {
+  wallet.state = "unavailable";
+  draw();
+  expect(screen.queryByRole("button", { name: "Connect a wallet" })).toBeNull();
+  const step = screen.getByText("Wallet unavailable").closest("li");
+  expect(step?.getAttribute("data-status")).toBe("warn");
+});
+
+const TRY_AGAIN = { name: "Wallet unavailable, try again" };
+
+it("reads the wallet again from its warning, and counts it loaded", async () => {
+  wallet.state = "unavailable";
+  wallet.refresh.mockImplementation(async () => {
+    wallet.state = "pg";
+  });
+  draw();
+
+  await userEvent.click(screen.getByRole("button", TRY_AGAIN));
+
+  expect(wallet.refresh).toHaveBeenCalledTimes(1);
+  expect(connectWallet).not.toHaveBeenCalled();
+  await vi.waitFor(() =>
+    expect(eventsNamed("setup_wallet_retried")).toEqual([{ outcome: "loaded" }])
+  );
+  expect(eventsNamed("setup_item_picked")).toEqual([]);
+});
+
+it("counts a try again that still cannot read the wallet", async () => {
+  wallet.state = "unavailable";
+  wallet.refresh.mockResolvedValue(undefined);
+  draw();
+
+  await userEvent.click(screen.getByRole("button", TRY_AGAIN));
+
+  await vi.waitFor(() =>
+    expect(eventsNamed("setup_wallet_retried")).toEqual([
+      { outcome: "unavailable" },
+    ])
+  );
+});
+
+it("reports a try again that throws, counted as unavailable", async () => {
+  wallet.state = "unavailable";
+  wallet.refresh.mockRejectedValue(new Error("boom"));
+  draw();
+
+  await userEvent.click(screen.getByRole("button", TRY_AGAIN));
+
+  await vi.waitFor(() =>
+    expect(eventsNamed("setup_wallet_retried")).toEqual([
+      { outcome: "unavailable" },
+    ])
+  );
+  expect(ours()).toHaveLength(1);
+  expect(ours()[0].report).toBe(true);
 });
 
 it("starts a sign-in from its step", async () => {
