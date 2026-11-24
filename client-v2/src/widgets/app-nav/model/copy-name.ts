@@ -6,11 +6,13 @@
  *
  * The source's own name may break that rule: the GitHub and gist importers
  * skip validation and name a project `github-owner/repo/path` or
- * `gist-owner/id@rev`. Each run of rejected characters becomes one `-`, so
- * the copy is a name `createWorkspace` accepts.
+ * `gist-owner/id`, plus `@rev` when the link pins a revision. Each run of
+ * rejected characters becomes one `-`, and a name with nothing left after
+ * leading whitespace becomes "Project", so the copy is always a name
+ * `createWorkspace` accepts.
  */
 export const copyName = (name: string, taken: readonly string[]) => {
-  const stem = name.replace(/[^\w\s-]+/g, "-").trimStart();
+  const stem = name.replace(/[^\w\s-]+/g, "-").trimStart() || "Project";
   const first = `${stem} copy`;
   if (!taken.includes(first)) return first;
 
@@ -45,6 +47,14 @@ if (import.meta.vitest) {
           "gist-owner-abc123-def copy"
         );
         expect(copyName("a//b", ["a-b copy"])).toBe("a-b copy 2");
+        // `\w` is ASCII only
+        expect(copyName("проект", [])).toBe("- copy");
+      });
+
+      it("never starts the copy with whitespace", () => {
+        expect(copyName("  x", [])).toBe("x copy");
+        expect(copyName("   ", [])).toBe("Project copy");
+        expect(copyName("", ["Project copy"])).toBe("Project copy 2");
       });
     });
   });
