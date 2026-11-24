@@ -167,6 +167,35 @@ describe("probeDefaultBackend", () => {
     expectFailure("network");
   });
 
+  it("is warned of and counted, not reported, when the connection drops mid-body", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new TypeError("Load failed");
+      },
+    } as unknown as Response);
+    expect(await probeDefaultBackend()).toEqual({ state: "unreachable" });
+    expect(logs.entries.map((e) => [e.ns, e.level, e.report])).toEqual([
+      ["assistant:connect", "warn", false],
+    ]);
+    expect(events.events.map((e) => [e.name, e.params])).toEqual([
+      ["assistant_default_probe_failed", { reason: "body" }],
+    ]);
+  });
+
+  it("is unreachable and reported on a body that is not JSON", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new SyntaxError("Unexpected token < in JSON");
+      },
+    } as unknown as Response);
+    expect(await probeDefaultBackend()).toEqual({ state: "unreachable" });
+    expectFailure("body");
+  });
+
   it("asks again after a dropped connection", async () => {
     const spy = vi
       .spyOn(globalThis, "fetch")
