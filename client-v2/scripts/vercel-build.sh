@@ -10,6 +10,7 @@ set -euo pipefail
 cd "$(dirname -- "${BASH_SOURCE[0]}")/.."
 
 node scripts/check-agent-env.mjs
+node scripts/check-auth-env.mjs
 node scripts/check-unstable-env.mjs
 
 # Vercel adds REACT_APP_VERCEL_OBSERVABILITY_CLIENT_CONFIG to the build on its

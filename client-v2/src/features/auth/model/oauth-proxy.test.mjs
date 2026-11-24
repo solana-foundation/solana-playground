@@ -47,10 +47,14 @@ const asPreview = () => {
   process.env.AUTH_OAUTH_PROXY_SECRET = PROXY_SECRET;
 };
 
-/** The environment the host deploys with: its own base URL, no proxy URL */
+/**
+ * The environment the host, the staging sign-in app, deploys with: its own
+ * base URL, the host flag, no proxy URL
+ */
 const asHost = () => {
   process.env.VERCEL_ENV = "production";
   process.env.AUTH_BASE_URL = HOST;
+  process.env.AUTH_OAUTH_PROXY_HOST = "true";
   process.env.AUTH_OAUTH_PROXY_SECRET = PROXY_SECRET;
 };
 
@@ -123,6 +127,7 @@ describe("oauthProxyPlugins", () => {
       VERCEL_BRANCH_URL: undefined,
       AUTH_OAUTH_PROXY_URL: undefined,
       AUTH_OAUTH_PROXY_SECRET: undefined,
+      AUTH_OAUTH_PROXY_HOST: undefined,
       AUTH_SECRET: "a-test-secret-of-at-least-32-bytes!",
       GITHUB_CLIENT_ID: "id",
       GITHUB_CLIENT_SECRET: "secret",
@@ -207,13 +212,35 @@ describe("oauthProxyPlugins", () => {
     });
   }
 
-  // Fails closed: production given the preview's settings by mistake
-  test("is the host outside a preview whatever the proxy URL", async () => {
+  // Fails closed: production given the preview's settings by mistake installs
+  // no proxy at all, neither its endpoints nor its hooks (HOO-2816)
+  test("is off outside a preview without the host flag", async () => {
     asPreview();
     process.env.VERCEL_ENV = "production";
     const { oauthProxyPlugins } = await load();
-    const [plugin] = oauthProxyPlugins();
-    assert.deepEqual(plugin.endpoints, {});
+    assert.deepEqual(oauthProxyPlugins(), []);
+  });
+
+  // Production holds the secret by mistake: it must not become the host
+  test("is off on production holding only the secret", async () => {
+    asHost();
+    delete process.env.AUTH_OAUTH_PROXY_HOST;
+    const { oauthProxyPlugins } = await load();
+    assert.deepEqual(oauthProxyPlugins(), []);
+  });
+
+  test('is off with a host flag that is not exactly "true"', async () => {
+    asHost();
+    process.env.AUTH_OAUTH_PROXY_HOST = "1";
+    const { oauthProxyPlugins } = await load();
+    assert.deepEqual(oauthProxyPlugins(), []);
+  });
+
+  test("reports the host flag without its secret", async () => {
+    asHost();
+    delete process.env.AUTH_OAUTH_PROXY_SECRET;
+    const { missingConfig } = await load();
+    assert.ok(missingConfig().includes("AUTH_OAUTH_PROXY_SECRET"));
   });
 
   test("reports a proxy URL without its secret", async () => {

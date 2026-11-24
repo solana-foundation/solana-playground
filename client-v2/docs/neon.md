@@ -104,7 +104,8 @@ way in.
 Every preview branch is cut from `main`, the default branch of the preview Neon project (`NEON_BASE_BRANCH`
 overrides it). The preview project is separate from production's so that no preview holds production's data: every
 preview holds `AUTH_OAUTH_PROXY_SECRET`, and whoever holds one preview's environment can forge a session on any
-preview ([Sign-in on previews](deploy-client-vercel.md#sign-in-on-previews)). A branch carries `main`'s rows, and
+preview or on the staging sign-in host, never on production
+([Sign-in on previews](deploy-client-vercel.md#sign-in-on-previews)). A branch carries `main`'s rows, and
 those are preview data.
 
 A copy-on-write branch carries `main`'s schema and its `schema_migrations`, so dbmate applies only the migrations

@@ -25,8 +25,9 @@ as soon as the Root Directory points at `client-v2`.
      move to Cloud SQL, `DB_PROVIDER=cloud-sql` and the `CLOUD_SQL_*` and
      `GCP_*` variables replace it ([Cloud SQL for client-v2](cloud-sql.md),
      steps 6 and 7).
-   - `AUTH_OAUTH_PROXY_SECRET` — the same value as on Preview, and never equal
-     to either `AUTH_SECRET` ([Sign-in on previews](#sign-in-on-previews)).
+   - No `AUTH_OAUTH_PROXY_*` variable: previews sign in through the staging
+     sign-in host, never production, and the build fails on one
+     ([Sign-in on previews](#sign-in-on-previews)).
    - `SYNC_ENABLED=true`.
    - `AUTH_SECRET` — generated for production, never reused from a preview.
    - `AUTH_BASE_URL` — the production origin. **Required here, not optional:**
@@ -49,9 +50,10 @@ as soon as the Root Directory points at `client-v2`.
      fails when the key is set without sign-in or `AUTH_BASE_URL`
      (`scripts/check-agent-env.mjs`).
 3. **GitHub OAuth app for production.** Its callback URL is
-   `<AUTH_BASE_URL>/api/auth/callback/github`. A GitHub OAuth app takes a
-   single callback, so previews have no app of their own: they sign in through
-   the host's, by the [OAuth proxy](#sign-in-on-previews).
+   `<AUTH_BASE_URL>/api/auth/callback/github`. It serves production only:
+   previews sign in through the staging sign-in host's own app, by the
+   [OAuth proxy](#sign-in-on-previews), and production holds no
+   `AUTH_OAUTH_PROXY_*` variable.
 4. **Build server CORS.** `PG_CLIENT_URLS` on the build server includes the
    production origin.
 5. **Dry run on a preview**, from `master`:
@@ -640,7 +642,7 @@ before this existed.
 | `SYNC_ENABLED` | Kill switch. Only the exact string `true` enables sync; unset or anything else keeps the app local-only |
 | `AUTH_SECRET` | Better Auth signing secret. Generate one per environment; rotating it signs everyone out |
 | `AUTH_BASE_URL` | The deployment's own origin, e.g. `https://example.vercel.app`. Better Auth builds the OAuth callback from it, so a wrong value breaks sign-in with no error at the browser |
-| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | The OAuth app. Its callback URL must match `AUTH_BASE_URL`; previews carry the host's pair |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | The OAuth app. Its callback URL must match `AUTH_BASE_URL`; previews carry the staging sign-in host's pair, never production's |
 | `AUTH_OAUTH_PROXY_URL` | Previews only: the origin of the host, the deployment whose callback is on the GitHub app |
 | `AUTH_OAUTH_PROXY_SECRET` | The OAuth proxy's encryption key. The same value on the host and every preview, never `AUTH_SECRET`'s. Unset, the proxy is off |
 
@@ -760,40 +762,84 @@ database that cannot be reached, not one whose schema is merely out of date.
 ### Sign-in on previews
 
 A preview's origin changes on every deployment and a GitHub OAuth app takes one
-callback, so previews sign in through the host's app with Better Auth's OAuth
-proxy (`oauthProxyPlugins` in `src/features/auth/model/auth.mjs`). The host is
-the Production deployment, `https://solana-playground-teal.vercel.app`. A
-preview sends GitHub to the host's callback; the host trades the code for the
-profile and redirects back to the preview with it encrypted; the preview
-creates the user and the session in the database it runs with.
+callback, so previews sign in through one app with Better Auth's OAuth proxy
+(`oauthProxyPlugins` in `src/features/auth/model/auth.mjs`). The app belongs to
+the **staging sign-in host**: a Vercel project of its own, deployed from
+`master` like production, with its own GitHub OAuth app, `AUTH_SECRET`, proxy
+secret and database. Production is never the host. A preview sends GitHub to
+the host's callback; the host trades the code for the profile and redirects
+back to the preview with it encrypted; the preview creates the user and the
+session in the database it runs with.
 
-Set once in the Vercel dashboard:
+Every preview holds the host's `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` and
+proxy secret, so whoever can get a branch built as a preview can read them.
+With a staging host, what they read belongs to staging: no preview holds a
+value production uses (HOO-2816).
 
-- **Production:** `AUTH_OAUTH_PROXY_SECRET`.
-- **Preview:** `AUTH_OAUTH_PROXY_URL=https://solana-playground-teal.vercel.app`,
-  the same `AUTH_OAUTH_PROXY_SECRET`, and the host's `GITHUB_CLIENT_ID` and
-  `GITHUB_CLIENT_SECRET`.
+Set once:
 
-Only a deployment with `VERCEL_ENV=preview` and a proxy URL naming another
-origin completes a proxied sign-in. Every other one is the host and drops the
-proxy's completion endpoints: the secret sits in every preview's environment,
-and on the host those endpoints would turn a forged payload into a session. The
-host must run this code before any preview can sign in.
+- **The staging host's Production environment:** `AUTH_BASE_URL` (its own
+  origin), `AUTH_SECRET`, the staging OAuth app's `GITHUB_CLIENT_ID` and
+  `GITHUB_CLIENT_SECRET`, `AUTH_OAUTH_PROXY_SECRET`,
+  `AUTH_OAUTH_PROXY_HOST=true`, `SYNC_ENABLED=true` and a database of its own
+  (any provider; a Neon database or one on `solpg-preview`, never
+  production's). The staging OAuth app's callback is
+  `<staging origin>/api/auth/callback/github`.
+- **The Preview environment of the project previews build on:**
+  `AUTH_OAUTH_PROXY_URL=<staging origin>`, the same `AUTH_OAUTH_PROXY_SECRET`,
+  and the staging app's `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`.
+- **Production:** no `AUTH_OAUTH_PROXY_*` variable at all.
 
-Whoever holds one preview's environment holds `AUTH_OAUTH_PROXY_SECRET`, and
-with it can forge a session on any preview. Two rules keep that away from real
-accounts:
+Every secret here is generated with `openssl rand -base64 32` for its one
+place and used nowhere else: the proxy secret never equals any `AUTH_SECRET`,
+since one key would then decrypt what was sealed for the other's purpose.
+
+`scripts/check-auth-env.mjs`, run by every Vercel build, fails a build that
+breaks these rules: production holding an `AUTH_OAUTH_PROXY_*` variable
+without the host flag, any deployment but a preview holding
+`AUTH_OAUTH_PROXY_URL`, a preview holding the host flag, and an
+`AUTH_SECRET` equal to the proxy secret. It names the variables, never their
+values.
+
+The roles in the code match. Only a deployment with `VERCEL_ENV=preview` and a
+proxy URL naming another origin completes a proxied sign-in. Only a
+deployment outside a preview with `AUTH_OAUTH_PROXY_HOST=true` is the host,
+and it drops the proxy's completion endpoints: on the host they would turn a
+forged payload into a session. Every other deployment, production among them,
+installs no proxy even if it is handed the secret. The host must run this
+code before any preview can sign in.
+
+To check that a preview holds nothing production uses, compare the two
+environments with `scripts/env-overlap.mjs`. It names every value the two
+files share, under the same name or another, and never prints one; public
+`REACT_APP_*` and `VERCEL_*` names, flags and empty values are skipped, and
+`--allow` skips public settings both sides share on purpose:
+
+```sh
+cd client-v2
+npx vercel@62.7.0 env pull /tmp/preview.env --environment=preview   # linked to the preview project
+doppler secrets download --no-file --format env \
+  --project <DOPPLER_PROJECT> --config <DOPPLER_CONFIG> > /tmp/production.env
+node scripts/env-overlap.mjs --allow REACT_APP_SERVER_URL,PG_BUILD_SERVER_URL \
+  /tmp/preview.env /tmp/production.env
+rm /tmp/preview.env /tmp/production.env
+```
+
+It exits `0` with `0 shared value(s)` when the preview is clean. `vercel env
+pull` delivers a Sensitive variable as an empty value, which cannot be
+compared; the last line counts those, and a Sensitive preview variable is
+checked by its source instead.
+
+The proxy secret reaches only previews and the staging host. Two rules keep
+it away from real accounts:
 
 - **No preview reaches production's data.** A preview from `preview.yml` or the
-  Makefile runs on a branch of the preview Neon project
-  ([The parent branch](neon.md#the-parent-branch)). A Git-triggered preview
-  runs on the Preview-scoped `DATABASE_URL`, which names a database in that
-  project too, never production's.
-- **Production's `AUTH_SECRET` is used nowhere else.** It signs production's
-  session cookies. The proxy secret is the same on production and every
-  preview, so it must never equal production's `AUTH_SECRET`, or the preview's
-  either, since one key would then decrypt what was sealed for the other's
-  purpose.
+  Makefile runs on a database of its own
+  ([Preview databases](preview-databases.md)). A Git-triggered preview
+  runs on the Preview-scoped database, never production's.
+- **The staging host's database is not production's either.** Its users are
+  the people who signed in to the staging app; a session forged with the
+  proxy secret reaches previews and staging, never production.
 
 A user signed in on a preview has no `login`: the proxy forwards only Better
 Auth's own user fields, so `mapProfileToUser` does not reach it. The header
