@@ -1,10 +1,22 @@
 // TODO(ui-migration 1.4): a feature importing a feature; chat sync runs only for a signed-in session
 import { PgSession } from "@/features/auth";
+import { isNetworkFailure } from "@/shared/lib/ai";
+import { createLogger } from "@/shared/lib/logger";
 import { timeoutSignal } from "@/shared/lib/timeout-signal";
 
 import type { ChatItem } from "../../../views/sidebar/assistant/store";
 import { batchPush, MAX_BATCH_BYTES } from "./chat-batch.mjs";
-import { decodeThread, encodeThread, mergeThreads } from "./chat-codec";
+import {
+  decodeThread,
+  encodeThread,
+  mergeThreads,
+  versionOf,
+} from "./chat-codec";
+import {
+  type ChatLimitExceeded,
+  NO_PROJECT_REASON,
+  readChatLimitExceeded,
+} from "./chat-limits.mjs";
 import { PgChatStorage, withoutTruncationNotice } from "./chat-storage";
 import { DELETED_REASON, isDeletedScope } from "./deleted.mjs";
 import { report } from "./diagnostics";
@@ -46,6 +58,12 @@ interface HandedThread {
  *   under it can be pushed. The caller leaves it for the user's answer about
  *   the project (`SyncBanner`): "keep as new" carries the conversation,
  *   "delete" drops it.
+ * - `no-project`: the account holds no row for the thread's project yet: a
+ *   project made while signed out, whose thread the sign-in dump uploads
+ *   before the project. The thread stays, owed, and is pushed again once the
+ *   server accepts its project (`awaiting`).
+ * - `over-limit`: the account is at a cap in `CHAT_LIMITS`. The thread stays,
+ *   owed, and `limit()` names the cap for the panel.
  * - `failed`: nothing is known; the thread stays and is tried again. Also a
  *   thread pushed whole but for items too large for any batch: those stay on
  *   this device, so a sign-out must not drop the thread, and the retry sends
@@ -58,6 +76,8 @@ export type PushOutcome =
   | "pushed"
   | "thread-deleted"
   | "project-deleted"
+  | "no-project"
+  | "over-limit"
   | "failed";
 
 /**
@@ -70,6 +90,38 @@ export type PushOutcome =
  */
 export const isHandedOver = (outcome: PushOutcome) =>
   outcome === "pushed" || outcome === "thread-deleted";
+
+/** `PgChatSync.limit`, for the layers above through `index.ts` */
+export const chatSyncLimit = () => PgChatSync.limit();
+
+/** `PgChatSync.onDidChangeLimit`, for the layers above through `index.ts` */
+export const onDidChangeChatSyncLimit = (cb: () => void) =>
+  PgChatSync.onDidChangeLimit(cb);
+
+/** How a read of the server's copy of one thread ended; see `PgChatSync._pull` */
+type Pulled =
+  | { kind: "items"; items: ChatItem[]; offered: number }
+  | { kind: "missing" }
+  | { kind: "refused"; status: number }
+  | { kind: "failed"; error: unknown };
+
+const log = createLogger("persistence:chat-sync");
+
+/**
+ * Whether the server's copy holds every local item at a version at least as
+ * new: each id present, and `versionOf` not older. A version that does not
+ * parse (`NaN`) holds nothing, on either side.
+ */
+const isHeldBy = (
+  server: readonly ChatItem[],
+  local: readonly ChatItem[]
+): boolean => {
+  const versions = new Map(server.map((item) => [item.id, versionOf(item)]));
+  return local.every((item) => {
+    const held = versions.get(item.id);
+    return held !== undefined && held >= versionOf(item);
+  });
+};
 
 /**
  * Mirror local threads to Postgres.
@@ -126,40 +178,62 @@ export class PgChatSync {
   ): Promise<ChatItem[] | "missing" | null> {
     if (!(await PgChatSync._ready())) return null;
 
-    try {
-      const response = await PgSession.fetchAuthed(
-        `/api/conversations?threadId=${encodeURIComponent(threadId)}`,
-        { credentials: "include", cache: "no-store" }
-      );
+    const pulled = await PgChatSync._pull(threadId);
+    switch (pulled.kind) {
       // A thread this browser started and has not pushed yet does not exist
       // on the server, and saying so is the honest answer rather than a
       // fault: there is simply nothing to merge in.
-      if (response.status === 404) return "missing";
-      if (!response.ok) {
-        report(`pull ${threadId}: HTTP ${response.status}`, null);
+      case "missing":
+        return "missing";
+      case "refused":
+        report(`pull ${threadId}: HTTP ${pulled.status}`, null);
         return null;
+      case "failed":
+        report(`pull ${threadId}`, pulled.error);
+        return null;
+      case "items": {
+        // The server's own count, before decoding. A message that reached
+        // Postgres and then failed to decode here is invisible everywhere
+        // else: the thread simply looks shorter than it is.
+        const { items, offered } = pulled;
+        if (items.length < offered) {
+          report(
+            `pull ${threadId}: dropped ${
+              offered - items.length
+            } of ${offered} server item(s) as unreadable`,
+            null
+          );
+        }
+        return items;
       }
+    }
+  }
 
+  /**
+   * `GET /api/conversations?threadId=`, given `LOCKED_REQUEST_MS` to answer,
+   * without a readiness check or a report: each caller decides what a failure
+   * means. `offered` is how many items the server sent before decoding.
+   */
+  private static async _pull(threadId: string): Promise<Pulled> {
+    try {
+      const response = await PgSession.fetchAuthed(
+        `/api/conversations?threadId=${encodeURIComponent(threadId)}`,
+        {
+          credentials: "include",
+          cache: "no-store",
+          signal: timeoutSignal(LOCKED_REQUEST_MS), // An account deletion waits on every thread's read (`syncedThreads`)
+        }
+      );
+      if (response.status === 404) return { kind: "missing" };
+      if (!response.ok) return { kind: "refused", status: response.status };
       const body = await response.json();
-      const fromServer = decodeThread(body?.items);
-
-      // The server's own count, before decoding. A message that reached
-      // Postgres and then failed to decode here is invisible everywhere else:
-      // the thread simply looks shorter than it is.
-      const offered = Array.isArray(body?.items) ? body.items.length : 0;
-      if (fromServer.length < offered) {
-        report(
-          `pull ${threadId}: dropped ${
-            offered - fromServer.length
-          } of ${offered} server item(s) as unreadable`,
-          null
-        );
-      }
-
-      return fromServer;
-    } catch (e) {
-      report(`pull ${threadId}`, e);
-      return null;
+      return {
+        kind: "items",
+        items: decodeThread(body?.items),
+        offered: Array.isArray(body?.items) ? body.items.length : 0,
+      };
+    } catch (error) {
+      return { kind: "failed", error };
     }
   }
 
@@ -238,9 +312,15 @@ export class PgChatSync {
     }
 
     for (const body of bodies) {
-      const outcome = await PgChatSync._post(threadId, body);
+      const outcome = await PgChatSync._post({ threadId, userId }, body);
+      if (outcome === "no-project" && PgChatSync._isSignedInAs(userId))
+        PgChatSync._awaiting.set(threadId, projectId);
       if (outcome !== "pushed") return outcome;
     }
+    PgChatSync._awaiting.delete(threadId);
+    // This thread is on the server. Another one refused for a cap still holds
+    // the row: a push that grew nothing passes at the cap too.
+    PgChatSync._setLimit(threadId, undefined);
     // The rest is on the server, but not the whole thread: a sign-out drops
     // only what the server holds, so this one must not read as `pushed`
     return oversized.length ? "failed" : "pushed";
@@ -259,12 +339,94 @@ export class PgChatSync {
   /** Every reason `_reportRefusal` has reported */
   private static _refusalsReported = new Set<string>();
 
+  /**
+   * The cap the latest refused push named, while any thread refused for a cap
+   * has not been taken since; otherwise `undefined`. What the assistant
+   * panel says while it holds.
+   */
+  static limit(): ChatLimitExceeded | undefined {
+    return [...PgChatSync._limited.values()].at(-1);
+  }
+
+  /** Fires whenever `limit()` changes */
+  static onDidChangeLimit(cb: () => void): { dispose: () => void } {
+    PgChatSync._limitListeners.add(cb);
+    return { dispose: () => PgChatSync._limitListeners.delete(cb) };
+  }
+
+  /**
+   * The threads refused with `no-project` for a project, to push again once
+   * the server accepts that project. In memory: a reload pushes every thread
+   * again anyway, on the next sign-in dump or turn.
+   */
+  static awaiting(projectId: string): string[] {
+    return [...PgChatSync._awaiting]
+      .filter(([, waitsOn]) => waitsOn === projectId)
+      .map(([threadId]) => threadId);
+  }
+
+  /**
+   * Forget the caps and the waits this tab holds: they are one account's, and
+   * the next account's pushes say their own. Called on every session change.
+   */
+  static forgetAccountState() {
+    PgChatSync._awaiting.clear();
+    if (!PgChatSync._limited.size) return;
+    PgChatSync._limited.clear();
+    PgChatSync._emitLimit();
+  }
+
+  /**
+   * Forget the cap and the wait of one thread: `PgThreadIndex` has removed
+   * it or moved it to a fresh id, so no push under this id will clear them.
+   */
+  static forgetThread(threadId: string) {
+    PgChatSync._awaiting.delete(threadId);
+    PgChatSync._setLimit(threadId, undefined);
+  }
+
+  /**
+   * Whether the account a push was sent for is still the signed-in one. A
+   * session change mid-request has already forgotten that account's caps and
+   * waits, and its answer must not put them back for the next account.
+   */
+  private static _isSignedInAs(userId: string) {
+    return PgSession.get()?.id === userId;
+  }
+
+  /** Record a thread refused for a cap, or `undefined` once it is taken */
+  private static _setLimit(
+    threadId: string,
+    limit: ChatLimitExceeded | undefined
+  ) {
+    const before = PgChatSync.limit();
+    if (limit) {
+      // Re-inserted, so the latest refusal is the one `limit()` names
+      PgChatSync._limited.delete(threadId);
+      PgChatSync._limited.set(threadId, limit);
+    } else {
+      PgChatSync._limited.delete(threadId);
+    }
+    if (PgChatSync.limit() !== before) PgChatSync._emitLimit();
+  }
+
+  private static _emitLimit() {
+    for (const cb of PgChatSync._limitListeners) cb();
+  }
+
+  /** Thread id to the cap its latest push was refused for */
+  private static readonly _limited = new Map<string, ChatLimitExceeded>();
+  private static readonly _limitListeners = new Set<() => void>();
+
+  /** Thread id to the project id it waits on */
+  private static readonly _awaiting = new Map<string, string>();
+
   /** `<threadId>:<itemId>` of every item `push` has reported as too large */
   private static _oversizedReported = new Set<string>();
 
   /** One batch of a push. @returns how it ended -- see `PushOutcome` */
   private static async _post(
-    threadId: string,
+    { threadId, userId }: { threadId: string; userId: string },
     body: string
   ): Promise<PushOutcome> {
     try {
@@ -290,11 +452,42 @@ export class PgChatSync {
         report(`push ${threadId}: ${scope} deleted on the server`, null);
         return scope === "project" ? "project-deleted" : "thread-deleted";
       }
+      // Expected, not a failure: a project made while signed out is uploaded
+      // after its thread (HOO-2882). Unreported; the caller keeps it owed.
+      if (response.status === 409) {
+        const said = await PgChatSync._body(response);
+        if (said?.reason === NO_PROJECT_REASON) return "no-project";
+      }
+      // An account cap, named for the panel. The body cap's 413 carries
+      // `too-large` and no figure, and stays an ordinary failure.
+      if (response.status === 413) {
+        const limit = readChatLimitExceeded(await PgChatSync._body(response));
+        if (limit) {
+          if (PgChatSync._isSignedInAs(userId))
+            PgChatSync._setLimit(threadId, limit);
+          PgChatSync._reportRefusal(`account cap: ${limit.reason}`);
+          return "over-limit";
+        }
+      }
       report(`push ${threadId}: HTTP ${response.status}`, null);
       return "failed";
     } catch (e) {
       report(`push ${threadId}`, e);
       return "failed";
+    }
+  }
+
+  /** A refusal's JSON body, or `undefined` when it has none that parses */
+  private static async _body(
+    response: Response
+  ): Promise<{ reason?: unknown } | undefined> {
+    try {
+      return await response.json();
+    } catch (e) {
+      // The caller reads a missing body as "not ours" and reports the status;
+      // this says why the body did not read, without its contents
+      report("read conversation refusal body", e);
+      return undefined;
     }
   }
 
@@ -454,6 +647,123 @@ export class PgChatSync {
   }
 
   /**
+   * The threads the server already holds, read without pushing anything: an
+   * account deletion's hand-over, whose result goes to `forget` once the
+   * server has deleted the account. Pushing first would make work the
+   * account never held "saved" seconds before it is deleted.
+   *
+   * The threads are those `pushAll` would push, and a thread is in only when
+   * the server's copy (`GET /api/conversations`, as a pull reads it) holds
+   * every local item -- the truncation notice aside, which `push` never
+   * uploads -- at a version at least as new (`isHeldBy`). A thread the server
+   * lacks or has deleted (404), a read that fails, a local copy that cannot
+   * be read, a thread a fence names, and every thread while another account
+   * owns the folder, stay on this device: logged, not reported, since each
+   * is an answer this hand-over expects, except a read the server refused
+   * with any other status, or one that failed for a reason other than the
+   * network dropping, which is reported. An empty thread is in, as
+   * `push` counts it pushed.
+   *
+   * Hashed from the copy compared, as `pushAll` hashes before its push, so a
+   * write landing afterwards leaves the stored copy newer than the hash and
+   * `forget` keeps it.
+   *
+   * Runs while `PgSession.isEnding` holds pushes off, so its readiness is
+   * the session and the sync service alone.
+   *
+   * @returns as `pushAll`, `null` when this device could not enumerate its
+   * threads or sync is unavailable
+   */
+  static async syncedThreads(): Promise<HandOver | null> {
+    // Every thread stays: `forget` keeps all of them for `null`
+    const keepAll = (why: string) => {
+      log.info("chats kept: the server's copies were not read", {
+        context: { why },
+      });
+      // eslint-disable-next-line unicorn/no-null -- `HandOver | null`, the contract `pushAll` and `forget` share: "could not look"
+      return null;
+    };
+    const userId = PgSession.get()?.id;
+    if (!userId) return keepAll("nobody is signed in");
+    if (!(await PgSyncClient.available())) {
+      return keepAll("sync is unavailable");
+    }
+
+    const indexed = Object.values(await PgThreadIndex.all());
+    const stored = await PgChatStorage.threadIds();
+    if (stored === null) return keepAll("the stored threads cannot be listed");
+    const threadIds = [...new Set([...indexed, ...stored])];
+
+    // Another account's threads are not this one's to drop
+    if (await PgThreadFence.isOwnedByAnother(userId)) {
+      log.info("chats kept: the folder is another account's", {
+        context: { threads: threadIds.length },
+      });
+      return { handedOver: [], complete: threadIds.length === 0 };
+    }
+
+    const outcomes = await Promise.all(
+      threadIds.map((id) => PgChatSync._syncedThread(id))
+    );
+    const handedOver = outcomes.filter(
+      (o): o is HandedThread => o !== undefined
+    );
+    return {
+      handedOver,
+      complete: handedOver.length === threadIds.length,
+    };
+  }
+
+  /** One thread of `syncedThreads`: its hash when the server holds it, else why not, logged */
+  private static async _syncedThread(
+    threadId: string
+  ): Promise<HandedThread | undefined> {
+    const keep = (why: string) => {
+      log.info("chat kept: not known to be on the server", {
+        context: { threadId, why },
+      });
+      return undefined;
+    };
+    if (await PgThreadFence.isFenced(threadId)) return keep("fenced");
+
+    const local = await PgChatStorage.read(threadId);
+    if (local === null) return keep("unreadable here");
+    // `_hashOf`'s hash, of the very copy compared below
+    const hash = await sha256(JSON.stringify(local));
+    const owed = withoutTruncationNotice(local);
+    if (!owed.length) return { id: threadId, hash };
+
+    const pulled = await PgChatSync._pull(threadId);
+    switch (pulled.kind) {
+      case "missing":
+        return keep("not on the server");
+      case "refused":
+        // A 404 is `missing`, which the hand-over expects; any other refusal
+        // (a 401, a 5xx) keeps the thread for a reason the team must hear of
+        report(
+          `read held thread ${threadId}: HTTP ${pulled.status}`,
+          new Error(`thread read answered ${pulled.status}`)
+        );
+        return undefined;
+      case "failed":
+        // A dropped connection is the user's network; anything else (a body
+        // that does not parse, a read out of time, a fault of ours) is reported
+        if (isNetworkFailure(pulled.error)) {
+          log.info("chat kept: not known to be on the server", {
+            context: { threadId, why: "read failed", error: pulled.error },
+          });
+        } else {
+          report(`read held thread ${threadId}`, pulled.error);
+        }
+        return undefined;
+      case "items":
+        return isHeldBy(pulled.items, owed)
+          ? { id: threadId, hash }
+          : keep("an item is missing or newer here");
+    }
+  }
+
+  /**
    * Forget the threads a sign-out's `pushAll` handed over.
    *
    * Separate from the push because a sign-out spans both: the push runs while
@@ -530,7 +840,7 @@ export class PgChatSync {
     return items === null ? null : sha256(JSON.stringify(items));
   }
 
-  /** Not while a sign-out tears down: the cookie is gone, see `PgSession.isEnding` */
+  /** No push may start while a sign-out tears down or an account deletion is under way, see `PgSession.isEnding` */
   private static async _ready() {
     return (
       !!PgSession.get() &&
@@ -629,14 +939,16 @@ if (import.meta.vitest) {
     });
 
     /** `/api/sync` says yes; everything else is the caller's to describe */
-    const respondingWith = (rest: (url: string) => unknown) =>
-      fetchMock.mockImplementation((url: string) =>
+    const respondingWith = (
+      rest: (url: string, init?: RequestInit) => unknown
+    ) =>
+      fetchMock.mockImplementation((url: string, init?: RequestInit) =>
         url === "/api/sync"
           ? Promise.resolve({
               ok: true,
               json: async () => ({ enabled: true, db: "ok" }),
             })
-          : rest(url)
+          : rest(url, init)
       );
 
     /** The body of the one POST that was made */
@@ -862,6 +1174,184 @@ if (import.meta.vitest) {
 
           expect(await PgChatSync.push(threadId)).toBe("failed");
           expect(posts()).toHaveLength(2);
+        });
+
+        describe("an account refusal (HOO-2882)", () => {
+          // Static state: each case starts with none of the last case's
+          beforeEach(() => PgChatSync.forgetAccountState());
+
+          const capped = {
+            reason: "too-many-messages",
+            limit: 20_000,
+            count: 20_001,
+          };
+          const answering = (status: number, body: unknown) =>
+            respondingWith(() =>
+              Promise.resolve(
+                status === 200
+                  ? { ok: true, json: async () => ({ written: 1 }) }
+                  : { ok: false, status, json: async () => body }
+              )
+            );
+
+          it("names the cap a 413 carries, until a push is taken again", async () => {
+            await signedIn();
+            await PgChatStorage.write(threadId, [item(1)]);
+            const changed = vi.fn();
+            const sub = PgChatSync.onDidChangeLimit(changed);
+
+            answering(413, {
+              error: "over",
+              reason: capped.reason,
+              limit: capped.limit,
+              count: capped.count,
+            });
+            expect(await PgChatSync.push(threadId)).toBe("over-limit");
+            expect(PgChatSync.limit()).toEqual(capped);
+            expect(changed).toHaveBeenCalledTimes(1);
+
+            answering(200, {});
+            expect(await PgChatSync.push(threadId)).toBe("pushed");
+            expect(PgChatSync.limit()).toBeUndefined();
+            expect(changed).toHaveBeenCalledTimes(2);
+            sub.dispose();
+          });
+
+          it("keeps naming the cap while another thread is still refused", async () => {
+            // At the thread cap a push to an old thread grows nothing and
+            // passes, while the new thread still does not sync
+            await signedIn();
+            await PgChatStorage.write(threadId, [item(1)]);
+            const other = await PgThreadIndex.ensure("w2");
+            await PgChatStorage.write(other, [item(2)]);
+
+            answering(413, {
+              error: "over",
+              reason: capped.reason,
+              limit: capped.limit,
+              count: capped.count,
+            });
+            expect(await PgChatSync.push(threadId)).toBe("over-limit");
+            answering(200, {});
+            expect(await PgChatSync.push(other)).toBe("pushed");
+
+            expect(PgChatSync.limit()).toEqual(capped);
+          });
+
+          it("forgets the cap and the waits when the account changes", async () => {
+            await signedIn();
+            await PgChatStorage.write(threadId, [item(1)]);
+            answering(413, {
+              error: "over",
+              reason: capped.reason,
+              limit: capped.limit,
+              count: capped.count,
+            });
+            await PgChatSync.push(threadId);
+            answering(409, { error: "No such project", reason: "no-project" });
+            await PgChatSync.push(threadId);
+            const changed = vi.fn();
+            const sub = PgChatSync.onDidChangeLimit(changed);
+
+            PgChatSync.forgetAccountState();
+
+            expect(PgChatSync.limit()).toBeUndefined();
+            expect(PgChatSync.awaiting("w1")).toEqual([]);
+            expect(changed).toHaveBeenCalledTimes(1);
+            sub.dispose();
+          });
+
+          it("does not take a refusal for an account that has signed out meanwhile", async () => {
+            await signedIn();
+            await PgChatStorage.write(threadId, [item(1)]);
+            const switchedAnd = (status: number, body: unknown) =>
+              respondingWith(async () => {
+                // The session changes while the POST is out, as a refresh can
+                await PgSession.refreshWith({
+                  id: "u2",
+                  name: undefined,
+                  image: undefined,
+                  login: undefined,
+                });
+                PgChatSync.forgetAccountState();
+                return { ok: false, status, json: async () => body };
+              });
+
+            switchedAnd(413, {
+              error: "over",
+              reason: capped.reason,
+              limit: capped.limit,
+              count: capped.count,
+            });
+            expect(await PgChatSync.push(threadId)).toBe("over-limit");
+            expect(PgChatSync.limit()).toBeUndefined();
+
+            await signedIn();
+            switchedAnd(409, {
+              error: "No such project",
+              reason: "no-project",
+            });
+            expect(await PgChatSync.push(threadId)).toBe("no-project");
+            expect(PgChatSync.awaiting("w1")).toEqual([]);
+          });
+
+          it("forgets the cap and the wait of a thread that is dropped", async () => {
+            await signedIn();
+            await PgChatStorage.write(threadId, [item(1)]);
+            answering(413, {
+              error: "over",
+              reason: capped.reason,
+              limit: capped.limit,
+              count: capped.count,
+            });
+            await PgChatSync.push(threadId);
+            const other = await PgThreadIndex.ensure("w2");
+            await PgChatStorage.write(other, [item(2)]);
+            answering(409, { error: "No such project", reason: "no-project" });
+            await PgChatSync.push(other);
+
+            PgChatSync.forgetThread(threadId);
+            PgChatSync.forgetThread(other);
+
+            expect(PgChatSync.limit()).toBeUndefined();
+            expect(PgChatSync.awaiting("w2")).toEqual([]);
+          });
+
+          it("keeps the body cap's 413 an ordinary failure", async () => {
+            await signedIn();
+            await PgChatStorage.write(threadId, [item(1)]);
+
+            answering(413, { error: "too big", reason: "too-large" });
+
+            expect(await PgChatSync.push(threadId)).toBe("failed");
+            expect(PgChatSync.limit()).toBeUndefined();
+          });
+
+          it("keeps a thread refused for no-project waiting on its project", async () => {
+            await signedIn();
+            await PgChatStorage.write(threadId, [item(1)]);
+
+            answering(409, { error: "No such project", reason: "no-project" });
+            const outcome = await PgChatSync.push(threadId);
+
+            expect(outcome).toBe("no-project");
+            expect(isHandedOver(outcome)).toBe(false);
+            expect(PgChatSync.awaiting("w1")).toEqual([threadId]);
+
+            answering(200, {});
+            expect(await PgChatSync.push(threadId)).toBe("pushed");
+            expect(PgChatSync.awaiting("w1")).toEqual([]);
+          });
+
+          it("reads a 409 without the reason as a failure", async () => {
+            await signedIn();
+            await PgChatStorage.write(threadId, [item(1)]);
+
+            answering(409, { error: "something else" });
+
+            expect(await PgChatSync.push(threadId)).toBe("failed");
+            expect(PgChatSync.awaiting("w1")).toEqual([]);
+          });
         });
 
         it("still posts a thread holding only the truncation notice, empty", async () => {
@@ -1429,6 +1919,282 @@ if (import.meta.vitest) {
           "/api/conversations",
           expect.anything()
         );
+      });
+    });
+
+    describe("handing conversations over at account deletion", () => {
+      let getFailures: typeof import("./diagnostics").getFailures;
+      beforeAll(async () => {
+        ({ getFailures } = await import("./diagnostics"));
+      });
+
+      /** A thread the index can place */
+      let threadId: string;
+
+      beforeEach(async () => {
+        await PgChatStorage.clear();
+        await PgThreadFence.clearOwner();
+        await PgThreadIndex.clear();
+        PgSession.reset();
+        PgSyncClient.reset();
+        threadId = await PgThreadIndex.ensure("w1");
+      });
+
+      /** The server holds `held` for each thread id; any other is a 404 */
+      const serverHolds = (held: Map<string, ChatItem[]>) =>
+        respondingWith((url) => {
+          const id = new URL(url, "https://playground.test").searchParams.get(
+            "threadId"
+          );
+          const items = id ? held.get(id) : undefined;
+          return Promise.resolve(
+            items
+              ? { ok: true, status: 200, json: async () => ({ items }) }
+              : { ok: false, status: 404, json: async () => ({}) }
+          );
+        });
+
+      /** `item(n)`, changed at second `at` */
+      const changed = (n: number, at: number): ChatItem => ({
+        kind: "user",
+        id: item(n).id,
+        createdAt: item(n).createdAt,
+        updatedAt: new Date(at * 1000).toISOString(),
+        text: `m${n} edited`,
+      });
+
+      const posted = () =>
+        fetchMock.mock.calls.filter(([, init]) => init?.method === "POST");
+
+      it("hands over a thread the server holds whole, and forget drops it", async () => {
+        await signedIn();
+        await PgChatStorage.write(threadId, [item(1), item(2)]);
+        serverHolds(new Map([[threadId, [item(1), item(2), item(3)]]]));
+
+        const handed = await PgChatSync.syncedThreads();
+
+        expect(handed?.handedOver.map(({ id }) => id)).toEqual([threadId]);
+        expect(handed?.complete).toBe(true);
+        expect(posted()).toEqual([]);
+        await PgChatSync.forget(handed);
+        expect(await PgChatStorage.threadIds()).toEqual([]);
+      });
+
+      it("keeps a thread with a local item the server lacks", async () => {
+        await signedIn();
+        await PgChatStorage.write(threadId, [item(1), item(2)]);
+        serverHolds(new Map([[threadId, [item(1)]]]));
+
+        const handed = await PgChatSync.syncedThreads();
+
+        expect(handed).toEqual({ handedOver: [], complete: false });
+        await PgChatSync.forget(handed);
+        expect(await PgChatStorage.read(threadId)).toEqual([item(1), item(2)]);
+      });
+
+      it("keeps a thread whose local copy of an item is newer than the server's", async () => {
+        await signedIn();
+        await PgChatStorage.write(threadId, [changed(1, 50)]);
+        serverHolds(new Map([[threadId, [changed(1, 40)]]]));
+
+        expect(await PgChatSync.syncedThreads()).toEqual({
+          handedOver: [],
+          complete: false,
+        });
+      });
+
+      it("hands over a thread whose server copy is newer", async () => {
+        await signedIn();
+        await PgChatStorage.write(threadId, [changed(1, 40)]);
+        serverHolds(new Map([[threadId, [changed(1, 50)]]]));
+
+        expect(
+          (await PgChatSync.syncedThreads())?.handedOver.map(({ id }) => id)
+        ).toEqual([threadId]);
+      });
+
+      it.each([
+        ["the server has never seen it", () => serverHolds(new Map())],
+        [
+          "the connection drops",
+          () =>
+            respondingWith(() =>
+              Promise.reject(new TypeError("Failed to fetch"))
+            ),
+        ],
+      ])("keeps a thread when %s, and reports nothing", async (_, arrange) => {
+        await signedIn();
+        await PgChatStorage.write(threadId, [item(1)]);
+        arrange();
+        const failures = getFailures().length;
+
+        const handed = await PgChatSync.syncedThreads();
+
+        expect(handed).toEqual({ handedOver: [], complete: false });
+        expect(getFailures()).toHaveLength(failures);
+        await PgChatSync.forget(handed);
+        expect(await PgChatStorage.read(threadId)).toEqual([item(1)]);
+      });
+
+      it.each([500, 401])(
+        "keeps a thread the server refuses with %i, and reports it",
+        async (status) => {
+          await signedIn();
+          await PgChatStorage.write(threadId, [item(1)]);
+          respondingWith(() =>
+            Promise.resolve({ ok: false, status, json: async () => ({}) })
+          );
+          const failures = getFailures().length;
+
+          const handed = await PgChatSync.syncedThreads();
+
+          expect(handed).toEqual({ handedOver: [], complete: false });
+          expect(getFailures().slice(failures)).toEqual([
+            expect.objectContaining({
+              what: `read held thread ${threadId}: HTTP ${status}`,
+            }),
+          ]);
+          await PgChatSync.forget(handed);
+          expect(await PgChatStorage.read(threadId)).toEqual([item(1)]);
+        }
+      );
+
+      it("keeps a thread written to between the read and forget", async () => {
+        // The deletion request runs between the two, with the panel open
+        await signedIn();
+        await PgChatStorage.write(threadId, [item(1)]);
+        serverHolds(new Map([[threadId, [item(1)]]]));
+
+        const handed = await PgChatSync.syncedThreads();
+        await PgChatStorage.write(threadId, [item(1), item(2)]);
+        await PgChatSync.forget(handed);
+
+        expect(await PgChatStorage.read(threadId)).toEqual([item(1), item(2)]);
+      });
+
+      it("keeps every thread while the folder is another account's", async () => {
+        await signedIn();
+        await PgChatStorage.write(threadId, [item(1)]);
+        await PgThreadFence.clearOwner();
+        await PgThreadFence.settle("someone-else");
+        await PgSession.refreshWith({
+          id: "u1",
+          name: undefined,
+          image: undefined,
+          login: undefined,
+        });
+        serverHolds(new Map([[threadId, [item(1)]]]));
+
+        const handed = await PgChatSync.syncedThreads();
+        await PgChatSync.forget(handed);
+        const kept = await PgChatStorage.read(threadId);
+        await PgThreadFence.clearOwner();
+
+        expect(handed).toEqual({ handedOver: [], complete: false });
+        expect(kept).toEqual([item(1)]);
+      });
+
+      it("keeps a thread a fence names, though the server holds it", async () => {
+        await signedIn();
+        await PgChatStorage.write(threadId, [item(1)]);
+        serverHolds(new Map([[threadId, [item(1)]]]));
+        vi.spyOn(PgThreadFence, "isFenced").mockImplementation(
+          async (id) => id === threadId
+        );
+
+        const handed = await PgChatSync.syncedThreads();
+
+        expect(handed).toEqual({ handedOver: [], complete: false });
+      });
+
+      it("keeps a thread whose item's version does not parse, on either side", async () => {
+        await signedIn();
+        // A bad `updatedAt` is dropped on decode for `createdAt`; a bad
+        // `createdAt` has nothing to fall back on
+        const unparseable: ChatItem = {
+          kind: "user",
+          id: item(1).id,
+          createdAt: "not a date",
+          text: "m1",
+        };
+        await PgChatStorage.write(threadId, [unparseable]);
+        serverHolds(new Map([[threadId, [unparseable]]]));
+
+        expect(await PgChatSync.syncedThreads()).toEqual({
+          handedOver: [],
+          complete: false,
+        });
+      });
+
+      it("reports a failed read that is not the network dropping", async () => {
+        await signedIn();
+        await PgChatStorage.write(threadId, [item(1)]);
+        const failure = new SyntaxError("Unexpected token < in JSON");
+        respondingWith(() =>
+          Promise.resolve({
+            ok: true,
+            status: 200,
+            json: async () => {
+              throw failure;
+            },
+          })
+        );
+        const failures = getFailures().length;
+
+        const handed = await PgChatSync.syncedThreads();
+
+        expect(handed).toEqual({ handedOver: [], complete: false });
+        expect(getFailures().slice(failures)).toEqual([
+          expect.objectContaining({
+            what: `read held thread ${threadId}`,
+          }),
+        ]);
+      });
+
+      it("keeps a thread whose read is still out at its time limit, and reports it", async () => {
+        await signedIn();
+        await PgChatStorage.write(threadId, [item(1)]);
+        // The limit in the test's hands: `AbortSignal.timeout` keeps real time
+        const limit = new AbortController();
+        vi.spyOn(AbortSignal, "timeout").mockReturnValue(limit.signal);
+        const timedOut = new Error("signal timed out");
+        timedOut.name = "TimeoutError";
+        // As `fetch` does, the read ends when its signal aborts. The limit
+        // passes while the read is out, and only then does the server answer
+        respondingWith(
+          (_, init) =>
+            new Promise((resolve, reject) => {
+              init?.signal?.addEventListener("abort", () => reject(timedOut));
+              limit.abort();
+              resolve({
+                ok: true,
+                status: 200,
+                json: async () => ({ items: [item(1)] }),
+              });
+            })
+        );
+        const failures = getFailures().length;
+
+        const handed = await PgChatSync.syncedThreads();
+
+        expect(handed).toEqual({ handedOver: [], complete: false });
+        expect(getFailures().slice(failures)).toEqual([
+          expect.objectContaining({
+            what: `read held thread ${threadId}`,
+            error: timedOut,
+          }),
+        ]);
+      });
+
+      it("reads even while a deletion holds pushes off", async () => {
+        await signedIn();
+        await PgChatStorage.write(threadId, [item(1)]);
+        serverHolds(new Map([[threadId, [item(1)]]]));
+        vi.spyOn(PgSession, "isEnding", "get").mockReturnValue(true);
+
+        expect(
+          (await PgChatSync.syncedThreads())?.handedOver.map(({ id }) => id)
+        ).toEqual([threadId]);
       });
     });
 

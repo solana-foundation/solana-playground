@@ -53,6 +53,14 @@ describe("conversations", { skip: !DB && "DATABASE_URL not set" }, () => {
     await query("delete from projects where user_id = any($1)", [
       [userId, other],
     ]);
+    // A push no longer creates its project (HOO-2882): the rows a synced
+    // project would have, made the way `PUT /api/projects` makes them
+    await query(
+      `insert into projects (id, user_id, name, kind)
+       select p, u, p, 'project'
+         from unnest($1::text[]) as u, unnest(array['p1', 'p2', 'p9']) as p`,
+      [[userId, other]]
+    );
   });
 
   const item = (n) => ({
@@ -66,7 +74,7 @@ describe("conversations", { skip: !DB && "DATABASE_URL not set" }, () => {
     assert.deepEqual(await listMessages(userId, thread(9)), []);
   });
 
-  it("creates the project and the thread on first append", async () => {
+  it("creates the thread on first append", async () => {
     await appendMessages(userId, on(1), [item(1)]);
     const items = await listMessages(userId, thread(1));
     assert.equal(items.length, 1);
@@ -289,9 +297,9 @@ describe("conversations", { skip: !DB && "DATABASE_URL not set" }, () => {
     });
 
     it("refuses a new thread under it, before creating one", async () => {
-      // The project insert is `on conflict do nothing`, so a tombstone stays
-      // one -- and a thread row inserted beneath it would be a live thread
-      // on a dead project, which the next list by project would hand out
+      // A tombstone is a project row, so the push finds one -- and a thread
+      // row inserted beneath it would be a live thread on a dead project,
+      // which the next list by project would hand out
       await appendMessages(userId, on(1), [item(1)]);
       await deleteProject(userId, "p1");
 

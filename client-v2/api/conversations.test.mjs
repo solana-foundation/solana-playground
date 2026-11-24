@@ -177,6 +177,42 @@ describe("/api/conversations", () => {
       assert.equal(body.scope, "project");
     });
 
+    it("maps a project the account does not hold to 409 no-project", async () => {
+      // A push no longer creates its project row (HOO-2882). The client
+      // reads this as "owed": the project upload that makes the row follows
+      const mod = await load();
+      const { NoProject, NO_PROJECT_REASON } = await import(
+        "../src/features/persistence/server.mjs"
+      );
+
+      const { status, body } = mod.describeFailure(new NoProject());
+
+      assert.equal(status, 409);
+      assert.equal(body.reason, NO_PROJECT_REASON);
+      assert.equal(NO_PROJECT_REASON, "no-project");
+    });
+
+    it("maps an account cap to 413 naming the cap, its figure and the count", async () => {
+      const mod = await load();
+      const { OverChatLimit } = await import(
+        "../src/features/persistence/server.mjs"
+      );
+      const limit = {
+        reason: "too-many-messages",
+        limit: 20_000,
+        count: 20_001,
+      };
+
+      const { status, body } = mod.describeFailure(new OverChatLimit(limit));
+
+      assert.equal(status, 413);
+      assert.deepEqual(
+        { reason: body.reason, limit: body.limit, count: body.count },
+        limit
+      );
+      assert.equal(typeof body.error, "string");
+    });
+
     it("keeps the driver's own text out of any other answer", async () => {
       const mod = await load();
       const { status, body } = mod.describeFailure(

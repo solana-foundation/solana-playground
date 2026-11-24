@@ -3,7 +3,10 @@
 ### Requirement: Run a client project from the stage row
 
 A project with no program SHALL have a Run button (`flow-run`) in its stage
-row. Pressing it SHALL:
+row. When a docs link opened the project, its first press asks first
+(`open-link-trust`, "The first Run of a link's code asks first"); once the
+user agrees, and on every press in a project no link opened, pressing it
+SHALL:
 
 - run the project's scripts under `client/`, as the terminal's `run` does,
   stopping at the first script that fails (the terminal's `test` still runs
@@ -34,7 +37,7 @@ has been run, and its `data-state` SHALL name the state shown:
 
 | `data-state` | Title | Body |
 | --- | --- | --- |
-| `source` | "From {host}: {title}", or "From a docs link: {title}" when the link had no `from` | "Runs with your Playground wallet." When the link had `from`, plus "View the docs page", which opens `from` in a new tab |
+| `source` | "Opened from a link: {title}"; the source is the link's claim (`open-link-trust`) | With `from`: "The link says it comes from {host}. Playground can't check that, so read the code before you run it with your Playground wallet." plus "View the docs page", which opens `from` in a new tab. Without: "Playground can't check where this code came from, so read the code before you run it with your Playground wallet." |
 | `done` | "Ran in {s} s" | "Signatures and Explorer links are in the terminal." |
 | `failed` | "Run failed" | The script's error message |
 | `missing-package` | "Playground can't load `{package}` yet" | "This script imports it, so nothing ran." |

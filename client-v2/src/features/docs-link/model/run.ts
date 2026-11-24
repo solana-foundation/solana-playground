@@ -5,7 +5,9 @@ import { PgCommand, PgConnection, PgExplorer, PgWallet, PgWeb3 } from "@/utils";
 import type { RunResult } from "@/utils/js-runtime";
 import { missingPackageOf } from "@/utils/js-runtime";
 
+import type { DocsLink } from "../lib/link";
 import { PgDocsLink } from "./opened";
+import { restingOf } from "./resting";
 import type { RunOutcome, WalletOrigin } from "./telemetry";
 import { docsLinkTelemetry } from "./telemetry";
 
@@ -18,7 +20,7 @@ type EndedState =
   | { kind: "missing-package"; pkg: string };
 
 /** A state with no run going and no card asking for SOL */
-type RestingState = { kind: "idle" } | EndedState;
+export type RestingState = { kind: "idle" } | EndedState;
 
 /** What the stage row's Run and its callout show */
 export type RunState =
@@ -35,6 +37,16 @@ export type RunState =
       previous: RestingState;
     }
   | {
+      /**
+       * The first Run of a link's code waits for the user to read it: the
+       * dialog shows the link's file and the source it claims
+       */
+      kind: "confirm";
+      link: DocsLink;
+      /** What Cancel goes back to */
+      previous: RestingState;
+    }
+  | {
       kind: "funding";
       address: string;
       balance: number;
@@ -42,6 +54,13 @@ export type RunState =
       /** What Not now goes back to */
       previous: RestingState;
     };
+
+/**
+ * How the question before a run from elsewhere ended: `run` (no link, a link
+ * already agreed to, or Run), `no` (Cancel, another project, a question
+ * already open), or `busy` (a run is going; the caller says so)
+ */
+export type RunAnswer = "run" | "no" | "busy";
 
 type Listener = (state: RunState) => void;
 
@@ -61,8 +80,26 @@ let started = 0;
 let switches = 0;
 let isListening = false;
 const listeners = new Set<Listener>();
+/**
+ * The link whose code the user agreed to run. Compared by identity: a new
+ * link is a new object, so its code is asked about again.
+ */
+let confirmedLink: DocsLink | undefined;
+/** Answers the open question before the first Run, if one is open */
+let answer: ((isYes: boolean) => void) | undefined;
+
+/** Answer the open question, if any, once */
+const settle = (isYes: boolean) => {
+  const pending = answer;
+  answer = undefined;
+  pending?.(isYes);
+};
 
 const set = (next: RunState) => {
+  // Any state but the question closes it, with "no": a project that
+  // switched, a run typed in the terminal, Cancel. Run answers "yes" first,
+  // so this finds nothing left to answer
+  if (next.kind !== "confirm") settle(false);
   state = next;
   listeners.forEach((listener) => listener(next));
 };
@@ -70,14 +107,6 @@ const set = (next: RunState) => {
 /** Back to a clean callout, unless a run is still going */
 const reset = () => {
   if (state.kind !== "running") set({ kind: "idle" });
-};
-
-/** @returns what Not now should return to from the current state */
-const restingOf = (current: RunState): RestingState => {
-  if (current.kind === "funding" || current.kind === "running") {
-    return current.previous;
-  }
-  return current;
 };
 
 const messageOf = (error: unknown) =>
@@ -170,12 +199,38 @@ const listen = () => {
   isListening = true;
 };
 
+/**
+ * Ask before the first Run of code a docs link opened: the link is anyone's
+ * to write, and its code runs with the Playground wallet. Asked before the
+ * wallet setup, so Cancel leaves nothing behind.
+ *
+ * @param since `switches` when the press began
+ * @returns whether to go on: no link, a link already agreed to, or Run
+ */
+const isAgreed = async (since: number): Promise<boolean> => {
+  const link = PgDocsLink.opened;
+  if (!link || link === confirmedLink) return true;
+  // One question at a time: a second asker would orphan the first's answer
+  if (answer) {
+    log.debug("a run asked while the question was open; it runs nothing");
+    return false;
+  }
+  const isYes = await new Promise<boolean>((resolve) => {
+    answer = resolve;
+    set({ kind: "confirm", link, previous: restingOf(state) });
+  });
+  // An answer for a project that is no longer open runs nothing
+  if (!isYes || switches !== since || PgDocsLink.opened !== link) return false;
+  confirmedLink = link;
+  return true;
+};
+
 /** The wallet's balance now, read from the chain rather than the cached one */
 const balanceOf = async (address: PgWeb3.PublicKey) =>
   PgWeb3.lamportsToSol(await PgConnection.current.getBalance(address));
 
 /** What the SOL check found */
-type Funds = "enough" | "short" | "project-left";
+type Funds = "enough" | "short" | "project-left" | "running";
 
 /**
  * The SOL check a docs link asks for: the funding card when the Playground
@@ -186,11 +241,14 @@ type Funds = "enough" | "short" | "project-left";
  * @param since `switches` when the press began: another project opened
  * while the balance was read means the answer belongs to a project that is
  * no longer open, so no card is shown and nothing runs
+ * @param runsBefore `started` when the press began: a run started elsewhere
+ * since (the menu, the terminal), going or already ended, is the run, and a
+ * card would cover it
  * @param wallet `new` when Run had to set the wallet up first; Check again
  * always reports `existing`, since the card's wallet exists by then
  */
 const fundsFor =
-  (since: number) =>
+  (since: number, runsBefore: number) =>
   async (wallet: WalletOrigin): Promise<Funds> => {
     const needed = PgDocsLink.opened?.sol;
     if (!needed) return "enough";
@@ -202,6 +260,7 @@ const fundsFor =
 
     const balance = await balanceOf(current.publicKey);
     if (switches !== since) return "project-left";
+    if (started !== runsBefore) return "running";
     if (balance >= needed) return "enough";
 
     docsLinkTelemetry.track("docs_link_run_funding_shown", {
@@ -309,14 +368,53 @@ export const PgClientRun = {
     if (state.kind === "running" || isStarting) return;
     isStarting = true;
     const since = switches;
+    const runsBefore = started;
     try {
+      if (!(await isAgreed(since))) return;
       const wallet = await walletForRun();
       if (!wallet || switches !== since) return;
-      if ((await fundsFor(since)(wallet)) !== "enough") return;
+      if ((await fundsFor(since, runsBefore)(wallet)) !== "enough") return;
+      // A run from the menu or the terminal went while Run waited on the
+      // wallet: that was the run, and this one would run the scripts again
+      if (started !== runsBefore) return;
     } finally {
       isStarting = false;
     }
     await runScripts();
+  },
+
+  /**
+   * Ask before a run that does not start from Run, such as the explorer's
+   * menu: the same question, once per link.
+   *
+   * @returns how the question ended
+   */
+  async askFirst(): Promise<RunAnswer> {
+    listen();
+    const link = PgDocsLink.opened;
+    // A question is owed only for a link's code not agreed to yet. Then a
+    // run going refuses it: the question would replace the running state
+    // the stage row shows. Otherwise the command answers, as it always did
+    const isOwed = link !== undefined && link !== confirmedLink;
+    if (isOwed && state.kind === "running") {
+      log.info("a run from elsewhere was refused: another run is going");
+      return "busy";
+    }
+    return (await isAgreed(switches)) ? "run" : "no";
+  },
+
+  /** The question's Run: the user read the link's code and runs it */
+  confirmRun() {
+    if (state.kind !== "confirm") return;
+    const { previous } = state;
+    settle(true);
+    set(previous);
+  },
+
+  /** The question's Cancel, or its dialog closed: nothing runs */
+  cancelRun() {
+    if (state.kind !== "confirm") return;
+    set(state.previous);
   },
 
   /** The funding card's Check again */
@@ -324,9 +422,10 @@ export const PgClientRun = {
     if (isStarting) return;
     isStarting = true;
     const since = switches;
+    const runsBefore = started;
     let funds: Funds;
     try {
-      funds = await fundsFor(since)("existing");
+      funds = await fundsFor(since, runsBefore)("existing");
     } finally {
       isStarting = false;
     }

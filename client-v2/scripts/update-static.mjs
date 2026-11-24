@@ -12,7 +12,9 @@
  *
  * Files under `client-v2/static` then replace their upstream copies
  * (`static-overlay.mjs`), and the mirrored `index.html` is pointed at the
- * brand's icons and share card (`brand-head.mjs`).
+ * brand's icons and share card (`brand-head.mjs`). `robots.txt` is written
+ * per deployment: a preview or a `DISALLOW_ROBOTS=true` build disallows every
+ * crawler (`robots.mjs`).
  *
  * Run via `make update-static` after cloning, after creating a worktree, or
  * after bumping the submodule.
@@ -22,6 +24,7 @@ import fs from "fs/promises";
 import path from "path";
 
 import { brandHead } from "./brand-head.mjs";
+import { isRobotsDisallowed, robotsTxt } from "./robots.mjs";
 import { overlayStatic } from "./static-overlay.mjs";
 import { CLIENT_PATH, exists } from "./utils.mjs";
 
@@ -79,6 +82,10 @@ const overlaid = await overlayStatic(
   DEST_PATH
 );
 
+// After the overlay, so the environment decides over any copy in `static/`
+const isDisallowed = isRobotsDisallowed(process.env);
+await fs.writeFile(path.join(DEST_PATH, "robots.txt"), robotsTxt(process.env));
+
 // The icons and share image the overlay just copied are named only by the
 // page's markup, so a crawler, a link preview or a home screen reads them
 // without running the bundle.
@@ -116,5 +123,8 @@ console.log(
     `, overlaid ${overlaid.length} from client-v2/static (${overlaid.join(
       ", "
     )})` +
-    ", pointed index.html at the brand icons and share card"
+    ", pointed index.html at the brand icons and share card" +
+    (isDisallowed
+      ? ", disallowed every crawler in robots.txt"
+      : ", allowed crawlers in robots.txt except /api/")
 );

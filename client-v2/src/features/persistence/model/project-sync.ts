@@ -808,6 +808,9 @@ export class PgProjectSync {
         projectId === PgExplorer.currentWorkspaceId
       );
       PgProjectSync._clear(projectId);
+      // Not awaited: a listener pushes conversations, which must not hold
+      // up this push or the queue behind it
+      for (const cb of PgProjectSync._acceptListeners) cb(projectId);
       return "ok";
     } catch (e) {
       report(`push project ${projectId}`, e);
@@ -1846,6 +1849,18 @@ export class PgProjectSync {
   }
 
   /**
+   * Fires with a project's id each time the server accepts a push of it, so
+   * a conversation refused for `no-project` can follow its project up
+   * (HOO-2882). A listener must not throw and must not wait.
+   */
+  static onDidAccept(cb: (projectId: string) => void): Disposable {
+    PgProjectSync._acceptListeners.add(cb);
+    return {
+      dispose: () => PgProjectSync._acceptListeners.delete(cb),
+    };
+  }
+
+  /**
    * Fires whenever the set of outstanding conflicts changes, raised *or*
    * settled. The banner had no way to hear the second, so once shown it stayed
    * up for the rest of the session -- including over projects with no conflict.
@@ -2008,6 +2023,9 @@ export class PgProjectSync {
   private static readonly _names = new Map<string, string>();
   private static readonly _conflicts = new Map<string, Conflict>();
   private static readonly _conflictListeners = new Set<() => void>();
+  private static readonly _acceptListeners = new Set<
+    (projectId: string) => void
+  >();
   /** Merges and adoptions running or queued, per project -- see `_exclusive` */
   private static readonly _merging = new Map<string, number>();
   /** The last queued merge or adoption per project, while any is outstanding */

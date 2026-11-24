@@ -154,6 +154,27 @@ describe("GitHub profile fields", () => {
   });
 });
 
+describe("GitHub tokens at rest", () => {
+  let restore;
+  beforeEach(() => {
+    restore = withEnv(SIGN_IN);
+  });
+  afterEach(() => restore());
+
+  // The tests of the token read build their own Better Auth with
+  // `ACCOUNT_OPTIONS`; this pins that the deployment's own instance uses it,
+  // since dropping it stores tokens in plaintext again with nothing to see
+  test("stores the tokens sign-in writes encrypted", async () => {
+    const { setTokenUtil } = await import("better-auth/oauth2");
+    const auth = await getAuth();
+
+    const stored = await setTokenUtil("gho_secret", await auth.$context);
+
+    assert.equal(auth.options.account?.encryptOAuthTokens, true);
+    assert.ok(!stored.includes("gho_secret"));
+  });
+});
+
 describe("missingConfig", () => {
   /** Sign-in's own variables, with the database left to each case */
   const GITHUB = {

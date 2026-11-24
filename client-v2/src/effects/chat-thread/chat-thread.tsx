@@ -1,5 +1,7 @@
 import { PgSession } from "../../features/auth";
+import { PgChatSync } from "../../features/persistence/model/chat-sync";
 import { report } from "../../features/persistence/model/diagnostics";
+import { PgProjectSync } from "../../features/persistence/model/project-sync";
 import { PgThreadFence } from "../../features/persistence/model/thread-fence";
 import { PgThreadIndex } from "../../features/persistence/model/thread-index";
 // Deep import rather than the `utils` barrel: the barrel reaches `settings.ts`,
@@ -199,6 +201,9 @@ export const chatThread = (): Disposable => {
     void openOrReport();
   };
 
+  // Whose caps and waits `PgChatSync` holds
+  let accountOfState = PgSession.get()?.id;
+
   const subscriptions = [
     PgExplorer.onDidSwitchWorkspace(() => {
       // The outgoing thread's, not the incoming one's
@@ -207,6 +212,25 @@ export const chatThread = (): Disposable => {
     }),
     PgAssistant.onDidChange(onChange),
     PgSession.onDidChange(onSessionChange),
+    // A thread refused for `no-project` follows its project up (HOO-2882):
+    // the sign-in dump uploads threads before the projects they belong to
+    PgProjectSync.onDidAccept((projectId) => {
+      for (const threadId of PgChatSync.awaiting(projectId)) {
+        pushThread(threadId).catch((e) => report("push awaiting thread", e));
+      }
+    }),
+    // A thread removed or moved to a fresh id is never pushed again under
+    // its old one, so nothing else would clear its cap or its wait
+    PgThreadIndex.onDidDropThread((threadId) =>
+      PgChatSync.forgetThread(threadId)
+    ),
+    // A cap or a wait is one account's: the next account's pushes say their own
+    PgSession.onDidChange(() => {
+      const userId = PgSession.get()?.id;
+      if (userId === accountOfState) return;
+      accountOfState = userId;
+      PgChatSync.forgetAccountState();
+    }),
   ];
 
   document.addEventListener("visibilitychange", onVisibilityChange);

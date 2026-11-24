@@ -3,9 +3,12 @@ import { PgAccountList } from "../../features/persistence/model/account-list";
 import type { HandOver } from "../../features/persistence/model/chat-sync";
 import { PgChatSync } from "../../features/persistence/model/chat-sync";
 import { report } from "../../features/persistence/model/diagnostics";
+import type { MarkReading } from "../../features/persistence/model/project-restore";
 import {
+  readProjectMarks,
   reconcile,
   releaseLocalProjects,
+  releaseProjectsUnchangedSince,
 } from "../../features/persistence/model/project-restore";
 import { PgProjectSync } from "../../features/persistence/model/project-sync";
 import { PgThreadFence } from "../../features/persistence/model/thread-fence";
@@ -17,6 +20,18 @@ import { PgExplorer } from "../../utils/explorer/explorer";
 import type { Disposable } from "../../utils/types";
 import { PgAssistant } from "../../views/sidebar/assistant/store";
 import { openThread } from "../chat-thread/open-thread";
+
+/**
+ * One step of a teardown (`relinquish`, `releaseDeletedAccount`): a step
+ * that fails is reported under `what` and is no reason to skip the next.
+ */
+const step = async (what: string, fn: () => unknown) => {
+  try {
+    await fn();
+  } catch (e) {
+    report(what, e);
+  }
+};
 
 /**
  * Restore the signed-in user on load, and reconcile this browser with the
@@ -259,6 +274,19 @@ export const session = (): Disposable => {
     // Independently, not one `try` around both, here and in the teardown: the
     // conversations and the projects are separate data, and one failing is no
     // reason to skip the other.
+    // The editor's push is debounced by seconds, so the workspace in front of
+    // the user is the one most likely to hold something the server has not
+    // seen. Best effort: if this fails, that project fails `isClean` in
+    // `releaseLocalProjects` and is kept, which is the outcome we want anyway.
+    // Before the conversations: a project made since the last push has no
+    // row yet, and the server refuses its thread with `no-project` until it
+    // does (HOO-2882), which would keep the thread off the account.
+    try {
+      await PgProjectSync.pushCurrent();
+    } catch (e) {
+      report("flush before sign-out", e);
+    }
+
     let handed: HandOver | null = null;
     try {
       // A sign-in whose owner write failed left these threads unowned; a
@@ -271,25 +299,7 @@ export const session = (): Disposable => {
       report("hand over conversations", e);
     }
 
-    // The editor's push is debounced by seconds, so the workspace in front of
-    // the user is the one most likely to hold something the server has not
-    // seen. Best effort: if this fails, that project fails `isClean` in
-    // `releaseLocalProjects` and is kept, which is the outcome we want anyway.
-    try {
-      await PgProjectSync.pushCurrent();
-    } catch (e) {
-      report("flush before sign-out", e);
-    }
-
     return async () => {
-      const step = async (what: string, fn: () => unknown) => {
-        try {
-          await fn();
-        } catch (e) {
-          report(what, e);
-        }
-      };
-
       // Stopped on its own as well: with no thread open the close below does
       // nothing, and a turn running there would carry on for the next account
       await step("stop turn", () => PgAssistant.stopTurn());
@@ -303,6 +313,72 @@ export const session = (): Disposable => {
       await step("release local projects", () => releaseLocalProjects());
       await step("close thread", () => PgAssistant.closeThread());
       await step("forget account", () => PgProjectSync.forgetAccount());
+    };
+  };
+
+  /**
+   * Read what the account holds, and return how to forget it once the server
+   * has deleted it: the sign-out's two halves (`relinquish`) with a read in
+   * place of the upload (`PgSession.deleteAccount`), so only what the server
+   * held identically leaves this browser.
+   *
+   * The read half runs while the cookie is valid and `PgSession.isEnding`
+   * holds pushes off. It pushes nothing: `PgChatSync.syncedThreads` asks the
+   * server for each thread and hands over those it holds whole; a thread it
+   * cannot vouch for stays, and so does every thread when the read fails.
+   *
+   * The read half also reads each project's sync mark (`readProjectMarks`).
+   * `isEnding` holds this tab's pushes only: another tab's push can land
+   * between the read and the `DELETE`, and its content then reached only a
+   * server copy the deletion removes.
+   *
+   * The teardown is the sign-out's: the panel closes, `forget` drops the
+   * handed-over threads still as they were read, and
+   * `releaseProjectsUnchangedSince` removes only projects whose files match
+   * this account's sync mark and whose mark is still what the read found, so
+   * an unpushed edit, a project never synced, or one another tab pushed
+   * meanwhile stays. What stays is owned by the
+   * deleted account (`claimUnowned` names it over a folder nobody owns), so
+   * the next account's sign-in fences it rather than uploading it. The
+   * teardown resolves with how many projects stayed, for the account menu's
+   * leftovers line (`AccountDeleted.kept`).
+   */
+  const releaseDeletedAccount = async () => {
+    PgAccountList.forget();
+    // eslint-disable-next-line unicorn/no-null -- `forget`'s "nothing known, keep every thread"
+    let handed: HandOver | null = null;
+    try {
+      const userId = PgSession.get()?.id;
+      if (userId) await PgThreadFence.claimUnowned(userId);
+      handed = await PgChatSync.syncedThreads();
+    } catch (e) {
+      report("read conversations the account holds", e);
+    }
+    // Empty when the read fails: nothing is released, every project stays
+    let marks: MarkReading = new Map();
+    try {
+      marks = await readProjectMarks();
+    } catch (e) {
+      report("read sync marks", e);
+    }
+
+    return async () => {
+      await step("stop turn", () => PgAssistant.stopTurn());
+      await step("close thread", () => PgAssistant.closeThread());
+      await step("drop unsaved messages", () => PgAssistant.clear());
+      // A write the panel queued before closing lands now, so `forget` sees it
+      await step("wait for chat writes", () => PgAssistant.whenPersisted());
+      await step("forget conversations", () => PgChatSync.forget(handed));
+      await step("release local projects", () =>
+        releaseProjectsUnchangedSince(marks)
+      );
+      // Everything the release left, as the sign-out's leftovers line counts
+      // it: a release that failed removed nothing, and all of it stayed. The
+      // stored names, which a temporary view lists too
+      const kept = PgExplorer.storedWorkspaceNames?.length ?? 0;
+      await step("close thread", () => PgAssistant.closeThread());
+      await step("forget account", () => PgProjectSync.forgetAccount());
+      return kept;
     };
   };
 
@@ -372,6 +448,7 @@ export const session = (): Disposable => {
   if (PgSession.hasRead) onSessionChange();
 
   PgSession.setOnSignOut(relinquish);
+  PgSession.setOnAccountDeleted(releaseDeletedAccount);
 
   void PgSession.refresh().then(() => {
     // A failed read restores nothing: the read that later answers does
@@ -386,6 +463,7 @@ export const session = (): Disposable => {
       onChange.dispose();
       otherTabs.dispose();
       PgSession.setOnSignOut(undefined);
+      PgSession.setOnAccountDeleted(undefined);
       // Nothing is left to release the gate once this is gone
       releaseHold();
     },

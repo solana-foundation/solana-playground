@@ -1,9 +1,12 @@
 import {
   ArrowUpRight,
   BookOpen,
+  Download,
   HandCoins,
   LogOut,
   Settings,
+  ShieldCheck,
+  Trash2,
   TriangleAlert,
   Unplug,
   Wallet,
@@ -12,6 +15,7 @@ import {
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 
+import { PRIVACY_POLICY_URL } from "@/shared/config/links";
 import { GithubMark } from "@/shared/lib/github-mark";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { SETTINGS_TRIGGER_ATTR } from "@/shared/lib/settings-request";
@@ -27,14 +31,26 @@ import {
 import { MenuNote } from "@/shared/ui/menu-extras";
 import { Spinner } from "@/shared/ui/spinner";
 
-import type { AccountItem, AccountView, SignOutState } from "../model/account";
+import type {
+  AccountItem,
+  AccountView,
+  DeleteAccountState,
+  SignOutState,
+} from "../model/account";
 import {
+  ACCOUNT_DELETED,
+  DELETE_ACCOUNT_CONSEQUENCE,
+  DELETE_ACCOUNT_FAILED,
+  DELETE_ACCOUNT_QUESTION,
   DOCS_URL,
   failureOf,
   formatBalance,
+  GITHUB_APPLICATIONS_URL,
   githubProfileUrl,
+  keptAfter,
   leftoversText,
   profileName,
+  REVOKE_AT_GITHUB,
   SIGN_OUT_CONSEQUENCE,
   SIGN_OUT_QUESTION,
 } from "../model/account";
@@ -58,6 +74,20 @@ export interface BaseAccountMenuProps {
   onSignOutConfirm: () => Promise<void>;
   /** The question's Cancel: the items come back */
   onSignOutCancel: () => void;
+  /**
+   * Where the account deletion question stands: `asking`, `running` and
+   * `failed` replace the items with it, `done` puts what happened above them
+   */
+  deleteAccount: DeleteAccountState;
+  /** Deletes the account; `deleteAccount` says how it goes */
+  onDeleteAccountConfirm: () => void;
+  /** The deletion question's Cancel: the items come back */
+  onDeleteAccountCancel: () => void;
+  /**
+   * The deletion question's "Export this project": the export dialog the
+   * explorer opens, once the menu has closed
+   */
+  onExportProject: () => void;
   /**
    * A phone's page, as the prototype draws the account there: the whole
    * screen, titled, with a close, its rows a fingertip tall and, signed out,
@@ -140,6 +170,16 @@ const SessionItems = ({
           }}
         >
           <LogOut /> Sign out
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          aria-label="Delete account"
+          onSelect={(ev) => {
+            // Asked in place, as Sign out is
+            ev.preventDefault();
+            onPick("delete-account");
+          }}
+        >
+          <Trash2 /> Delete account
         </DropdownMenuItem>
       </>
     );
@@ -253,6 +293,90 @@ const SignOutQuestion = ({
   );
 };
 
+/**
+ * The account deletion question, in place of the menu's items, built as the
+ * sign-out question is: Cancel holds focus and brings the items back; Delete
+ * account stays busy, with the menu open, until the server answers; a refusal
+ * keeps the question, with its reason. Export comes first, for a person who
+ * wants their work before it goes
+ */
+const DeleteAccountQuestion = ({
+  state,
+  onConfirm,
+  onCancel,
+  onExport,
+}: {
+  state: DeleteAccountState;
+  onConfirm: () => void;
+  onCancel: () => void;
+  onExport: () => void;
+}) => {
+  const cancel = useRef<HTMLDivElement>(null);
+  const busy = state.status === "running";
+  // After Radix has moved focus into the content on open
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => cancel.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  return (
+    <>
+      <DropdownMenuLabel className="text-foreground">
+        {DELETE_ACCOUNT_QUESTION}
+      </DropdownMenuLabel>
+      <MenuNote className="max-w-64 pt-0">
+        {DELETE_ACCOUNT_CONSEQUENCE}
+      </MenuNote>
+      {state.status === "failed" && (
+        <MenuNote role="alert" className="max-w-64 pt-0 text-destructive">
+          {DELETE_ACCOUNT_FAILED} {state.reason}
+        </MenuNote>
+      )}
+      {/* Closes the menu: the export dialog opens once it has */}
+      <DropdownMenuItem disabled={busy} onSelect={onExport}>
+        <Download /> Export this project
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem
+        ref={cancel}
+        onSelect={(ev) => {
+          ev.preventDefault();
+          if (!busy) onCancel();
+        }}
+      >
+        Cancel
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        variant="destructive"
+        aria-busy={busy || undefined}
+        onSelect={(ev) => {
+          ev.preventDefault();
+          if (!busy) onConfirm();
+        }}
+      >
+        <Trash2 /> Delete account
+        {busy && <Spinner aria-label="Deleting account" className="ml-auto" />}
+      </DropdownMenuItem>
+    </>
+  );
+};
+
+/** What the signed-out menu says after the deletion, above its items */
+const AccountDeletedNote = ({ githubRevoked }: { githubRevoked: boolean }) => (
+  <MenuNote className="max-w-64">
+    <span className="block text-foreground">{ACCOUNT_DELETED}</span>
+    {!githubRevoked && (
+      <a
+        href={GITHUB_APPLICATIONS_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline underline-offset-2 hover:text-foreground"
+      >
+        {REVOKE_AT_GITHUB}
+      </a>
+    )}
+  </MenuNote>
+);
+
 /** The page's foot while signed out: what signing in is for, and the button */
 const SignInFoot = ({
   account,
@@ -325,21 +449,29 @@ const BaseAccountMenu = ({
   signOut,
   onSignOutConfirm,
   onSignOutCancel,
+  deleteAccount,
+  onDeleteAccountConfirm,
+  onDeleteAccountCancel,
+  onExportProject,
   page = false,
 }: BaseAccountMenuProps) => {
   const { cluster, wallet } = account;
-  const leftovers =
-    signOut.status === "done" ? leftoversText(signOut.kept) : undefined;
+  // The sign-out's line, and the deletion's in the same words
+  const leftovers = leftoversText(keptAfter(signOut, deleteAccount));
   // A pick that opens the settings waits for the menu to close: while the
   // menu is mounted its focus trap pulls back the focus the settings take as
   // they open, and as it closes it puts focus back on its trigger
-  const deferred = useRef<AccountItem | null>(null);
+  const deferred = useRef<(() => void) | undefined>(undefined);
   const pick = (item: AccountItem) => {
     if (MOVES_FOCUS.has(item) || (page && LEAVES_PAGE.has(item)))
-      deferred.current = item;
+      deferred.current = () => onPick(item);
     else onPick(item);
   };
-  const items =
+  const isAskingToDelete =
+    deleteAccount.status === "asking" ||
+    deleteAccount.status === "running" ||
+    deleteAccount.status === "failed";
+  const menuItems =
     signOut.status === "asking" ? (
       <SignOutQuestion
         onConfirm={onSignOutConfirm}
@@ -347,6 +479,9 @@ const BaseAccountMenu = ({
       />
     ) : (
       <>
+        {deleteAccount.status === "done" && (
+          <AccountDeletedNote githubRevoked={deleteAccount.githubRevoked} />
+        )}
         {leftovers && <MenuNote className="max-w-64">{leftovers}</MenuNote>}
         {cluster.down && (
           <>
@@ -386,6 +521,17 @@ const BaseAccountMenu = ({
             <External />
           </a>
         </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <a
+            href={PRIVACY_POLICY_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => pick("privacy-policy")}
+          >
+            <ShieldCheck /> Privacy policy
+            <External />
+          </a>
+        </DropdownMenuItem>
         {feedback}
         <DropdownMenuSeparator />
         {wallet ? (
@@ -419,12 +565,25 @@ const BaseAccountMenu = ({
         )}
       </>
     );
+  const items = isAskingToDelete ? (
+    <DeleteAccountQuestion
+      state={deleteAccount}
+      onConfirm={onDeleteAccountConfirm}
+      onCancel={onDeleteAccountCancel}
+      // The dialog takes focus as it opens, which the menu's trap pulls back
+      onExport={() => {
+        deferred.current = onExportProject;
+      }}
+    />
+  ) : (
+    menuItems
+  );
   const closeAfterPick = (ev: Event) => {
-    const item = deferred.current;
-    if (!item) return;
-    deferred.current = null;
+    const run = deferred.current;
+    if (!run) return;
+    deferred.current = undefined;
     ev.preventDefault();
-    onPick(item);
+    run();
   };
   if (page) {
     return (
