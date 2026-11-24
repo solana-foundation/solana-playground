@@ -583,6 +583,7 @@ if (import.meta.vitest) {
         "https://r.test/?api-key=",
         "https://r.test/#section",
         "http://[::1]:8899/",
+        "https://r.test/?url=https://u:pw@x.test/", // By decision: a saved RPC holds no second URL with credentials, so its query is not searched for one
       ])("shows %s in full", (url) => {
         expect(maskRpcUrl(url)).toEqual({ text: url, outcome: "unchanged" });
       });
