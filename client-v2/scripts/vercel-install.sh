@@ -94,13 +94,23 @@ remote_has() {
   remote_found "$1" "$status"
 }
 
-# $1: artifact key, $2: destination. A failed download leaves no partial file to be read as a hit.
+# $1: artifact key, $2: destination. A failed or broken-off download leaves no partial file to be read as a hit.
 remote_fetch() {
   remote_enabled || return 1
   mkdir -p "$(dirname "$2")"
   local status
-  status=$(remote_status -o "$2.part" "$(remote_url "$1")")
-  remote_found "$1" "$status" && mv "$2.part" "$2"
+  # curl's own exit code too: a transfer that breaks off after a 200 still prints 200.
+  if ! status=$(curl -sS -H "Authorization: Bearer $REMOTE_TOKEN" -w '%{http_code}' -o "$2.part" "$(remote_url "$1")"); then
+    echo ">>> Remote Cache: download of $1 broke off, treated as a miss" >&2
+    rm -f "$2.part"
+    return 1
+  fi
+  if remote_found "$1" "$status"; then
+    mv "$2.part" "$2"
+  else
+    rm -f "$2.part"
+    return 1
+  fi
 }
 
 # $1: archive, $2: what it holds, for the log. A corrupt copy is deleted, so the build regenerates and re-uploads it.
@@ -128,8 +138,9 @@ production_build() {
 }
 
 # $1: cache key. Production stores under names derived from CACHE_SEAL_KEY, so no other build writes
-# them by accident, and rotating the secret moves production to fresh names: that is how a build stopped
-# by a seal that does not match recovers. printf is a builtin, so the secret never reaches an argv.
+# them by accident, and rotating the secret moves production to names with no entries yet: that is how a
+# build stopped by a seal that does not match recovers. The names are not secret (the log prints them);
+# the seal is what stops a deliberate write. printf is a builtin, so the secret never reaches an argv.
 cache_key() {
   if production_build; then
     printf 'production-%s-%s' "$CACHE_SEAL_KEY" "$1" | sha256 | cut -d' ' -f1
@@ -138,27 +149,42 @@ cache_key() {
   fi
 }
 
-# $1: artifact key of an archive. Prints the artifact key of its seal.
+# $1: artifact key, $2: archive. Prints the artifact key of its seal, named by the archive's content as well,
+# so two production builds that overlap can never pair one's archive with the other's seal.
 seal_key() {
-  printf 'seal-%s' "$1" | sha256 | cut -d' ' -f1
+  local digest
+  digest=$(sha256 <"$2" | cut -d' ' -f1)
+  printf 'seal-%s-%s' "$1" "$digest" | sha256 | cut -d' ' -f1
 }
 
 # $1: artifact key, $2: archive, $3: what it holds, for the log. Outside production every copy passes.
-# In production a copy without a seal is discarded and rebuilt, and one whose seal does not match stops the build.
+# In production a copy without a seal is discarded and treated as a miss; any other failed check stops the build.
 seal_holds() {
   production_build || return 0
-  local status=0
+  local verdict status=0
   if [ ! -f "$2.seal" ]; then
     echo ">>> $3: $(basename "$2") has no seal, discarding" >&2
     rm -f "$2"
     return 1
   fi
-  node "$SEAL_SCRIPT" verify "$1" "$2" "$2.seal" || status=$?
-  [ "$status" -eq 0 ] && return 0
-  if [ "$status" -eq 1 ]; then
-    echo ">>> $3: $(basename "$2") does not match its seal; production never builds from it. Someone other than a production build wrote this cache entry. Rotate CACHE_SEAL_KEY to rebuild under new names (docs/deploy-client-vercel.md, \"Sealed production cache\")." >&2
+  # The script prints `sealed` on a match: an exit 0 without it is no verdict.
+  verdict=$(node "$SEAL_SCRIPT" verify "$1" "$2" "$2.seal") || status=$?
+  if [ "$status" -eq 0 ] && [ "$verdict" = sealed ]; then
+    return 0
   fi
+  case "$status" in
+    1) echo ">>> $3: $(basename "$2") does not match its seal; production never builds from it. Someone other than a production build wrote this cache entry. Rotate CACHE_SEAL_KEY to rebuild under new names (docs/deploy-client-vercel.md, \"Sealed production cache\")." >&2 ;;
+    0) echo ">>> $3: the seal check of $(basename "$2") gave no verdict; stopping" >&2 ;;
+    *) echo ">>> $3: the seal check of $(basename "$2") failed (exit $status); stopping" >&2 ;;
+  esac
   exit 1
+}
+
+# $1: artifact key, $2: archive. Succeeds when Remote Cache holds the archive and, in production, its seal.
+remote_holds() {
+  remote_has "$1" || return 1
+  production_build || return 0
+  remote_has "$(seal_key "$1" "$2")"
 }
 
 # $1: artifact key, $2: archive, $3: what it holds, for the log. Succeeds when $2 holds a copy this build may use,
@@ -166,30 +192,46 @@ seal_holds() {
 restore_archive() {
   if [ -f "$2" ] && seal_holds "$1" "$2" "$3" && readable_archive "$2" "$3"; then
     echo ">>> $3: HIT in Build Cache ($1)"
-    # A build restored from Build Cache seeds Remote Cache when it lacks the archive.
-    remote_has "$1" || store_archive "$1" "$2" "$3"
+    # A build restored from Build Cache seeds Remote Cache when it lacks the archive, uploading the seal it just checked.
+    remote_holds "$1" "$2" || upload_archive "$1" "$2" "$3"
     return 0
   fi
   rm -f "$2.seal"
   if remote_fetch "$1" "$2" \
-    && { ! production_build || remote_fetch "$(seal_key "$1")" "$2.seal"; } \
+    && { ! production_build || remote_fetch "$(seal_key "$1" "$2")" "$2.seal"; } \
     && seal_holds "$1" "$2" "$3" && readable_archive "$2" "$3"; then
     echo ">>> $3: HIT in Remote Cache ($1)"
     return 0
   fi
-  rm -f "$2"
+  rm -f "$2" "$2.seal"
   return 1
 }
 
-# $1: artifact key, $2: archive, $3: what it holds, for the log. A production build seals the archive first.
-store_archive() {
-  if production_build; then
-    node "$SEAL_SCRIPT" sign "$1" "$2" >"$2.seal"
+# $1: artifact key, $2: archive. Writes $2.seal. Any failure stops the build: it may run where set -e does not
+# reach, and an empty seal would stop every later build instead.
+seal_archive() {
+  local seal
+  if ! seal=$(node "$SEAL_SCRIPT" sign "$1" "$2") || ! [[ "$seal" =~ ^[0-9a-f]{64}$ ]]; then
+    echo ">>> could not seal $(basename "$2"); stopping" >&2
+    exit 1
   fi
+  printf '%s\n' "$seal" >"$2.seal"
+}
+
+# $1: artifact key, $2: archive, $3: what it holds, for the log. Uploads the archive and, in production, its seal.
+upload_archive() {
   remote_upload "$1" "$2" "$3"
   if production_build; then
-    remote_upload "$(seal_key "$1")" "$2.seal" "$3 seal"
+    remote_upload "$(seal_key "$1" "$2")" "$2.seal" "$3 seal"
   fi
+}
+
+# $1: artifact key, $2: a freshly built archive, $3: what it holds, for the log.
+store_archive() {
+  if production_build; then
+    seal_archive "$1" "$2"
+  fi
+  upload_archive "$1" "$2" "$3"
 }
 
 # $1: package. Prints the lockfile wasm-pack reads for it: the one at the package's workspace root.
@@ -392,8 +434,8 @@ main() {
     exit 1
   fi
   # Production refuses to start without its seal secret rather than build from an unverified cache.
-  if production_build; then
-    node "$SEAL_SCRIPT" check || exit 1
+  if production_build && [ "$(node "$SEAL_SCRIPT" check)" != ready ]; then
+    exit 1
   fi
   wasm_key=$(wasm_source_key)
   report_remote_credentials

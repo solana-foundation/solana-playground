@@ -39,8 +39,12 @@ as soon as the Root Directory points at `client-v2`.
      without it (`scripts/check-agent-env.mjs`).
    - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — see step 3.
    - `CACHE_SEAL_KEY`: `openssl rand -hex 32`, Production only, never on
-     Preview or Development. A production build fails without it
-     ([Sealed production cache](#sealed-production-cache)).
+     Preview or Development, stored as Sensitive so nobody who can read the
+     project's variables can seal an archive. A production build fails
+     without it ([Sealed production cache](#sealed-production-cache)), so a
+     production built locally (`make deploy-client-to-vercel-production`),
+     which pulls a Sensitive variable as empty, stops at the install; deploy
+     production from Vercel's own build.
    - `SENTRY_AUTH_TOKEN`: a production build fails without it
      (`scripts/upload-sourcemaps.mjs`). A local `vercel build` pulls a
      Sensitive variable as an empty value, which fails the same way, so a
@@ -224,14 +228,14 @@ Remote Cache is reached through its [artifacts API](https://vercel.com/docs/rest
 
 Remote Cache is shared by every build of the team, and anything holding `VERCEL_ARTIFACTS_TOKEN` can write any entry: a preview build of a pull request, a CI job, a leaked token. Unpacking such an entry puts its code into the bundle. So a production build (`VERCEL_ENV=production`) takes back only archives a production build stored:
 
-- It stores its archives under artifact keys derived from `CACHE_SEAL_KEY` and the cache key, so it never reads an entry a preview build wrote, and a preview never overwrites one of its own.
-- Beside each archive it stores a seal: HMAC-SHA256 over the cache key and the archive's bytes under `CACHE_SEAL_KEY` (`scripts/cache-seal.mjs`), as `<archive>.seal` in Build Cache and as a second Remote Cache artifact.
-- Before unpacking any copy, from Build Cache or Remote Cache, it checks the seal. A copy without a seal is discarded and rebuilt. A copy whose seal does not match stops the build with `does not match its seal`: someone other than a production build wrote it.
+- It stores its archives under artifact keys derived from `CACHE_SEAL_KEY` and the cache key, so a preview build never reads or overwrites one of them by accident. The keys are not secret (the build log prints them); the seal is the control against a deliberate write.
+- Beside each archive it stores a seal: HMAC-SHA256 over the artifact key and the archive's bytes under `CACHE_SEAL_KEY` (`scripts/cache-seal.mjs`), as `<archive>.seal` in Build Cache and as a second Remote Cache artifact named after the archive's content, so two overlapping production builds never pair one's archive with the other's seal.
+- Before unpacking any copy, from Build Cache or Remote Cache, it checks the seal. A copy without a seal is discarded and treated as a miss. A copy whose seal does not match stops the build with `does not match its seal`: someone other than a production build wrote it. So does a seal check that fails for any other reason.
 - Without `CACHE_SEAL_KEY`, or with one under 32 characters, a production build stops before it reads any cache.
 
 This covers the wasm packages and the default crates. Preview and local builds are unchanged and keep the unsealed keys.
 
-`CACHE_SEAL_KEY` is set for Production only, so no preview or CI job ever holds it. To recover from a seal that does not match, rotate it: every production key changes with it, so the next production build ignores the old entries and rebuilds (about an hour for the wasm packages, which may need a second deployment, as on any wasm miss). Rotating it is also the step after any suspected leak.
+`CACHE_SEAL_KEY` is set for Production only, so no preview or CI job ever holds it. To recover from a seal that does not match, rotate it: every production key changes with it, so the next production build finds no entries and rebuilds (about an hour for the wasm packages, which may need a second deployment, as on any wasm miss). Rotating it is also the step after any suspected leak.
 
 Rust state (toolchains, cargo registry, and target dir) lives in `client-v2/.cache/rust`, outside `node_modules`. It is larger than the build cache size limit, so on Vercel it is empty at the start of every build. Locally it persists.
 
