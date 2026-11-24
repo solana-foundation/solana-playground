@@ -724,8 +724,10 @@ describe("signing out", () => {
     await PgSession.signOut();
 
     expect(order).toEqual([
-      "pushChats",
+      // The project first: a thread whose project has no row yet is refused
+      // with `no-project` (HOO-2882)
       "pushProject",
+      "pushChats",
       "request",
       "stopTurn",
       "closeThread",
@@ -774,7 +776,7 @@ describe("signing out", () => {
     const effect = await mount();
     await expect(PgSession.signOut()).rejects.toThrow();
 
-    expect(order).toEqual(["pushChats", "pushProject", "request"]);
+    expect(order).toEqual(["pushProject", "pushChats", "request"]);
     expect(PgSession.get()).toEqual(user);
     expect(PgProjectSync.conflictFor("tut:hello")).not.toBeNull();
     effect.dispose();
