@@ -356,6 +356,21 @@ describe("commands/deploy", () => {
     expect(deployProgram).toHaveBeenCalled();
   });
 
+  // The deploy signs with the account it started with, so the hold must be
+  // on while it sends, not only taken and released around it
+  it("holds the accounts while it sends the deploy", async () => {
+    env.balance = 100e9;
+    let holdsDuringSend: number | undefined;
+    deployProgram.mockImplementation(async () => {
+      holdsDuringSend = env.accountHolds;
+      return "sig";
+    });
+
+    await runDeploy();
+
+    expect(holdsDuringSend).toBe(1);
+  });
+
   it("prints the low balance notice as a warning", async () => {
     env.waitForInput = async () => {
       env.controller.abort();

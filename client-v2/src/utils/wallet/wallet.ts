@@ -435,7 +435,11 @@ const derive = () => ({
               if (PgWallet.canDeriveFirst()) {
                 PgWallet.addFirst().catch(() => tell("first-account-failed"));
               }
-            } else PgWallet.switch(0);
+            } else {
+              // A repair of an index that names no account, not a change of
+              // account, so a deploy's hold does not refuse it
+              PgWallet.update({ state: "pg", currentIndex: 0 });
+            }
 
             return null;
           }
@@ -1028,7 +1032,10 @@ class _PgWallet {
    * Hold the wallet's accounts for a deploy: until the returned release runs,
    * `switch`, `selectStandard`, `add`, `addNew`, `import` and `remove` throw
    * `AccountsHeldError`. Other writes of the wallet's state (a load, a
-   * disconnect) are not held. Releasing twice releases once.
+   * disconnect, the repair of an index that names no account) are not held.
+   * Making an extension current from a connect (`setStandardCurrentWith`)
+   * writes the state directly; `PgDeployRun.isActive` refuses that path.
+   * Releasing twice releases once.
    */
   static holdSwitch() {
     switchHolds++;

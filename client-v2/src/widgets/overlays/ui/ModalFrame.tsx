@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { PROJECT_NAME } from "@/constants";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { createLogger } from "@/shared/lib/logger";
+import { isPlainRefusal } from "@/shared/lib/plain-refusal";
 import { PgView } from "@/utils/view";
 
 import { overlayTelemetry } from "../model/telemetry";
@@ -65,10 +66,6 @@ export type ModalFrameProps = {
  * Thrown by a submit the user abandoned on the way (closed a dialog it
  * opened, for one): the dialog stays open, shows nothing and reports nothing.
  */
-/** An error that says it is its own message (`PgServerError.isPlain`) */
-const isPlainRefusal = (error: unknown): error is Error =>
-  error instanceof Error && (error as { isPlain?: unknown }).isPlain === true;
-
 export class SubmitCancelled extends Error {
   constructor() {
     super("Submit cancelled");

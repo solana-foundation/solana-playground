@@ -1,3 +1,5 @@
+import { isPlainRefusal } from "@/shared/lib/plain-refusal";
+
 import { isStopped, StoppedError } from "../stopped";
 
 /**
@@ -60,10 +62,6 @@ export const lineTone = (error: unknown): LineTone => {
 /** Whether a failure prints as its own line, with no prefix */
 const isTerminalLine = (error: unknown): error is TerminalLineError =>
   error instanceof TerminalLineError;
-
-/** An error that says it is its own line (`PgServerError.isPlain`) */
-const isPlainRefusal = (error: unknown): error is Error =>
-  error instanceof Error && (error as { isPlain?: unknown }).isPlain === true;
 
 /**
  * The line the terminal prints for a command that threw.

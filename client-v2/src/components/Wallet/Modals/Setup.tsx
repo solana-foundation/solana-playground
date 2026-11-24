@@ -3,6 +3,7 @@ import { type ReactNode, useState } from "react";
 import styled, { css } from "styled-components";
 
 import { createLogger } from "@/shared/lib/logger";
+import { isPlainRefusal } from "@/shared/lib/plain-refusal";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
@@ -63,7 +64,8 @@ const LocalSetup = () => {
         );
       }
     } catch (err) {
-      if (err instanceof KeypairFileError) {
+      // A bad file, or accounts held by a running deploy: not a failure
+      if (err instanceof KeypairFileError || isPlainRefusal(err)) {
         setText(err.message);
         return;
       }
@@ -122,6 +124,11 @@ const KeyOriginSetup = () => {
         isNew ? addNewImportedKey(publicKey) : addExistingImportedKey(publicKey)
       );
     } catch (err) {
+      // Accounts held by a running deploy: say so, it is not a failure
+      if (isPlainRefusal(err)) {
+        setText(err.message);
+        return;
+      }
       log.error(err, { report: true });
       setText(importFailure(err));
     }

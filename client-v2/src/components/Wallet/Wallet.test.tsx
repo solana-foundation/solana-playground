@@ -184,6 +184,27 @@ describe("WalletName accounts menu", () => {
     }
   });
 
+  it("enables the accounts again once the deploy lets go of them", async () => {
+    renderName();
+    act(() => {
+      wallets.held = true;
+      for (const cb of wallets.holdListeners) cb(true);
+    });
+    act(() => {
+      wallets.held = false;
+      for (const cb of wallets.holdListeners) cb(false);
+    });
+    const trigger = screen.getByText("first - (key-first)");
+    trigger.focus();
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    await screen.findByRole("menu");
+    const items = screen.getAllByRole("menuitem");
+    expect(items.length).toBeGreaterThan(0);
+    for (const item of items) {
+      expect(item.getAttribute("data-disabled")).toBeNull();
+    }
+  });
+
   it("draws a standard wallet's icon at the menu's icon size", async () => {
     wallets.standard = [{ name: "Phantom", icon: "phantom.svg" }];
     await openAccounts();

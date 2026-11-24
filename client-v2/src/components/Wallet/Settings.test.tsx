@@ -195,6 +195,25 @@ describe("wallet Settings menu", () => {
     }
   });
 
+  it("enables Add, Remove and Import again once the deploy lets go of the accounts", async () => {
+    const wallet = PgWallet as unknown as { isSwitchHeld: boolean };
+    render(<Host />);
+    act(() => {
+      wallet.isSwitchHeld = true;
+      for (const cb of holdListeners) cb(true);
+    });
+    act(() => {
+      wallet.isSwitchHeld = false;
+      for (const cb of holdListeners) cb(false);
+    });
+    await openMenu();
+    for (const name of [/^Add$/, /Remove/, /Import/]) {
+      expect(
+        screen.getByRole("menuitem", { name }).getAttribute("data-disabled")
+      ).toBeNull();
+    }
+  });
+
   it("focuses the rename input after Rename, not the trigger", async () => {
     render(<Host />);
     await openMenu();
