@@ -463,8 +463,8 @@ production without this command ([Deploying production](#deploying-production)).
      transaction from the page loads of checks 4 to 6, with LCP and CLS among its measurements, and the Web Vitals
      dashboard shows environment `production`. If the Web Vitals dashboard stays empty while Discover lists the
      `pageload` transaction, the dashboard does not read static transactions: report it to the team, not as a deploy
-     fault. At a lower rate a page load may go untraced, so this check does not apply. The browser sends no trace headers, so the `GET /api/sync` spans of the functions check follow
-     `SENTRY_TRACES_SAMPLE_RATE` alone.
+     fault. At a lower rate a page load may go untraced, so this check does not apply. The browser sends no trace
+     headers, so the `GET /api/sync` spans of the functions check follow `SENTRY_TRACES_SAMPLE_RATE` alone.
 9. With RPC URLs set: Settings › Network offers Mainnet, Devnet and Testnet on your provider's URLs, and a program
    deploy to Devnet completes.
 10. `make migrate-production-db` prints `nothing to apply`.

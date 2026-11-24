@@ -56,10 +56,8 @@ const MAX_DEPTH = 12;
 const NEXT_URL = /(?=,https?:\/\/)/i;
 
 /**
- * An `http(s)://` URL in running text, up to whitespace, a quote, an angle
- * bracket, a brace or a character a URL escapes; brackets and parentheses stay
- * in, for an IPv6 host and a path such as `/rpc(v1)/`, and {@link urlPartOf}
- * trims what only ends or wraps the sentence.
+ * An `http(s)://` URL in running text, brackets and parentheses kept for an IPv6 host and a path such as `/rpc(v1)/`;
+ * {@link urlPartOf} trims what only ends or wraps the sentence.
  */
 const URL_IN_TEXT = /https?:\/\/[^\s"'`<>{}\\^|]+/gi;
 
@@ -98,10 +96,16 @@ const isWholeUrl = (text: string) => {
 
 const maskUrl = maskUrlWith(REDACTED);
 
-/** `url` with its secrets masked; a URL with none stays as written, unnormalised */
+/** Whether the parser leaves `url` as written, a bare origin's added `/` aside */
+const isAsParsed = (url: string) => {
+  const { href } = new URL(url);
+  return href === url || href === `${url}/`;
+};
+
+/** `url` with its secrets masked; one the parser would change, as `/<key>/../` is, is sent as masked, never as written */
 const maskedUrl = (url: string) => {
   const { text: shown, masked } = maskUrl(url);
-  return masked ? shown : url;
+  return !masked && isAsParsed(url) ? url : shown;
 };
 
 /** One URL found in text, a leading comma kept, with its secrets masked and its trailing punctuation kept */
@@ -320,18 +324,40 @@ const withheld = <E extends ScrubbableEvent>(event: E, failure: unknown): E => {
   } as unknown as E;
 };
 
+interface WithProcessingMetadata {
+  sdkProcessingMetadata?: { dynamicSamplingContext?: unknown };
+}
+
 /**
- * `event` with its breadcrumbs re-checked and every value in it redacted;
- * throws when the walk does. Sentry merges the scope's breadcrumbs into
- * transactions too, so both kinds of event go through it.
+ * `metadata` with only its sampling context redacted: the envelope header carries that context and drops the rest,
+ * which holds live scopes, so walking them would only cost time and withhold an event over a value never sent.
+ */
+const scrubbedMetadataOf = (
+  metadata: NonNullable<WithProcessingMetadata["sdkProcessingMetadata"]>
+) =>
+  "dynamicSamplingContext" in metadata
+    ? {
+        ...metadata,
+        dynamicSamplingContext: redact(metadata.dynamicSamplingContext),
+      }
+    : metadata;
+
+/**
+ * `event` with its breadcrumbs re-checked and every value it sends redacted, its processing metadata by
+ * {@link scrubbedMetadataOf}; throws when the walk does. Sentry merges the scope's breadcrumbs into transactions too.
  */
 const scrubbedOf = <E extends object>(event: E): E => {
   const breadcrumbs = (event as WithBreadcrumbs).breadcrumbs
     ?.map(scrubBreadcrumb)
     .filter((crumb): crumb is Breadcrumb => crumb !== null);
-  const scrubbed = redact(event) as E;
+  const { sdkProcessingMetadata: metadata, ...sent } = event as E &
+    WithProcessingMetadata;
+  const scrubbed = redact(sent) as E & WithProcessingMetadata;
   if (breadcrumbs !== undefined) {
     (scrubbed as WithBreadcrumbs).breadcrumbs = breadcrumbs;
+  }
+  if (typeof metadata === "object" && metadata !== null) {
+    scrubbed.sdkProcessingMetadata = scrubbedMetadataOf(metadata);
   }
   return scrubbed;
 };
@@ -350,10 +376,8 @@ export const scrubEvent = <E extends ScrubbableEvent>(event: E): E => {
 const WITHHELD = "scrub.withheld";
 
 /**
- * A transaction scrubbed as {@link scrubEvent} scrubs an error, its spans
- * included, or `null` to drop it when the walk throws, after `onWithheld` gets
- * the failure's name. One whose root span {@link scrubSpan} withheld is sent,
- * marked {@link WITHHELD}, with its numeric measurements.
+ * A transaction scrubbed as {@link scrubEvent} scrubs an error, or `null` after `onWithheld` gets the failure's name:
+ * a transaction without its values is worth nothing, unlike an error's withheld stand-in.
  */
 export const scrubTransactionWith =
   (onWithheld: (failure: string | undefined) => void) =>
@@ -369,13 +393,17 @@ export const scrubTransactionWith =
   };
 
 /**
- * Redacts, in place, the root span's name in a dynamic sampling context: a
- * standalone span's envelope header carries it, and `beforeSendSpan` never
- * sees the header. Sentry's `createDsc` hook passes the context to change.
+ * Redacts, in place, the root span's name in a dynamic sampling context, which every envelope header built from it
+ * carries and no `beforeSend*` hook sees; Sentry's `createDsc` hook passes the context to change.
  */
 export const scrubSamplingContext = (context: { transaction?: string }) => {
-  if (typeof context.transaction === "string") {
-    context.transaction = redactText(context.transaction);
+  try {
+    if (typeof context.transaction === "string") {
+      context.transaction = redactText(context.transaction);
+    }
+  } catch {
+    // `createDsc` is emitted unguarded, so a throw here would lose the event; a name not redacted is not sent
+    delete context.transaction;
   }
 };
 
@@ -707,17 +735,46 @@ if (import.meta.vitest) {
           text: `(see ${DEVNET}).`,
           shown: `(see ${DEVNET}).`,
         },
+        {
+          name: "a bare origin in a sentence",
+          text: "see https://x.test then",
+          shown: "see https://x.test then",
+        },
+        {
+          name: "a token segment a dot segment removes",
+          text: "https://x.test/abc123def456ghi789/../v2",
+          shown: "https://x.test/v2",
+        },
       ])("should mask a URL with $name", ({ text, shown }) => {
         expect(redact(text)).toBe(shown);
       });
 
-      // Each mark ends the sentence, not the URL; a row fails if its mark leaves the trim lists
-      it.each([",", ";", ":", "!", "]"])(
-        "should mask the last segment of a URL followed by %s and keep the mark",
+      // Untrimmed, the parser would take the mark into the host, or drop it, and the masked text would move or lose it
+      it.each([",", ";", ":", "!", "?", "]"])(
+        "should keep %s after a bare host with credentials outside the masked URL",
         (mark) => {
-          expect(
-            redact(`see https://x.test/a/abc123def456ghi789${mark} then`)
-          ).toBe(`see https://x.test/a/[redacted]${mark} then`);
+          expect(redact(`see https://u:pw@x.test${mark} then`)).toBe(
+            `see https://[redacted]@x.test/${mark} then`
+          );
+        }
+      );
+
+      it.each([
+        {
+          name: "the app's bundle",
+          text: "at f (https://playground.test/static/js/main.3f2a1b4c.js:1:2345)",
+          shown:
+            "at f (https://playground.test/static/js/main.3f2a1b4c.js:1:2345)",
+        },
+        {
+          name: "a file whose name part is a token",
+          text: "at f (https://playground.test/static/js/abc123def456ghi789.3f2a1b4c.js:1:2)",
+          shown: "at f (https://playground.test/static/js/[redacted]:1:2)",
+        },
+      ])(
+        "should show a stack trace line with $name as $shown",
+        ({ text, shown }) => {
+          expect(redact(text)).toBe(shown);
         }
       );
 
@@ -1092,6 +1149,18 @@ if (import.meta.vitest) {
         scrubSamplingContext(context);
 
         expect(context).toEqual(scrubbed);
+      });
+
+      it("should delete a transaction name it cannot read", () => {
+        const context = {
+          get transaction(): string {
+            throw new TypeError(`getter ${KEY}`);
+          },
+        };
+
+        scrubSamplingContext(context);
+
+        expect("transaction" in context).toBe(false);
       });
     });
 

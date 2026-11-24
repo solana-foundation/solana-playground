@@ -23,7 +23,8 @@ Each task depends on the one before it; nothing runs in parallel.
   of the logging spec and keeps `https://api.devnet.solana.com/`; the integration test finds no `sentry-trace` header
   on a same-origin and a cross-origin fetch inside a sampled span, and asserts `traceLifecycle` and
   `beforeSendTransaction` on the client `reporter.init` builds; the two traces sample rate rows of
-  `public-env.test.mjs` pass `0.25` and fail `1.5` with the problem naming the variable; `yarn run check` passes. Depends on 1.1. HOO-2905.
+  `public-env.test.mjs` pass `0.25` and fail `1.5` with the problem naming the variable; `yarn run check` passes.
+  Depends on 1.1. HOO-2905.
 - [x] 1.3 Apply the review of `6f7fdb84e` as design.md, Decisions 2, 3 and 5, describe: `beforeSendSpan` scrubs
   standalone spans (INP); `redact` masks a whole-URL string, IPv6 hosts and parentheses in paths; the browser parser
   and `public-env.mjs` share one decimal pattern; the logger provider test asserts the exact integration list.
@@ -35,23 +36,24 @@ Each task depends on the one before it; nothing runs in parallel.
   name of the app's content-hashed assets (`static/js/main.3f2a1b4c.js`); `redact` masks the `url.query` and
   `url.fragment` span attributes; `isTokenLike` ignores characters outside its alphabet at the end of a part; a span
   `scrubSpan` cannot walk keeps its numeric `measurements` and carries `scrub.withheld` (task 1.5 replaced the drop of
-  a transaction whose root span carries it: such a transaction is sent, marked); one table in `sample-rate.test.mjs` tests `SAMPLE_RATE`; the
-  `observabilityEnv` and `scrubSpan` comments and design.md's Limit and Risks match the code. Verify: a `scrubEvent`
-  test keeps `https://<host>/static/js/main.3f2a1b4c.js` in a frame and a debug image and masks a token in its place;
-  through the real client, a fetch span arrives with a bare token query term and a token fragment redacted, and a
-  transaction whose child span cannot be scrubbed is sent with that span marked (task 1.5 replaced the check that a
-  transaction whose root span cannot be scrubbed is not sent: it arrives marked); `redact` masks the last segment before `,`, `;`, `:`, `!`, `]` and `*`; `SAMPLE_RATE` accepts
-  `0`, `1`, `.5` and `1.0` and rejects `1.5`, `-1`, `0x1` and `1e-1`; `yarn run check` passes. Depends on 1.3.
-  HOO-2905.
+  a transaction whose root span carries it: such a transaction is sent, marked); one table in `sample-rate.test.mjs`
+  tests `SAMPLE_RATE`; the `observabilityEnv` and `scrubSpan` comments and design.md's Limit and Risks match the code.
+  Verify: a `scrubEvent` test keeps `https://<host>/static/js/main.3f2a1b4c.js` in a frame and a debug image and masks
+  a token in its place; through the real client, a fetch span arrives with a bare token query term and a token
+  fragment redacted, and a transaction whose child span cannot be scrubbed is sent with that span marked (task 1.5
+  replaced the check that a transaction whose root span cannot be scrubbed is not sent: it arrives marked); `redact`
+  masks the last segment before `,`, `;`, `:`, `!`, `]` and `*`; `SAMPLE_RATE` accepts `0`, `1`, `.5` and `1.0` and
+  rejects `1.5`, `-1`, `0x1` and `1e-1`; `yarn run check` passes. Depends on 1.3. HOO-2905.
 - [x] 1.5 Apply the review of `52897a80f` as design.md, Decisions 2 and 5, describe: `redact` masks a token-like
   label of the host in the `server.address` and `url.domain` span attributes by the URL masker's host rule; a
   transaction whose root span `scrubSpan` withheld is sent, scrubbed, with its numeric measurements and the
   `scrub.withheld` marker, and `scrubTransaction` returns `null` only when its own walk throws; the URL masker keeps a
   content-hashed file name under `static/` only when its name part is not token-like; the `client-v2-custom-rpcs`
   masking requirement states the rule the screen follows; the runbook's Page loads check marks the dashboard clause
-  pending the preview check, now task 1.7 (task 1.6 replaced the mark with the condition). Verify: through the real client, a fetch span to `acme-mainnet-4f2a9c1b7d3e.rpc.example.test` arrives
-  with both host attributes redacted, a `sig=abc` query term arrives as `sig=[redacted]` in `url.query`, and a
-  transaction whose root span cannot be scrubbed arrives marked, with its `lcp` measurement and no secret; a
+  pending the preview check, now task 1.8 (task 1.6 replaced the mark with the condition). Verify: through the real
+  client, a fetch span to `acme-mainnet-4f2a9c1b7d3e.rpc.example.test` arrives with both host attributes redacted,
+  a `sig=abc` query term arrives as `sig=[redacted]` in `url.query`, and a transaction whose root span cannot be
+  scrubbed arrives marked, with its `lcp` measurement and no secret; a
   `scrubEvent` test keeps `main.3f2a1b4c.js` and `812.a1b2c3d4.chunk.js` frames and masks
   `abc123def456ghi789.3f2a1b4c.js`; `redact` keeps a `static/media/logo.<hash>.svg` URL and masks a token segment
   above `static/js/main.<hash>.js`; `yarn run check` passes. Depends on 1.4. HOO-2905.
@@ -70,17 +72,31 @@ Each task depends on the one before it; nothing runs in parallel.
   `scrubTransactionWith` passes `TypeError` to its callback on a walk that throws and does not call it on success;
   through the real client, two transactions whose walk throws send no transaction and one withheld message;
   `yarn run check` passes. Depends on 1.5. HOO-2905.
-- [ ] 1.7 Check the change on a preview before the merge: label the PR `preview`, set `SENTRY_PREVIEW_ENABLED=true`
+- [x] 1.7 Apply the review of `64d039521` as design.md, Decisions 2 and 5, describe: `redact` sends a URL as written
+  only when nothing was masked and the parser leaves it as written, a bare origin's added `/` aside; the URL masker
+  keeps an app file name followed by a stack trace's `:line:col`; the event and transaction scrub redacts only the
+  `dynamicSamplingContext` of `sdkProcessingMetadata` and passes the rest through unwalked; `scrubSamplingContext`
+  deletes a transaction name it cannot redact; the proposal states the per-run rule of task 1.6, design.md says the
+  sampling context hook covers every envelope header and that `reporter/sentry.ts` binds `onWithheld`, and the
+  `maskUrlWith`, `isTokenRun`, `URL_IN_TEXT` and `scrubTransactionWith` JSDoc states the contract only. Verify:
+  `redact` sends `https://x.test/<key>/../v2` as `https://x.test/v2`, keeps `see https://x.test then`, keeps
+  `at f (https://playground.test/static/js/main.3f2a1b4c.js:1:2345)` and masks a token-named file before `:1:2`;
+  `redact` keeps each of `,`, `;`, `:`, `!`, `?` and `]` after `https://u:pw@x.test` outside the masked URL, and each
+  row fails when its mark leaves the trim lists; `scrubSamplingContext` leaves no `transaction` key when reading it
+  throws; through the real client, a transaction whose scope holds a value that throws on reading, set with
+  `setContext`, is sent with no secret; `publicEnvProblems` fails `https://eth.example.com/v2/<key>;v=1` as a
+  token-shaped path segment; `yarn run check` passes. Depends on 1.6. HOO-2905.
+- [ ] 1.8 Check the change on a preview before the merge: label the PR `preview`, set `SENTRY_PREVIEW_ENABLED=true`
   for it with the rate unset, and walk the manual scenarios of both delta specs. Rewrite the Page loads check of
   `client-v2/docs/production-runbook.md` with the result. Verify: the `pageload` transaction shows in Sentry with LCP
   and CLS, the Web Vitals dashboard of project `solana-playground` shows the preview's environment, the PR lists each
   scenario with its result, the runbook's Page loads check states what the dashboard showed, and the PR states the
   preview's transaction count after one day in Sentry's usage stats, with production's projected monthly volume
   against the quota. If the dashboard stays empty while the transaction is in Discover, stop and update this change
-  for stream mode (design.md, Risks). Depends on 1.6. HOO-2905.
+  for stream mode (design.md, Risks). Depends on 1.7. HOO-2905.
 
 ## Workflow follow-up
 
 - After the merge, watch Sentry's usage stats for a week; if production's volume runs past the quota, set
   `REACT_APP_SENTRY_TRACES_SAMPLE_RATE` lower in Vercel and redeploy.
-- Archive the change in this PR once 1.7 is ticked (agreed 2026-11-14).
+- Archive the change in this PR once 1.8 is ticked (agreed 2026-11-14).

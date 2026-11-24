@@ -536,6 +536,42 @@ describe("reporter scrub", () => {
     expect(JSON.stringify(envelopes)).not.toContain(KEY);
   });
 
+  // After the withheld-message test: a drop here would spend its once-per-session message
+  it("should send a transaction whose scope holds a value the scrub cannot walk, without that value", async () => {
+    await Sentry.close();
+    envelopes.length = 0;
+    const options = sentryOptions({ dsn: DSN, tracesSampleRate: 1 });
+    Sentry.init({
+      dsn: options.dsn,
+      tracesSampleRate: options.tracesSampleRate,
+      traceLifecycle: options.traceLifecycle,
+      beforeSendTransaction: options.beforeSendTransaction,
+      beforeSendSpan: options.beforeSendSpan,
+      defaultIntegrations: false,
+      transport: recording,
+    });
+    const hostile = {
+      get boom(): string {
+        throw new TypeError(`getter ${KEY}`);
+      },
+    };
+
+    Sentry.withScope((scope) => {
+      // The event gets the context normalised; the transaction's captured scope keeps it as set
+      scope.setContext("x", hostile);
+      Sentry.startNewTrace(() =>
+        Sentry.startSpan({ name: "/", op: "pageload" }, () => {})
+      );
+    });
+    await Sentry.flush();
+
+    const transactions = envelopes
+      .map((envelope) => itemsOf(envelope)[0])
+      .filter(([header]) => header.type === "transaction");
+    expect(transactions).toHaveLength(1);
+    expect(JSON.stringify(envelopes)).not.toContain(KEY);
+  });
+
   /** Stands in for the user's test printing through mocha to this window's console */
   const userPrints = (...args: unknown[]) => {
     // eslint-disable-next-line no-console -- the user's own output is what this test keeps out of Sentry

@@ -11,10 +11,8 @@ const KEY_NAME = /key|token|secret|auth|pass|sig|credential/i;
 const TOKEN_RUN = /[\w.~+=%-]+/g;
 
 /**
- * Whether one {@link TOKEN_RUN} reads as a token: 16 or more characters with
- * a digit, or 24 or more in mixed case. A long slug with a digit counts as
- * well: on screen, hiding a word is cheaper than showing a key, and in a
- * build, failing on a slug is cheaper than publishing a key.
+ * Whether one {@link TOKEN_RUN} is 16 or more characters with a digit, or 24 or more in mixed case.
+ * A slug with a digit counts too: hiding a word costs less than showing or publishing a key.
  *
  * @param {string} run
  * @returns {boolean}
@@ -48,15 +46,18 @@ const maskTokensWith = (mask) => (part) =>
 const APP_ASSET =
   /\/static\/(?:js|css|media)\/([\w-]+)\.[0-9a-f]{8,32}(?:\.chunk)?\.[a-z0-9]+$/;
 
+/** The `:line` or `:line:col` a stack trace writes after a file name */
+const LINE_COLUMN = /:\d+:\d+$|:\d+$/;
+
 /**
- * Whether `pathname` ends in a file name of {@link APP_ASSET}'s shape whose
- * name part is not itself token-like, as CRA's `main`, `812` and `logo` are.
+ * Whether `pathname` ends in a file name of {@link APP_ASSET}'s shape, a {@link LINE_COLUMN} after it allowed,
+ * whose name part is not itself token-like, as CRA's `main`, `812` and `logo` are.
  *
  * @param {string} pathname
  * @returns {boolean}
  */
 const isAppAsset = (pathname) => {
-  const name = APP_ASSET.exec(pathname)?.[1];
+  const name = APP_ASSET.exec(pathname.replace(LINE_COLUMN, ""))?.[1];
   return name !== undefined && !isTokenLike(name);
 };
 
@@ -162,12 +163,8 @@ export const maskQueryWith = (mask) => {
 export const maskFragmentWith = maskTokensWith;
 
 /**
- * `url` with each secret replaced by `mask`: a user name or password, each
- * token in a host label, path segment, query value, bare query term or
- * fragment, and the value of a term {@link maskQueryWith} masks. The file name
- * of a path {@link isAppAsset} accepts stays. Built from the parsed parts
- * split by hand, so names keep their spelling and `mask` is never
- * percent-encoded; a value that does not parse is `mask` whole.
+ * `url` rebuilt from its parsed parts with credentials and tokens replaced by `mask`, an {@link isAppAsset} file name kept.
+ * Built by hand so `mask` is never percent-encoded; a value that does not parse is `mask` whole.
  *
  * @param {string} mask what stands for each secret
  * @returns {(url: string) => { text: string, masked: boolean }} the text, and whether anything was masked

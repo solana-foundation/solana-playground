@@ -46,9 +46,9 @@ In every URL the browser sends to Sentry, comma-joined URLs each on their own,
 and in a span's `url.query`, `url.fragment`, `server.address` and
 `url.domain`, credentials, each token-like run in a host label, path segment,
 query value or fragment, and a key-named query value SHALL be `[redacted]`, by
-the rule that masks a custom RPC URL on screen. The rest SHALL stay, a port and
-a content-hashed file name under `static/` whose name is not token-like
-included.
+the rule that masks a saved RPC's URL. The rest SHALL stay as the URL
+parser reads it, a port and a hashed file name under `static/` whose name is
+not token-like, with its `:line:col`, included.
 
 #### Scenario: A provider key in the path (manual)
 

@@ -142,6 +142,14 @@ for (const [label, env, expected] of [
     /REACT_APP_MAINNET_RPC_URL carries a token-shaped path segment/,
   ],
   [
+    "fails a token in the path followed by a matrix parameter",
+    {
+      REACT_APP_MAINNET_RPC_URL:
+        "https://eth.example.com/v2/abc123def456ghi789;v=1",
+    },
+    /REACT_APP_MAINNET_RPC_URL carries a token-shaped path segment/,
+  ],
+  [
     "fails a token in the fragment",
     { REACT_APP_SERVER_URL: "https://api.example.com/#abc123def456ghi789" },
     /REACT_APP_SERVER_URL carries a token-shaped fragment/,
