@@ -3,7 +3,7 @@
 // `yarn test-api` collects only client-v2's tests. Values are made up.
 
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import {
   buildEnv,
   PLACEHOLDER,
+  publicSecrets,
 } from "../../.github/scripts/preview-build-env.mjs";
 
 const SCRIPT = fileURLToPath(
@@ -61,11 +62,7 @@ test("keeps public names verbatim", () => {
 
 test("replaces every other non-empty value with the placeholder, keeping the name", () => {
   const lines = buildEnv(PULLED).split("\n");
-  for (const name of [
-    "PG_AI_API_KEY",
-    "BETTER_AUTH_SECRET",
-    "SENTRY_AUTH_TOKEN",
-  ]) {
+  for (const name of ["PG_AI_API_KEY", "BETTER_AUTH_SECRET"]) {
     assert.ok(lines.includes(`${name}="${PLACEHOLDER}"`), name);
   }
 });
@@ -76,9 +73,37 @@ test("keeps an empty non-public value empty, so the build still sees it as unset
   assert.ok(lines.includes('VERCEL_URL=""'));
 });
 
-test("drops the OIDC token, SOURCES and comments", () => {
+test("drops the OIDC token, SOURCES, the Sentry token and comments", () => {
   const out = buildEnv(PULLED);
-  assert.doesNotMatch(out, /VERCEL_OIDC_TOKEN|SOURCES|Created by/);
+  assert.doesNotMatch(
+    out,
+    /VERCEL_OIDC_TOKEN|SOURCES|SENTRY_AUTH_TOKEN|Created by/
+  );
+});
+
+test("finds a public value equal to a secret one", () => {
+  assert.deepEqual(publicSecrets(PULLED), []);
+  assert.deepEqual(
+    publicSecrets(
+      'REACT_APP_KEY="sk-made-up"\nPG_AI_API_KEY="sk-made-up"\nREACT_APP_EMPTY=""\nX=""\n'
+    ),
+    ["REACT_APP_KEY = PG_AI_API_KEY"]
+  );
+});
+
+test("the CLI refuses a pulled file whose public value is a secret", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "preview-build-env-"));
+  const input = path.join(dir, "in");
+  writeFileSync(input, 'REACT_APP_X="s3cret"\nAPI_KEY="s3cret"\n');
+  const run = spawnSync(
+    process.execPath,
+    [SCRIPT, input, path.join(dir, "out")],
+    {
+      encoding: "utf8",
+    }
+  );
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /REACT_APP_X = API_KEY/);
 });
 
 test("no secret value survives", () => {

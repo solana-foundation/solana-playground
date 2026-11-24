@@ -59,6 +59,22 @@ on:
 
 permissions: {}
 
+# The whole run holds the group, not each job: a job that joined on its own
+# when its `needs` finished could cancel a newer push's run, or the teardown.
+# A push to a labelled PR cancels the run it supersedes, and a close or an
+# unlabel cancels a deploy still going. A run no preview job reacts to (an
+# unrelated label, a push to an unlabelled PR) gets a group of its own, so it
+# never cancels a live deploy. The label name is spelled out, as in the `if:`s.
+concurrency:
+  group: >-
+    ${{ (github.event.action == 'closed' ||
+         (contains(fromJSON('["labeled", "unlabeled"]'), github.event.action) &&
+          github.event.label.name == 'preview') ||
+         (contains(fromJSON('["opened", "reopened", "synchronize"]'), github.event.action) &&
+          contains(github.event.pull_request.labels.*.name, 'preview')))
+        && format('preview-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: true
+
 defaults:
   run:
     # Explicit, for pipefail: the implicit default runs `bash -e` without it.
@@ -98,11 +114,8 @@ jobs:
   #   deploy    uploads build's output, comments on the PR  (VERCEL_TOKEN, NEON_API_KEY, GitHub)
   #   report    comments on the PR when a job failed        (GitHub)
   #
-  # One chain, not parallel jobs, so that every job can share the concurrency
-  # group with teardown: a push cancels the run it supersedes and a close
-  # cancels a run still going, whichever job it is in. Jobs of one run never
-  # overlap, so they never cancel each other. Only `database` carries the
-  # conditions; the others follow it through `needs`.
+  # Only `database` carries the conditions; the others follow it through
+  # `needs`. The run as a whole holds the concurrency group (above `jobs:`).
   database:
     name: preview database
     # A fork's PR gets no secrets, and Dependabot gets only Dependabot
@@ -120,9 +133,6 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'preview') &&
       (contains(fromJSON('["opened", "reopened", "synchronize"]'), github.event.action) ||
        (github.event.action == 'labeled' && github.event.label.name == 'preview'))
-    concurrency:
-      group: preview-${{ github.event.pull_request.number }}
-      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -230,9 +240,6 @@ jobs:
   keys:
     name: preview cache keys
     needs: database
-    concurrency:
-      group: preview-${{ github.event.pull_request.number }}
-      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -280,9 +287,6 @@ jobs:
   prepare:
     name: preview settings and caches
     needs: keys
-    concurrency:
-      group: preview-${{ github.event.pull_request.number }}
-      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -365,9 +369,6 @@ jobs:
   build:
     name: build preview
     needs: prepare
-    concurrency:
-      group: preview-${{ github.event.pull_request.number }}
-      cancel-in-progress: true
     runs-on: ubuntu-latest
     # A cache archive `prepare` could not fetch is rebuilt here: the wasm
     # packages take about an hour.
@@ -447,9 +448,6 @@ jobs:
   deploy:
     name: deploy preview
     needs: [database, build]
-    concurrency:
-      group: preview-${{ github.event.pull_request.number }}
-      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -485,8 +483,13 @@ jobs:
       - name: Unpack and check the build output
         run: |
           archive="$RUNNER_TEMP/preview-output.tgz"
-          climbing=$(tar -tzf "$archive" | grep -E '^/|(^|/)\.\.(/|$)' || true)
+          # Their own lines, so a broken archive fails the step.
+          names=$(tar -tzf "$archive")
+          listing=$(tar -tvzf "$archive")
+          climbing=$(grep -E '^/|(^|/)\.\.(/|$)' <<<"$names" || true)
           [ -z "$climbing" ] || { echo "::error::the build archive holds paths out of its folder: $(head -5 <<<"$climbing")"; exit 1; }
+          # Unpacked, a hard link is a plain file the check below cannot tell apart.
+          ! grep -q '^h' <<<"$listing" || { echo "::error::the build archive holds hard links"; exit 1; }
           mkdir -p "$RUNNER_TEMP/out"
           tar -xzf "$archive" -C "$RUNNER_TEMP/out" --no-same-owner --no-same-permissions
           node .github/scripts/preview-check-output.mjs "$RUNNER_TEMP/out"
@@ -539,8 +542,7 @@ jobs:
           Commit \`${SHA::7}\`, database: $db, migrated. Remove the \`$PREVIEW_LABEL\` label or close the PR to drop the database."
 
   # Whichever job of the chain failed. Not on cancel: a newer push's run or
-  # the teardown writes the comment. Outside the concurrency group, which it
-  # would otherwise share with a teardown it could cancel.
+  # the teardown writes the comment.
   report:
     name: report a failed preview
     needs: [database, keys, prepare, build, deploy]
@@ -581,9 +583,6 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository &&
       (github.event.action == 'closed' ||
        (github.event.action == 'unlabeled' && github.event.label.name == 'preview'))
-    concurrency:
-      group: preview-${{ github.event.pull_request.number }}
-      cancel-in-progress: true
     runs-on: ubuntu-latest
     # Above the deletes' worst case, four neon.sh `api()` calls of about 7
     # minutes each: a slow Neon then fails the step rather than timing out,

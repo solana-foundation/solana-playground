@@ -3,9 +3,11 @@
 // job ran the PR's code, so the archive is untrusted:
 //
 // - only .vercel/output and .vercel/project.json may be there;
-// - no link may point out of .vercel/output: the CLI packs what a link points
-//   at, so a link to a runner file, the deploy job's /proc/self/environ among
-//   them, would upload it into the public deployment;
+// - no link may point out of .vercel/output, followed the way the kernel
+//   follows it: vercel@62.7.0 uploads a link's text, not its target, but a CLI
+//   that followed links would upload a runner file, the deploy job's
+//   /proc/self/environ among them, into the public deployment;
+// - nothing but files, folders and links: a FIFO would hang the upload;
 // - no function may name source files outside itself (`filePathMap` in its
 //   .vc-config.json): the deploy job has no checkout to resolve them against,
 //   so they would be missing, which `vercel build --standalone` prevents;
@@ -16,7 +18,13 @@
 // Usage: node preview-check-output.mjs <folder holding .vercel>
 // Prints one line per problem and exits 1 when there is any.
 
-import { lstatSync, readdirSync, readFileSync, readlinkSync } from "node:fs";
+import {
+  lstatSync,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  realpathSync,
+} from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -58,21 +66,42 @@ export const outputProblems = (folder) => {
     problems.push(`unexpected entry: ${name}`);
   if (!lstatSync(output, { throwIfNoEntry: false })?.isDirectory())
     return [...problems, "no .vercel/output folder"];
+  const project = lstatSync(path.join(vercel, "project.json"), {
+    throwIfNoEntry: false,
+  });
+  if (project && !project.isFile())
+    problems.push("not a file: .vercel/project.json");
 
+  const realOutput = realpathSync.native(output);
   for (const full of walk(output)) {
     const shown = path.relative(folder, full);
     const stat = lstatSync(full);
-    if (stat.isSymbolicLink()) {
-      // Lexically, since the target may not exist; every link is checked, so
-      // a chain of links stays inside too
-      const target = path.resolve(path.dirname(full), readlinkSync(full));
-      if (!isInside(output, target))
-        problems.push(`link out of the output: ${shown}`);
-    } else if (stat.isDirectory() && full.endsWith(".test.func")) {
+    const name = path.basename(full);
+    if (name.endsWith(".test.func"))
       problems.push(`test file deployed as a function: ${shown}`);
-    } else if (path.basename(full) === ".vc-config.json") {
-      const { filePathMap } = JSON.parse(readFileSync(full, "utf8"));
-      if (filePathMap && Object.keys(filePathMap).length)
+    if (stat.isSymbolicLink()) {
+      if (name === ".vc-config.json")
+        problems.push(`function config is a link: ${shown}`);
+      // A dangling link is judged by its text, which is all there is to upload
+      let target;
+      try {
+        target = realpathSync.native(full);
+      } catch {
+        target = path.resolve(path.dirname(full), readlinkSync(full));
+      }
+      if (!isInside(realOutput, target))
+        problems.push(`link out of the output: ${shown}`);
+    } else if (!stat.isFile() && !stat.isDirectory()) {
+      problems.push(`not a file, folder or link: ${shown}`);
+    } else if (stat.isFile() && name === ".vc-config.json") {
+      let config;
+      try {
+        config = JSON.parse(readFileSync(full, "utf8"));
+      } catch {
+        problems.push(`function config is not JSON: ${shown}`);
+        continue;
+      }
+      if (config.filePathMap && Object.keys(config.filePathMap).length)
         problems.push(`function names files outside itself: ${shown}`);
     }
   }

@@ -41,11 +41,11 @@ const code = (name) =>
     .join("\n");
 
 const CREDENTIAL =
-  /secrets[.[]|toJSON\(\s*secrets|github\.token|id-token:\s*write|pull-requests:\s*write|write-all/i;
+  /secrets[.[]|secrets: inherit|toJSON\(\s*secrets|github\.token|[a-z-]+:\s*write\b|write-all/i;
 
 // What only the PR's dependencies and build need: none of it may meet a credential
 const INSTALL_OR_BUILD =
-  /\byarn\b|\bnpm (ci|i|install)\b|vercel-install|vercel-build|"\$cli" build|submodules: true|setup-node/i;
+  /\b(yarn|pnpm|bun|make)\b|\bnpm (ci|i|install)\b|vercel-install|vercel-build|"\$\{?cli\}?" build|submodules: true|setup-node/i;
 
 // A value, not `secrets.VERCEL_TOKEN != ''`, which gives a job only whether it is set
 const holdsVercelToken = (name) =>
@@ -91,7 +91,17 @@ test("every job that installs or builds holds no credential", () => {
 
 for (const name of ["prepare", "deploy"]) {
   test(`job ${name} checks out no root file, so no .npmrc reaches npx`, () => {
-    assert.match(code(name), /sparse-checkout-cone-mode: false/);
+    const block = code(name);
+    assert.match(block, /sparse-checkout-cone-mode: false/);
+    // Only the workflow's own scripts and the CLI's version, never client-v2
+    const paths = [...block.matchAll(/^\s+(\/[^\s]+)$/gm)].map(([, p]) => p);
+    assert.ok(paths.length > 0, "no sparse-checkout paths");
+    for (const p of paths)
+      assert.match(
+        p,
+        /^\/(\.github\/scripts\/|client-v2\/Makefile\.vercel$)/,
+        p
+      );
   });
 
   test(`job ${name} runs npx only after checking the CLI is vercel@x.y.z`, () => {
@@ -106,5 +116,7 @@ test("job deploy checks the build output before it deploys", () => {
   const block = code("deploy");
   const check = block.indexOf("preview-check-output.mjs");
   assert.ok(check >= 0);
+  // A failed check must fail the step
+  assert.doesNotMatch(block, /preview-check-output\.mjs[^\n]*(\|\||;|&)/);
   assert.ok(check < block.indexOf(" deploy --prebuilt"));
 });

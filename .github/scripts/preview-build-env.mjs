@@ -13,12 +13,16 @@
 //   (scripts/public-env.mjs) as a list of names, which a placeholder would
 //   change.
 // - Every other name keeps its name with a placeholder value, or "" when it
-//   was empty. The build only checks that the server's variables are set
+//   was empty. For those the build only checks that they are set
 //   (client-v2/scripts/check-agent-env.mjs), and the deployed functions read
 //   the real values from the Vercel project at runtime.
-// - A name whose value the build parses is dropped, since a placeholder would
-//   fail the parse: SOURCES (check-agent-env.mjs). VERCEL_OIDC_TOKEN is a
-//   credential and is dropped too.
+// - A name whose value the build uses as more than "set" is dropped, since a
+//   placeholder would be read as the value: SOURCES, which check-agent-env.mjs
+//   parses, and SENTRY_AUTH_TOKEN, which upload-sourcemaps.mjs would send to
+//   Sentry (without it a labelled preview uploads no source maps).
+//   VERCEL_OIDC_TOKEN is a credential and is dropped too.
+// - A public value equal to a secret one fails the run: public-env.mjs, which
+//   refuses such a value in the bundle, only sees placeholders in this build.
 //
 // Lines that are not NAME=value (Vercel's header comment) are dropped.
 //
@@ -42,22 +46,44 @@ const PUBLIC_NAMES = new Set([
   "SOURCEMAPS_PREVIEW_ENABLED",
   "PUBLIC_ENV_RESTRICTED_KEYS",
 ]);
-const DROPPED_NAMES = new Set(["SOURCES", "VERCEL_OIDC_TOKEN"]);
+const DROPPED_NAMES = new Set([
+  "SOURCES",
+  "SENTRY_AUTH_TOKEN",
+  "VERCEL_OIDC_TOKEN",
+]);
 
 const isPublic = (name) =>
   PUBLIC_NAMES.has(name) || PUBLIC_PREFIXES.some((p) => name.startsWith(p));
 
 const isEmpty = (value) => /^\s*(""|'')?\s*$/.test(value);
 
+/** @param {string} text an env file @returns {[string, string][]} its NAME=value lines as pairs */
+const entriesOf = (text) =>
+  text.split(/\r?\n/).flatMap((line) => {
+    const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line);
+    return match ? [[match[1], match[2]]] : [];
+  });
+
+/**
+ * @param {string} text the pulled env file
+ * @returns {string[]} each public name whose value equals a secret one, as `PUBLIC = SECRET`
+ */
+export const publicSecrets = (text) => {
+  const entries = entriesOf(text).filter(([, value]) => !isEmpty(value));
+  const secret = new Map(
+    entries.filter(([name]) => !isPublic(name)).map(([name, v]) => [v, name])
+  );
+  return entries
+    .filter(([name, value]) => isPublic(name) && secret.has(value))
+    .map(([name, value]) => `${name} = ${secret.get(value)}`);
+};
+
 /** @param {string} text the pulled env file @returns {string} the build's env file */
 export function buildEnv(text) {
   const out = [];
-  for (const line of text.split(/\r?\n/)) {
-    const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line);
-    if (!match) continue;
-    const [, name, value] = match;
+  for (const [name, value] of entriesOf(text)) {
     if (DROPPED_NAMES.has(name)) continue;
-    if (isPublic(name)) out.push(line);
+    if (isPublic(name)) out.push(`${name}=${value}`);
     else out.push(`${name}="${isEmpty(value) ? "" : PLACEHOLDER}"`);
   }
   return out.length ? `${out.join("\n")}\n` : "";
@@ -71,5 +97,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     );
     process.exit(2);
   }
-  writeFileSync(output, buildEnv(readFileSync(input, "utf8")));
+  const pulled = readFileSync(input, "utf8");
+  const leaks = publicSecrets(pulled);
+  if (leaks.length) {
+    for (const leak of leaks)
+      console.error(
+        `::error::a public variable holds a secret's value: ${leak}`
+      );
+    process.exit(1);
+  }
+  writeFileSync(output, buildEnv(pulled));
 }

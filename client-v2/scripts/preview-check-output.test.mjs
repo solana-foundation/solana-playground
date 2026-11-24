@@ -68,6 +68,44 @@ test("refuses a relative link that climbs out of the output", () => {
   ]);
 });
 
+test("refuses a chain of links that leaves the output through a folder link", () => {
+  const folder = buildOutput();
+  const staticDir = path.join(folder, ".vercel/output/static");
+  // `d` points back at the output itself, so `d/../..` is the folder above it
+  symlinkSync("..", path.join(staticDir, "d"));
+  symlinkSync("d/../../project.json", path.join(staticDir, "p.json"));
+  assert.deepEqual(outputProblems(folder), [
+    "link out of the output: .vercel/output/static/p.json",
+  ]);
+});
+
+test("refuses a function config that is a link", () => {
+  const folder = buildOutput();
+  const func = path.join(folder, ".vercel/output/functions/api/agent.func");
+  writeFileSync(path.join(func, "config.json"), "{}");
+  symlinkSync("config.json", path.join(func, ".vc-config.json.tmp"));
+  // Replace the real config with a link to a sibling
+  writeFileSync(path.join(func, ".vc-config.json"), "");
+  const other = path.join(folder, ".vercel/output/functions/api/b.func");
+  mkdirSync(other);
+  symlinkSync("../agent.func/config.json", path.join(other, ".vc-config.json"));
+  assert.deepEqual(outputProblems(folder), [
+    "function config is not JSON: .vercel/output/functions/api/agent.func/.vc-config.json",
+    "function config is a link: .vercel/output/functions/api/b.func/.vc-config.json",
+  ]);
+});
+
+test("refuses a test function that is a link", () => {
+  const folder = buildOutput();
+  symlinkSync(
+    "agent.func",
+    path.join(folder, ".vercel/output/functions/api/agent.test.func")
+  );
+  assert.deepEqual(outputProblems(folder), [
+    "test file deployed as a function: .vercel/output/functions/api/agent.test.func",
+  ]);
+});
+
 test("refuses entries beside .vercel/output and project.json", () => {
   const folder = buildOutput();
   writeFileSync(path.join(folder, ".vercel/.env.preview.local"), "A=1");
