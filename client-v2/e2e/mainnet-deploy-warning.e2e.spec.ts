@@ -9,6 +9,12 @@ import {
   runInTerminal,
   test,
 } from "./fixtures";
+import { DOCK_DESK } from "./viewports";
+
+// These tests drive the project tree as its docked column, which needs a code
+// area of 1100 px or more; the default window is too narrow and shows the
+// dropdown instead
+test.use({ viewport: DOCK_DESK });
 
 /**
  * The scenarios of `mainnet-deploy-warning`: in the beta a program is not

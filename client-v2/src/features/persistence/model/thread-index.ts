@@ -8,6 +8,7 @@ import {
 import { PgFs } from "../../../utils/explorer/fs";
 import { PgChatStorage } from "./chat-storage";
 import { report } from "./diagnostics";
+import { readFencedIds } from "./fence-records";
 import { withSyncLock } from "./sync-lock";
 
 /**
@@ -159,6 +160,7 @@ export class PgThreadIndex {
       // project that never existed; an entry left pointing at a missing file
       // just reads as an empty thread.
       if (!(await PgChatStorage.remove(threadId))) return false;
+      PgThreadIndex._emitDrop(threadId);
       const { [workspaceId]: _gone, ...rest } = await PgThreadIndex._refresh();
       return PgThreadIndex._commit(rest);
     });
@@ -229,6 +231,7 @@ export class PgThreadIndex {
         }
       }
 
+      PgThreadIndex._emitDrop(threadId);
       // Moved whether or not this lands: an old entry left behind points at
       // a file that is gone, which is an empty conversation, and the old
       // workspace's delete that follows forgets it
@@ -255,6 +258,47 @@ export class PgThreadIndex {
     PgThreadIndex._cache = undefined;
     PgThreadIndex._migrated = null;
   }
+
+  /**
+   * The map as storage holds it now, read past the cache, or `undefined`
+   * when the file cannot be read; the cache then stays empty.
+   *
+   * For a decision a lost map must not make. `all` reads a failed read as
+   * an empty map, which is right for opening a thread and wrong for the
+   * fence: it would record every thread with no workspace and clear the
+   * real map.
+   */
+  static async reloadOrFail(): Promise<Index | undefined> {
+    PgThreadIndex.reload();
+    // Before the adoption pass, which reads a failure as an empty map and
+    // would adopt every thread file as a workspace of its own over it
+    if (!(await PgThreadIndex._readOrFail())) return undefined;
+    await PgThreadIndex._migrateOnce();
+    const index = await PgThreadIndex._readOrFail();
+    if (index) PgThreadIndex._cache = index;
+    return index;
+  }
+
+  /**
+   * Fires with a thread id once `forget` has removed its file or `carry` has
+   * moved it to a fresh id: nothing pushes under that id again, so what is
+   * kept in memory about it can go. `clear` does not fire it; it runs with a
+   * sign-out, and the account change drops that state already.
+   */
+  static onDidDropThread(cb: (threadId: string) => void): {
+    dispose: () => void;
+  } {
+    PgThreadIndex._dropListeners.add(cb);
+    return { dispose: () => PgThreadIndex._dropListeners.delete(cb) };
+  }
+
+  private static _emitDrop(threadId: string) {
+    for (const cb of PgThreadIndex._dropListeners) cb(threadId);
+  }
+
+  private static readonly _dropListeners = new Set<
+    (threadId: string) => void
+  >();
 
   /** Forget everything. Sign-out clears the whole directory with it. */
   static async clear() {
@@ -304,8 +348,24 @@ export class PgThreadIndex {
   }
 
   private static async _read(): Promise<Index> {
+    return (await PgThreadIndex._readOrFail()) ?? {};
+  }
+
+  /**
+   * The map on disk: `{}` for a missing file or bytes that are not a map,
+   * `undefined` when the file is there but cannot be read.
+   */
+  private static async _readOrFail(): Promise<Index | undefined> {
+    let raw: string;
     try {
-      const parsed = JSON.parse(await PgFs.readToString(INDEX_PATH));
+      raw = await PgFs.readToString(INDEX_PATH);
+    } catch (e) {
+      if (isMissing(e)) return {};
+      report("read index", e);
+      return undefined;
+    }
+    try {
+      const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
         return {};
       }
@@ -321,7 +381,7 @@ export class PgThreadIndex {
       }
       return Object.fromEntries(kept) as Index;
     } catch (e) {
-      if (!isMissing(e)) report("read index", e);
+      report("read index", e);
       return {};
     }
   }
@@ -463,10 +523,19 @@ export class PgThreadIndex {
     const known = new Set(Object.values(index));
     // Not in the index, so each of these files is named after its workspace
     // whatever the name looks like
-    return names
+    const unindexed = names
       .filter((name) => name.endsWith(SUFFIX))
       .map((name) => ({ name, id: nameToId(name) }))
-      .filter(({ id }) => id !== "index" && !known.has(id))
+      .filter(({ id }) => id !== "index" && !known.has(id));
+    if (!unindexed.length) return [];
+    // Except a thread a fence names, which a lagging tab wrote back: adopted
+    // under a fresh id, no fence would know it, and the next sign-in would
+    // upload another account's messages. `PgThreadFence.settle` moves it
+    // back. Records that cannot be read adopt nothing; the files wait.
+    const fenced = await readFencedIds();
+    if (!fenced) return [];
+    return unindexed
+      .filter(({ id }) => !fenced.has(id))
       .map(({ name, id }) => ({ name, id, threadId: uuid() }));
   }
 }
@@ -628,6 +697,18 @@ if (import.meta.vitest) {
           await expect(PgThreadIndex.forget("never")).resolves.toBe(true);
         });
 
+        it("says which thread it dropped", async () => {
+          const threadId = await PgThreadIndex.ensure("tut:hello");
+          await PgChatStorage.write(threadId, [item(1)]);
+          const dropped = vi.fn();
+          const sub = PgThreadIndex.onDidDropThread(dropped);
+
+          await PgThreadIndex.forget("tut:hello");
+
+          expect(dropped).toHaveBeenCalledExactlyOnceWith(threadId);
+          sub.dispose();
+        });
+
         it("keeps the entry when the file could not be removed", async () => {
           // An entry dropped over a file that stayed left the file for the next
           // load's migration, which adopted it as a workspace named after the
@@ -695,6 +776,18 @@ if (import.meta.vitest) {
         // "Keep a copy": the project was deleted on another device,
         // its conversation tombstoned with it, and the user keeps this device's
         // work under a new id -- chat included
+        it("says the old thread id is dropped", async () => {
+          const old = await PgThreadIndex.ensure("p1");
+          await PgChatStorage.write(old, [item(1)]);
+          const dropped = vi.fn();
+          const sub = PgThreadIndex.onDidDropThread(dropped);
+
+          await PgThreadIndex.carry({ from: "p1", to: "p2" });
+
+          expect(dropped).toHaveBeenCalledExactlyOnceWith(old);
+          sub.dispose();
+        });
+
         it("moves the items under a fresh thread id, and drops the old one", async () => {
           const old = await PgThreadIndex.ensure("p1");
           await PgChatStorage.write(old, [item(1), item(2)]);

@@ -3,6 +3,12 @@ import type { Page } from "@playwright/test";
 import { requireFor } from "../src/test-utils/require-for";
 import { expect, test } from "./fixtures";
 import { currentProject, openGallery, seedWorkspace } from "./fixtures";
+import { DOCK_DESK } from "./viewports";
+
+// These tests drive the project tree as its docked column, which needs a code
+// area of 1100 px or more; the default window is too narrow and shows the
+// dropdown instead
+test.use({ viewport: DOCK_DESK });
 
 /**
  * Chat is keyed by workspace and survives a reload.

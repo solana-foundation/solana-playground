@@ -1,5 +1,8 @@
 import { PgSession } from "../../features/auth";
+import { PgChatSync } from "../../features/persistence/model/chat-sync";
 import { report } from "../../features/persistence/model/diagnostics";
+import { PgProjectSync } from "../../features/persistence/model/project-sync";
+import { PgThreadFence } from "../../features/persistence/model/thread-fence";
 import { PgThreadIndex } from "../../features/persistence/model/thread-index";
 // Deep import rather than the `utils` barrel: the barrel reaches `settings.ts`,
 // which reads `GLOBAL_SETTINGS`, a global only webpack defines, so the unit
@@ -42,14 +45,14 @@ export const chatThread = (): Disposable => {
    * comparing thread ids; now that the id has to be looked up first, the
    * guard has to live here, ahead of the close below.
    */
-  let openedFor: string | null = null;
+  let openedFor: string | undefined;
 
   const open = async () => {
     const workspaceId = PgExplorer.currentWorkspaceId;
     // No workspace means nowhere to persist to. Closing rather than leaving
     // the last thread open stops it collecting messages that belong nowhere.
     if (!workspaceId) {
-      openedFor = null;
+      openedFor = undefined;
       return PgAssistant.closeThread();
     }
     if (openedFor === workspaceId) return;
@@ -60,6 +63,23 @@ export const chatThread = (): Disposable => {
     // message sent in the gap is filed under the project the user has just
     // left. With no thread open, `loadThread` adopts it instead.
     PgAssistant.closeThread();
+
+    // Until this tab has settled the signed-in account, `/.config/chats` may
+    // still be another account's: a thread opened or minted now would be
+    // read from, or written into, that account's folder and fenced as its
+    // own. So the first open after a sign-in or a load waits for the settle,
+    // and one that failed or threw is tried again on the next switch; until
+    // it works the panel holds what is typed in memory, as with no project
+    // open.
+    const userId = PgSession.get()?.id;
+    if (userId && !PgThreadFence.isSettledFor(userId)) {
+      const settled = await PgThreadFence.settle(userId);
+      if (PgExplorer.currentWorkspaceId !== workspaceId) return;
+      if (!settled) {
+        openedFor = undefined;
+        return;
+      }
+    }
 
     // Synchronous whenever the index is already in memory, which is what
     // `warm` below is for: opening the thread in the same tick as the switch
@@ -155,7 +175,14 @@ export const chatThread = (): Disposable => {
     if (document.visibilityState === "hidden") flushUnlessRunning();
   };
 
-  void open();
+  const openOrReport = () =>
+    open().catch((e) => {
+      // Forget the workspace, so the next switch tries again
+      openedFor = undefined;
+      report("open thread", e);
+    });
+
+  void openOrReport();
 
   // Sign-out's teardown closes the thread, and nothing else would open one:
   // the workspace has not changed, so `open` stands down on `openedFor`. The
@@ -170,18 +197,40 @@ export const chatThread = (): Disposable => {
     // cut a running turn and deny its approvals, over a failed upload
     if (PgSession.expiredUser) return;
 
-    openedFor = null;
-    void open().catch((e) => report("open thread after sign-out", e));
+    openedFor = undefined;
+    void openOrReport();
   };
+
+  // Whose caps and waits `PgChatSync` holds
+  let accountOfState = PgSession.get()?.id;
 
   const subscriptions = [
     PgExplorer.onDidSwitchWorkspace(() => {
       // The outgoing thread's, not the incoming one's
       flush();
-      void open();
+      void openOrReport();
     }),
     PgAssistant.onDidChange(onChange),
     PgSession.onDidChange(onSessionChange),
+    // A thread refused for `no-project` follows its project up (HOO-2882):
+    // the sign-in dump uploads threads before the projects they belong to
+    PgProjectSync.onDidAccept((projectId) => {
+      for (const threadId of PgChatSync.awaiting(projectId)) {
+        pushThread(threadId).catch((e) => report("push awaiting thread", e));
+      }
+    }),
+    // A thread removed or moved to a fresh id is never pushed again under
+    // its old one, so nothing else would clear its cap or its wait
+    PgThreadIndex.onDidDropThread((threadId) =>
+      PgChatSync.forgetThread(threadId)
+    ),
+    // A cap or a wait is one account's: the next account's pushes say their own
+    PgSession.onDidChange(() => {
+      const userId = PgSession.get()?.id;
+      if (userId === accountOfState) return;
+      accountOfState = userId;
+      PgChatSync.forgetAccountState();
+    }),
   ];
 
   document.addEventListener("visibilitychange", onVisibilityChange);

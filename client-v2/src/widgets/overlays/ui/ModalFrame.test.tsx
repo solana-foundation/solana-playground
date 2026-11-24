@@ -169,6 +169,20 @@ it("should close with null on Cancel", () => {
   expect(closeModal).toHaveBeenCalledWith(null, DIALOG_ID);
 });
 
+it("should hold the submit and Cancel while isHeld", () => {
+  renderFrame({
+    title: "Rename",
+    buttonProps: { text: "Rename", onSubmit: vi.fn(), isHeld: true },
+  });
+
+  const cancel = screen.getByRole("button", { name: "Cancel" });
+  expect((cancel as HTMLButtonElement).disabled).toBe(true);
+  expect(
+    (screen.getByRole("button", { name: "Rename" }) as HTMLButtonElement)
+      .disabled
+  ).toBe(true);
+});
+
 it("should show the product's name for title true", () => {
   renderFrame({ title: true });
 

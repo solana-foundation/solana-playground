@@ -119,6 +119,21 @@ export const maskRpcUrl = (url: string): MaskedUrl => {
   };
 };
 
+/**
+ * Any http(s) URL inside free text, such as an RPC's error message. It never
+ * ends on punctuation: a `,` or `.` after it belongs to the sentence, and left
+ * on the last path segment it would stop that segment reading as a key
+ */
+const URL_IN_TEXT = /https?:\/\/[^\s"'<>`)\]]*[^\s"'<>`)\].,;:!?]/g;
+
+/**
+ * `text` with every URL in it masked by {@link maskRpcUrl}. An RPC's error can
+ * quote its URL, key included, and error text can reach the assistant's model
+ * and its stored chat (HOO-2878)
+ */
+export const maskUrlsIn = (text: string) =>
+  text.replace(URL_IN_TEXT, (url) => maskRpcUrl(url).text);
+
 /** `new URL(value).href`, or the value itself when it is not a URL */
 const normalised = (value: string) => {
   try {
@@ -506,6 +521,35 @@ if (import.meta.vitest) {
         "rpc.example.com"
       );
       expect(hostOf("http://localhost:8899/")).toBe("localhost:8899");
+    });
+
+    describe("maskUrlsIn", () => {
+      it("masks the key of every URL an error quotes, and leaves the rest", () => {
+        expect(
+          maskUrlsIn(
+            "failed to get recent blockhash: 401 from https://devnet.helius-rpc.com/?api-key=abc (https://r.test/?apiKey=x)"
+          )
+        ).toBe(
+          "failed to get recent blockhash: 401 from https://devnet.helius-rpc.com/?api-key=•••• (https://r.test/?apiKey=••••)"
+        );
+      });
+
+      it.each([",", ".", ";", ":", "!", "?", ".,"])(
+        "masks a path key the sentence follows with %s, and keeps the punctuation",
+        (punctuation) => {
+          expect(
+            maskUrlsIn(
+              `failed at https://solana-mainnet.g.alchemy.com/v2/abc123def456ghi789${punctuation} retry later`
+            )
+          ).toBe(
+            `failed at https://solana-mainnet.g.alchemy.com/v2/••••${punctuation} retry later`
+          );
+        }
+      );
+
+      it("leaves text without a URL as it is", () => {
+        expect(maskUrlsIn("insufficient funds")).toBe("insufficient funds");
+      });
     });
 
     describe("maskRpcUrl", () => {

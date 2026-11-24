@@ -53,6 +53,13 @@ export const startProject = async (page: Page, name: string, timeout = {}) => {
 export const filesToggle = (page: Page) => page.locator("#editor-head-files");
 
 /**
+ * The project tree's dropdown under the editor head: the tree undocked, or
+ * docked on a code area too narrow (< 1100 px) to give it a column
+ */
+export const filesDropdown = (page: Page) =>
+  page.getByRole("dialog", { name: "Files" });
+
+/**
  * The editor holding the focus it takes when it mounts and opens the current
  * file. Monaco is a lazy chunk, and on a loaded runner it arrives well past
  * an assertion's 20 s (30 s seen on CI): the wait is the page load's,
@@ -86,6 +93,18 @@ export const startTutorialFromAbout = async (page: Page) => {
 };
 
 /**
+ * Puts `wallet` in `localStorage['wallet']` as an earlier version left it, on
+ * the first load only, so a reload finds what the wallet's migration wrote
+ * rather than a fresh seed.
+ */
+export const seedLocalWalletFor = (page: Page) => (wallet: unknown) =>
+  page.addInitScript((text) => {
+    if (sessionStorage.getItem("e2e-wallet-seeded")) return;
+    sessionStorage.setItem("e2e-wallet-seeded", "1");
+    localStorage.setItem("wallet", text);
+  }, JSON.stringify(wallet));
+
+/**
  * A browser with one project already created.
  *
  * A fresh profile shows Home, not the work, so any test that clicks the
@@ -102,9 +121,10 @@ export const seedWorkspace = async (page: Page, name = "e2e-project") => {
 
   // `PgExplorer.createWorkspace` hands the work over, then the explorer
   // re-initializes -- wait for the work, not just Home going away: its
-  // editor head, and the tree when the layout has it open. A spec that
-  // clears the tree-open seed (playwright.config's `storageState`) gets a
-  // closed tree, which `openFiles` opens.
+  // editor head, and the tree when it shows. The seeded layout docks it
+  // (playwright.config's `storageState`), which shows as a column only in a
+  // spec at `DOCK_DESK`; at the default width, or undocked, the tree waits
+  // in its dropdown, which `openFiles` opens.
   const toggle = filesToggle(page);
   await expect(toggle).toBeVisible();
   if ((await toggle.getAttribute("aria-pressed")) === "true") {
@@ -119,7 +139,10 @@ export const seedWorkspace = async (page: Page, name = "e2e-project") => {
 export const consoleTrigger = (page: Page) =>
   page.locator('[data-slot="console-drawer-trigger"]');
 
-/** Opens the file tree from the editor head, if it is not open already */
+/**
+ * Shows the file tree from the editor head, if it does not show already: a
+ * docked tree that has its column shows; otherwise "Files" opens the dropdown
+ */
 export const openFiles = async (page: Page) => {
   const toggle = filesToggle(page);
   await expect(toggle).toBeVisible(LONG);
@@ -271,7 +294,7 @@ export const applyWrite = (
   const files: Record<string, string> = {};
   if (body.files) Object.assign(files, body.files);
   else Object.assign(files, held?.files, body.changed);
-  for (const path of body.removed ?? []) delete files[path];
+  for (const removed of body.removed ?? []) delete files[removed];
   return { files };
 };
 
@@ -662,3 +685,67 @@ export const isStored = (page: Page, needle: string) =>
     }
     return false;
   }, needle);
+
+/** A browser with one Native project, whose test is the hello world one */
+export const seedNativeWorkspace = async (page: Page) => {
+  await page.goto("/");
+  await expect(home(page)).toBeVisible();
+  await homeRegion(page)
+    .getByRole("button", { name: /^New project/ })
+    .click();
+  // Start from scratch is on the New project page, not in Home's region
+  const created = newProjectPage(page);
+  await created.getByRole("radio", { name: /Native/ }).click();
+  await created.getByLabel("Project name").fill("e2e-native");
+  await created.getByRole("button", { name: /^Start/ }).click();
+  await expect(created).toBeHidden();
+  await expect(home(page)).toBeHidden();
+  // As in `seedWorkspace`: the work is up once its editor head shows; the
+  // tree shows only when docked, and otherwise waits in its dropdown
+  await expect(filesToggle(page)).toBeVisible();
+  // As in the `seededPage` fixture: Monaco takes the focus when it mounts,
+  // which closes a dropdown opened before it, so hand over after that
+  await editorTookFocus(page);
+};
+
+/** Opens the terminal drawer, if it is closed */
+export const openTerminal = async (page: Page) => {
+  // The console drawer's own toggle: the editor head has a "Terminal" button too
+  const drawer = page.locator('[data-slot="console-drawer-trigger"]');
+  if ((await drawer.getAttribute("aria-expanded")) !== "true") {
+    await drawer.click();
+  }
+};
+
+/**
+ * Opens `folder/file` from the tree, showing the tree first, then replaces
+ * its text with `code`.
+ *
+ * A paste, not typing: the editor closes brackets as they are typed. Then a
+ * wait for the editor's autosave (500 ms after the last change,
+ * `Monaco.tsx`), since `run` and `test` read the saved file.
+ */
+export const replaceFile =
+  (context: BrowserContext) =>
+  (page: Page) =>
+  (folder: string) =>
+  (file: string) =>
+  async (code: string) => {
+    // The tree may wait in its dropdown, which closes once a file opens
+    await openFiles(page);
+    await page.getByRole("button", { name: folder, exact: true }).click();
+    await page.getByRole("button", { name: file, exact: true }).click();
+    const lines = page.locator(".monaco-editor .view-lines");
+    await expect(lines).not.toBeEmpty(LONG);
+    await page.locator(".monaco-editor textarea.inputarea").focus();
+    await page.keyboard.press("ControlOrMeta+A");
+    await grantClipboard(context);
+    await page.evaluate((text) => navigator.clipboard.writeText(text), code);
+    await page.keyboard.press("ControlOrMeta+V");
+    const last = code.trim().split("\n").at(-1) ?? "";
+    await expect(lines).toContainText(last.trim());
+    await page.waitForTimeout(1000);
+  };
+
+/** The terminal's rows in view */
+export const terminalRows = (page: Page) => page.locator(".xterm-rows").first();

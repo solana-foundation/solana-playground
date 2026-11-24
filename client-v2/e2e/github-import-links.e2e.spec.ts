@@ -165,18 +165,44 @@ test("github-import: A temporary project's Import keeps it", async ({
 }) => {
   await stubExamples(page);
   await page.goto(PROGRAM_ROUTE);
-  const warning = page.getByText(/This is a temporary project/);
+  await expect(page.locator(".monaco-editor")).toContainText(
+    "entrypoint!(process_instruction)",
+    LONG
+  );
+  // At the default window the code area is too narrow to dock the tree, so
+  // the warning is in the dropdown "Files" opens
+  const files = page.locator("#editor-head-files");
+  const tree = page.getByRole("dialog", { name: "Files" });
+  await files.click();
+  const warning = tree.getByText(/This is a temporary project/);
   await expect(warning).toBeVisible(LONG);
 
-  await page.getByRole("button", { name: "Import", exact: true }).click();
-  const dialog = page.getByRole("dialog");
+  await tree.getByRole("button", { name: "Import", exact: true }).click();
+  const dialog = page
+    .getByRole("dialog")
+    .filter({ has: page.getByPlaceholder("project name...") });
   await dialog.getByPlaceholder("project name...").fill("hello-kept");
   await dialog.getByRole("button", { name: "Import", exact: true }).click();
 
   await expect(dialog).toHaveCount(0);
+  // The kept project opens with its file, which closes the dropdown; the
+  // tree is read in it once more
+  await expect(
+    page
+      .getByRole("group", { name: "Projects" })
+      .getByRole("button", { name: "hello-kept", exact: true })
+  ).toBeVisible(LONG);
+  await expect(page.locator(".monaco-editor")).toContainText(
+    "entrypoint!(process_instruction)",
+    LONG
+  );
+  await expect(async () => {
+    if (!(await tree.isVisible())) await files.click();
+    await expect(tree.locator("#root-dir")).toBeVisible({ timeout: 2_000 });
+  }).toPass(LONG);
   await expect(warning).toHaveCount(0);
   // Kept: the picker, now in the warning's place, names the project, and
-  // the column still hides it
+  // the tree still hides it
   const picker = page.locator('[aria-label="Project"]');
   await expect(picker).toHaveCount(1);
   await expect(picker).toHaveText("hello-kept");

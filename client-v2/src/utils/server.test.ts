@@ -1,4 +1,5 @@
 import { PgServer, PgServerError } from "./server";
+import { BUSY_SERVER_MESSAGE } from "./server-error";
 
 const settings = {
   server: { endpoint: "https://server.test" },
@@ -47,6 +48,44 @@ describe("PgServer routes", () => {
 
     expect(requestedUrl()).toBe("https://server.test/deploy/abc");
     expect(Array.from(bytes)).toEqual([1, 2, 3]);
+  });
+
+  it("sends the route the project a build belongs to", async () => {
+    settings.server.endpoint = "/api/build-server";
+    try {
+      respond({ stderr: "", uuid: "u" });
+      await PgServer.build({
+        files: [],
+        project: { id: "p1", name: "hello" },
+      });
+
+      expect(JSON.parse(requestInit().body as string).project).toEqual({
+        id: "p1",
+        name: "hello",
+      });
+    } finally {
+      settings.server.endpoint = "https://server.test";
+    }
+  });
+
+  it("keeps the project from a server other than the route", async () => {
+    respond({ stderr: "", uuid: "u" });
+    await PgServer.build({ files: [], project: { id: "p1", name: "hello" } });
+
+    expect(JSON.parse(requestInit().body as string)).not.toHaveProperty(
+      "project"
+    );
+  });
+
+  it("reaches a route on this origin given as a path", async () => {
+    settings.server.endpoint = "/api/build-server";
+    try {
+      respond({ stderr: "", uuid: "u" });
+      await PgServer.build({ files: [] });
+      expect(requestedUrl()).toBe("/api/build-server/build");
+    } finally {
+      settings.server.endpoint = "https://server.test";
+    }
   });
 
   // The server in this tree has no such routes; a client that still asked
@@ -127,5 +166,114 @@ describe("PgServer refusals with an unreadable body", () => {
 
     expect(error.cause).toBe(offline);
     expect(error.body).toBe("Failed to fetch");
+  });
+});
+
+describe("a refusal", () => {
+  const refuse = (status: number, text: string) =>
+    mockFetch.mockResolvedValue({ ok: false, status, text: async () => text });
+
+  it("carries the route's sign-in reason and words", async () => {
+    refuse(
+      401,
+      JSON.stringify({
+        error: "Sign in with GitHub to build.",
+        reason: "signed-out",
+      })
+    );
+
+    const error = await PgServer.build({ files: [] }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(PgServerError);
+    expect(error).toMatchObject({
+      answered: true,
+      reason: "signed-out",
+      message: "Sign in with GitHub to build.",
+    });
+  });
+
+  it("shows the route's words for a refusal with no reason", async () => {
+    refuse(503, JSON.stringify({ error: "Sign-in is unavailable right now." }));
+
+    const error = await PgServer.build({ files: [] }).catch((e) => e);
+
+    expect(error.message).toBe("Sign-in is unavailable right now.");
+    expect(error.reason).toBeUndefined();
+    expect(error.isPlain).toBe(false);
+  });
+
+  it("carries Retry-After of a 429, as a plain refusal", async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 429,
+      headers: new Headers({ "retry-after": "42" }),
+      text: async () =>
+        JSON.stringify({
+          error: "You already have a build running.",
+          reason: "build-limit",
+        }),
+    });
+
+    const error = await PgServer.build({ files: [] }).catch((e) => e);
+
+    expect(error).toMatchObject({
+      status: 429,
+      retryAfterSeconds: 42,
+      message: "You already have a build running.",
+      isPlain: true,
+    });
+  });
+
+  it("carries Retry-After of a 503 too, for a full build queue", async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 503,
+      headers: new Headers({ "retry-after": "5" }),
+      text: async () => "The build server is busy, try again in 5 seconds",
+    });
+
+    const error = await PgServer.build({ files: [] }).catch((e) => e);
+
+    // The build server's own plain-text body is not shown; the words are ours
+    expect(error).toMatchObject({
+      status: 503,
+      retryAfterSeconds: 5,
+      message: BUSY_SERVER_MESSAGE,
+      isPlain: true,
+    });
+  });
+
+  it("reads no wait from a 429 without Retry-After, a date, or another status", async () => {
+    const answer = (status: number, headers: Record<string, string>) =>
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status,
+        headers: new Headers(headers),
+        text: async () => "x",
+      });
+
+    answer(429, {});
+    expect(
+      (await PgServer.build({ files: [] }).catch((e) => e)).retryAfterSeconds
+    ).toBeUndefined();
+    answer(429, { "retry-after": "Wed, 21 Oct 2026 07:28:00 GMT" });
+    expect(
+      (await PgServer.build({ files: [] }).catch((e) => e)).retryAfterSeconds
+    ).toBeUndefined();
+    answer(500, { "retry-after": "30" });
+    expect(
+      (await PgServer.build({ files: [] }).catch((e) => e)).retryAfterSeconds
+    ).toBeUndefined();
+  });
+
+  it("keeps a plain-text error as it was, with no reason", async () => {
+    refuse(500, "Invalid UUID");
+
+    const error = await PgServer.build({ files: [] }).catch((e) => e);
+
+    expect(error.reason).toBeUndefined();
+    expect(error.message).toBe(
+      "Server request failed (https://server.test/build): Invalid UUID"
+    );
   });
 });

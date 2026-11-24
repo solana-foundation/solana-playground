@@ -2,6 +2,7 @@ import { CircleAlert, CircleCheck, CircleX, History } from "lucide-react";
 import type { FocusEvent, ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import { useElapsed } from "@/shared/lib/hooks/use-elapsed";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { cn } from "@/shared/lib/utils";
 import { AsyncButton } from "@/shared/ui/async-button";
@@ -37,6 +38,7 @@ import {
   EMPTY_SOURCE_HINT,
   fileLabel,
 } from "../../../commands/build/empty-source";
+import { busySecondsLeft } from "../state/sign-in-refusal";
 import type { BuildFailure } from "../state/stage";
 import type { BuildSurface } from "./build-surface";
 import type { DiagnosticView, FailedView } from "./build-view";
@@ -82,6 +84,8 @@ export interface BaseBuildProps {
   onOpenFile: (path: string) => void;
   /** Opens the console, where the terminal holds the whole output */
   onShowLog: () => void;
+  /** Signs in with GitHub, which the Foundation's server asks for, then builds */
+  onSignIn: () => unknown;
   /** Stops the build in flight, as the console's Stop does */
   onStop: () => void;
   /** The build's downloads (IDL, program binary), links under Build succeeded's pills */
@@ -345,6 +349,10 @@ const Unreached = (p: BaseBuildProps & { failure: BuildFailure | null }) => {
   if (p.failure?.kind === "empty-source") {
     return <EmptySource {...p} file={p.failure.file} />;
   }
+  if (p.failure?.kind === "signed-out") return <SignedOut {...p} />;
+  if (p.failure?.kind === "busy") {
+    return <Busy {...p} refusal={p.failure} />;
+  }
   const noAnswer = p.failure?.kind === "no-answer";
   return (
     // No duration: a build that never ran took no time worth naming. The
@@ -393,6 +401,62 @@ const EmptySource = (p: BaseBuildProps & { file: string }) => {
           <BuildButton p={p} label="Build" variant="outline" />
         </>
       }
+      progress={p}
+    />
+  );
+};
+
+/**
+ * HOO-2422: the Solana Foundation's build server builds only for a signed-in
+ * GitHub user. Signing in is the one action, and builds again once it is
+ * done. Not a red error: nothing is wrong with the code.
+ */
+const SignedOut = (p: BaseBuildProps) => (
+  <Surface
+    title="Sign in with GitHub to build"
+    description="Builds run on Playground's build server, which needs a GitHub sign-in. Your code stays in this browser."
+    actions={
+      <BrandButton
+        onClick={() =>
+          Promise.resolve()
+            .then(p.onSignIn)
+            .catch(reportButtonFailure("sign in"))
+        }
+      >
+        Sign in with GitHub
+      </BrandButton>
+    }
+    progress={p}
+  />
+);
+
+/**
+ * The build service is busy, because this user already has a build running
+ * or is past the hourly limit (HOO-2907, `429`), or because the build
+ * server's queue is full (HOO-2908, `503`). It asked to be tried again in
+ * `retryAfterSeconds`, which counts down here from the refusal's own time, so
+ * leaving the stage and coming back shows what is left of the wait. Not a red
+ * error: the code was never built, so nothing is wrong with it. The server's
+ * own words say which limit it was. Try again stays enabled, since a slot may
+ * free sooner.
+ */
+const Busy = (
+  p: BaseBuildProps & {
+    refusal: Extract<BuildFailure, { kind: "busy" }>;
+  }
+) => {
+  const elapsedMs = useElapsed(p.refusal.refusedAt) ?? 0;
+  const left = busySecondsLeft(p.refusal, elapsedMs);
+  return (
+    <Surface
+      title={
+        left > 0
+          ? `Builds are busy, retry in ${left} s`
+          : "Builds are busy, try again now"
+      }
+      description={`${p.refusal.message} Your code is unchanged.`}
+      announce="status"
+      actions={<BrandBuildButton p={p} label="Try again" />}
       progress={p}
     />
   );

@@ -57,6 +57,7 @@ const props = (
   onAsk: vi.fn(),
   onOpenFile: vi.fn(),
   onShowLog: vi.fn(),
+  onSignIn: vi.fn(),
   onStop: vi.fn(),
   idlActions: null,
   idlGuide: <button aria-label={GUIDE}>{GUIDE}</button>,
@@ -853,6 +854,133 @@ describe("BaseBuild", () => {
     expect(p.onOpenFile).toHaveBeenCalledWith("src/lib.rs");
     fireEvent.click(screen.getByRole("button", { name: "Build" }));
     expect(p.onBuild).toHaveBeenCalled();
+    expect(brandButtons(container)).toHaveLength(1);
+  });
+
+  // HOO-2907: a user past a build limit is told to wait, not that the build failed
+  it("says builds are busy and for how long, with Try again as the one action", async () => {
+    const p = props({
+      kind: "unreached",
+      failure: {
+        kind: "busy",
+        message: "You already have a build running.",
+        retryAfterSeconds: 15,
+        refusedAt: Date.now(),
+      },
+    });
+    const { container } = render(<BaseBuild {...p} />);
+
+    expect(
+      screen.getByRole("heading", { name: "Builds are busy, retry in 15 s" })
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "You already have a build running. Your code is unchanged."
+      )
+    ).toBeTruthy();
+    expect(screen.queryByText("Could not build")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await vi.waitFor(() => expect(p.onBuild).toHaveBeenCalled());
+    expect(brandButtons(container)).toHaveLength(1);
+  });
+
+  // HOO-2908: the seconds the server asked for count down to "try again now"
+  it("counts the busy answer's seconds down to try again now", () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <BaseBuild
+          {...props({
+            kind: "unreached",
+            failure: {
+              kind: "busy",
+              message: "The build server is busy.",
+              retryAfterSeconds: 3,
+              refusedAt: Date.now(),
+            },
+          })}
+        />
+      );
+      expect(
+        screen.getByRole("heading", { name: "Builds are busy, retry in 3 s" })
+      ).toBeTruthy();
+
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(
+        screen.getByRole("heading", { name: "Builds are busy, retry in 1 s" })
+      ).toBeTruthy();
+
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(
+        screen.getByRole("heading", { name: "Builds are busy, try again now" })
+      ).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // A Build stage mounted again (after Write, say) shows what is left of the
+  // wait, not the whole wait over again
+  it("counts a busy wait from when it was answered, not from the mount", () => {
+    vi.useFakeTimers();
+    try {
+      const busyFor = (refusedAt: number) =>
+        props({
+          kind: "unreached",
+          failure: {
+            kind: "busy",
+            message: "You have started too many builds this hour.",
+            retryAfterSeconds: 15,
+            refusedAt,
+          },
+        });
+      const { unmount } = render(
+        <BaseBuild {...busyFor(Date.now() - 10_000)} />
+      );
+      expect(
+        screen.getByRole("heading", { name: "Builds are busy, retry in 5 s" })
+      ).toBeTruthy();
+      unmount();
+
+      render(<BaseBuild {...busyFor(Date.now() - 60_000)} />);
+      expect(
+        screen.getByRole("heading", { name: "Builds are busy, try again now" })
+      ).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // HOO-2422: the Foundation's server builds only for a signed-in user
+  it("asks a signed-out user to sign in, with that one action", async () => {
+    const p = props({
+      kind: "unreached",
+      failure: {
+        kind: "signed-out",
+        message: "Sign in with GitHub to build.",
+      },
+    });
+    const { container } = render(<BaseBuild {...p} />);
+
+    expect(
+      screen.getByRole("heading", { name: "Sign in with GitHub to build" })
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Builds run on Playground's build server, which needs a GitHub sign-in. Your code stays in this browser."
+      )
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show details" })).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Sign in with GitHub" })
+    );
+    await vi.waitFor(() => expect(p.onSignIn).toHaveBeenCalled());
+    // One action: signing in builds again by itself
+    expect(screen.queryByRole("button", { name: "Build" })).toBeNull();
     expect(brandButtons(container)).toHaveLength(1);
   });
 });

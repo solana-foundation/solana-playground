@@ -11,6 +11,7 @@ import {
 } from "@/shared/ui/callout";
 import { CopyButton } from "@/shared/ui/copy-button";
 
+import { restingOf } from "../model/resting";
 import type { RunState } from "../model/run";
 
 /** Where the open project came from, when a docs link opened it */
@@ -80,21 +81,27 @@ const BaseRunCallout: FC<BaseRunCalloutProps> = ({
 }) => {
   const again = <CalloutAction onClick={onRunAgain}>Run again</CalloutAction>;
 
-  // A run in progress keeps showing what was there before it
-  const shown = state.kind === "running" ? state.previous : state;
+  // Under any other overlay (a run going, the question before a link's first
+  // Run) the callout keeps what was there; the funding card is its own
+  const shown = state.kind === "funding" ? state : restingOf(state);
   switch (shown.kind) {
     case "idle": {
       // eslint-disable-next-line unicorn/no-null -- a component that draws nothing returns `null`; React's types refuse `undefined`
       if (!source) return null;
-      const where = source.from ? hostOf(source.from) : "a docs link";
+      // The source is what the link says, and anyone can write a link: it is
+      // shown as the link's claim, never as where the code came from
       return (
         <Note
           state="source"
           variant="info"
           icon={<Info />}
-          title={`From ${where}: ${source.title}`}
+          title={`Opened from a link: ${source.title}`}
         >
-          Runs with your Playground wallet.{" "}
+          {source.from
+            ? `The link says it comes from ${hostOf(
+                source.from
+              )}. Playground can't check that, so read the code before you run it with your Playground wallet.`
+            : "Playground can't check where this code came from, so read the code before you run it with your Playground wallet."}{" "}
           {source.from && (
             <a
               className="underline underline-offset-4"

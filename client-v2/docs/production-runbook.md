@@ -34,7 +34,7 @@ or Vercel, and none is a secret. Have each ready before step 1; the table says w
 | `<DOPPLER_PROJECT>`, `<DOPPLER_CONFIG>` | The Doppler project and config that hold production's variables, for example `solana-playground` and `prd` | Your team; created in step 1 if new |
 | `<OPERATOR>` | The Google account of each person who runs migrations, lower case | Your team |
 | `<GITHUB_OWNER>` | The GitHub organization that will own the production OAuth app | Your team |
-| `<BUILD_SERVER_CONTACT>` | Whoever sets `PG_CLIENT_URLS` on the build server (App Engine) | Your team |
+| `<BUILD_SERVER_CONTACT>` | Whoever sets `PG_CLIENT_URLS` and `PG_API_KEYS` on the build server (App Engine) | Your team |
 | `<BUILD_SERVER_URL>` | The build server's `https://` origin, the one whose `PG_CLIENT_URLS` lists production | `<BUILD_SERVER_CONTACT>` |
 | `<NOUS_ACCOUNT>` | The Nous Research account whose credits the assistant spends | Your team |
 | `<TOP_UP_OWNER>` | The person who adds Nous credits when the balance runs low. Nous has no auto top-up: an empty balance stops the assistant for everyone | Your team |
@@ -145,6 +145,7 @@ All Unmasked in Doppler: none is a secret, and `migrate-production-db` reads the
 | `GITHUB_CLIENT_ID` | The production OAuth app's Client ID (step 5) | Unmasked | Step 6 |
 | `GITHUB_CLIENT_SECRET` | The production OAuth app's client secret (step 5) | Masked | Step 6 |
 | `AUTH_OAUTH_PROXY_SECRET`, `AUTH_OAUTH_PROXY_URL` | Unset until it is decided whether preproduction previews sign in with GitHub, and through which deployment. Set on Production, `AUTH_OAUTH_PROXY_SECRET` makes production the OAuth proxy host for every preview that carries the same secret and names production in `AUTH_OAUTH_PROXY_URL`; unset, production runs no proxy (`oauthProxyPlugins` in `src/features/auth/model/auth.mjs`) | | |
+| `CRON_SECRET` | `openssl rand -base64 32`, generated for production and used nowhere else. Vercel Cron sends it to `/api/retention` once a day. Unset, the route answers `503` and no expired data is removed ([Retention and account deletion](#retention-and-account-deletion)) | Masked | Step 6 |
 
 ### Assistant default backend (Nous Research)
 
@@ -171,7 +172,7 @@ spend](deploy-client-vercel.md#default-backend-spend)); do not set it up for the
 | `SENTRY_AUTH_TOKEN` | A Sentry auth token that may upload source maps to that project. Read by the build only | **Unmasked**: a local build pulls a Vercel Secret as empty, and then fails | Step 6 |
 | `SENTRY_TRACES_SAMPLE_RATE` | `0` to `1`. Unset traces every API request | Unmasked | |
 | `SENTRY_PREVIEW_ENABLED`, `SOURCEMAPS_PREVIEW_ENABLED` | Never on Production: Preview only | | |
-| `REACT_APP_GA_MEASUREMENT_ID` | `G-...`, the Google Analytics 4 measurement id, if the Foundation uses Google Analytics. Unset, the page carries no tag | Unmasked | Step 6 |
+| `REACT_APP_GA_MEASUREMENT_ID` | `G-...`, the Google Analytics 4 measurement id, if the Foundation uses Google Analytics. Unset, the page carries no tag. Set, the tag loads only for a visitor who allows analytics, in the consent banner or in Settings, so Google Analytics counts only those visitors | Unmasked | Step 6 |
 | `REACT_APP_LOG_LEVEL` | Unset logs `warn` in production | Unmasked | |
 
 ### Solana RPC and deploys
@@ -188,7 +189,9 @@ Optional. Without them the app uses the public Solana endpoints.
 
 | Variable | Value | In Doppler | Set in |
 | --- | --- | --- | --- |
-| `REACT_APP_SERVER_URL` | `<BUILD_SERVER_URL>`, no trailing slash. **Required**: the build server every profile starts on | Unmasked | Step 6 |
+| `REACT_APP_SERVER_URL` | `/api/build-server`, exactly. **Required**: builds go through this deployment's own route, which needs a GitHub sign-in and records each build in `build_audit` | Unmasked | Step 6 |
+| `PG_BUILD_SERVER_URL` | `<BUILD_SERVER_URL>`, no trailing slash: where `/api/build-server` forwards builds. **Required**: unset, the route refuses every build | Unmasked | Step 6 |
+| `PG_BUILD_SERVER_API_KEY` | This deployment's entry of the build server's `PG_API_KEYS`, sent as `x-api-key`. Unset, no key is sent and production reports an error once per instance | Masked | Step 6 |
 | `REACT_APP_SERVER_UNSTABLE` | Never `true`: a Vercel build with it fails | | |
 | `REACT_APP_VERCEL_ENV`, `REACT_APP_VERCEL_GIT_COMMIT_SHA` | Never: `scripts/vercel-build.sh` sets both | | |
 | `USE_WASM_STUBS` | Never: a deployment with it fails its install (`scripts/vercel-install.sh`) | | |
@@ -201,6 +204,7 @@ Optional. Without them the app uses the public Solana endpoints.
 | `client-v2/.env` in your checkout (gitignored) | `VERCEL_DEPLOY_TEAM`, `VERCEL_DEPLOY_PROJECT_ID` | `<TEAM_SLUG>` and `<VERCEL_PROJECT_ID>`. Every Makefile target refuses a checkout linked to another project | Step 1 |
 | GitHub, `solana-foundation/solana-playground` → Settings → Secrets and variables → Actions → Repository secrets | `VERCEL_AUTOMATION_BYPASS_SECRET` | Vercel → the project → Settings → Deployment Protection → Protection Bypass for Automation. **Why:** after each push to `master`, the `smoke` job of `.github/workflows/client-v2.yml` waits for that commit's production deployment and calls `GET /api/sync` on the deployment's own URL, which Deployment Protection hides; the job sends this secret to get past it. The run fails unless production answers `{"enabled":true,"db":"ok"}`, so a production that cannot reach its database shows as a red run. Without the secret the job passes with a warning and checks nothing | Step 8 |
 | GitHub, the same page → Variables → Repository variables | `GCP_WORKLOAD_IDENTITY_PROVIDER` | The full resource name of the server's Workload Identity provider. Set, the server's deploys and releases sign in to GCP through OIDC; empty, through the `GCP_KEY` secret. The secrets `GCP_KEY`, `SERVICE_ACCOUNT` and `PROJECT_ID` already exist there | Step 10 |
+| The build server's environment | `PG_API_KEYS` | A comma-separated list of keys, one per client of the server; set it from a GCP secret, never in `app.yaml`. Generate each key with `openssl rand -hex 32`, so every key has one length and holds no space or comma. `PG_BUILD_SERVER_API_KEY` is one entry. Set, the server answers `401` to `/build`, `/deploy` and `/unstable/*` unless `x-api-key` matches an entry, so only a client holding a key gets in. Removing an entry and redeploying the server revokes that client alone: the server reads its keys once, at start. After a change, check each client's key with the `curl` of [D-9](../../docs/testing.md#d-9-the-server-builds-a-program-without-a-client): a listed key passes, a removed one gets `401`. `PG_API_KEY`, a single key, is read only while `PG_API_KEYS` holds no key: once the list is set, the old key stops working unless it is also an entry, so put the Playground's key in the list and unset `PG_API_KEY` after the move. Either variable set without a key, or with a key holding a space or a character outside visible ASCII, stops the server at start. Both unset, those routes stay open and the server logs an error at start, the one level App Engine prints without `RUST_LOG`. Set `PG_BUILD_SERVER_API_KEY` on Vercel first: a key on the server alone refuses every build, while a key Vercel sends to a server without one is ignored | Step 6 |
 | The build server's environment | `PG_CLIENT_URLS` | Must include `https://<VERCEL_APP_DOMAIN>` and, from step 9, `https://<CUSTOM_DOMAIN>`, or the browser's build requests are refused by CORS | Before step 7; step 9 |
 
 ## Step 1: the Vercel project
@@ -385,11 +389,12 @@ first deployment in step 7. Give write access to `<DOPPLER_CONFIG>` only to the 
 **Run:** set each variable the tables mark "Step 6" in `<DOPPLER_CONFIG>`, with the visibility in its "In Doppler"
 column. `AUTH_BASE_URL` is `https://<VERCEL_APP_DOMAIN>` for now.
 
-Then ask `<BUILD_SERVER_CONTACT>` to add `https://<VERCEL_APP_DOMAIN>` to `PG_CLIENT_URLS` on the build server.
+Then ask `<BUILD_SERVER_CONTACT>` for this deployment's entry of the build server's `PG_API_KEYS` (the value of
+`PG_BUILD_SERVER_API_KEY`) and to add `https://<VERCEL_APP_DOMAIN>` to `PG_CLIENT_URLS` on the build server.
 
 **Check:** `npx vercel@62.7.0 env ls production` lists the step 3 variables, `SYNC_ENABLED`, `AUTH_SECRET`,
-`AUTH_BASE_URL`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `PG_AI_API_KEY`, `PG_AI_NEWCOMER_API_KEY`,
-`REACT_APP_SENTRY_DSN`, `SENTRY_AUTH_TOKEN` and `REACT_APP_SERVER_URL`, plus any optional ones you set,
+`AUTH_BASE_URL`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `CRON_SECRET`, `PG_AI_API_KEY`, `PG_AI_NEWCOMER_API_KEY`,
+`REACT_APP_SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, `REACT_APP_SERVER_URL`, `PG_BUILD_SERVER_URL` and `PG_BUILD_SERVER_API_KEY`, plus any optional ones you set,
 with no `AGENT_*`, `DATABASE_URL` or `AUTH_OAUTH_PROXY_*` name. Only the Masked ones carry the Secret badge in the
 dashboard.
 
@@ -789,6 +794,22 @@ merges after that. Migrations are written so the code already deployed keeps wor
   credits are added, and Sentry receives the `api:agent` error `upstream credit balance is empty`.
 - **A leaked key:** create a new one in Nous with the same limits, replace it in `<DOPPLER_CONFIG>` (the sync
   redeploys), check the new deployment is Current, then revoke the old one.
+
+### Retention and account deletion
+
+- **The retention job** runs once a day: Vercel Cron calls `GET /api/retention` with `CRON_SECRET`
+  (`client-v2/vercel.json`, `crons`). It deletes expired sessions and `build_audit` rows older than 90 days, and
+  clears the names of deleted projects. Vercel → Settings → Cron Jobs lists it, with a Run button for a run by hand.
+- **Check a run:** Logs, filtered to `/api/retention`. A `200` carries the counts
+  `{"sessions":n,"buildAudit":n,"projectNames":n}`. A `500` means at least one step failed: its key is missing from
+  the counts, Sentry has the `api:retention` error, and the other steps still ran. A `503` means `CRON_SECRET` is
+  missing from the deployment: set it in `<DOPPLER_CONFIG>` ([Production environment](#production-environment)). A
+  `401` means the cron sent a secret other than the deployment's, as after a rotation that no deployment picked up:
+  redeploy production.
+- **Account deletion** is the user's own action, in the account menu. It removes the account's projects, chats,
+  sessions and AI usage, and clears their GitHub login and id from `build_audit`. If GitHub could not revoke the app's
+  access, the menu tells the user to remove it at `https://github.com/settings/applications`.
+- **A deletion request by email**, from someone who cannot sign in: tell Alexander. Do not delete rows by hand.
 
 ### Adding an operator
 

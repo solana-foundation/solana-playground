@@ -12,8 +12,17 @@ WORKDIR ${HOME}
 
 FROM base AS binary
 
-# Install Rust
-RUN sh -c "$(curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs)" -- -y
+# Install Rust: rustup-init at a pinned version, checked against its SHA-256
+# (rustup publishes rustup-init.sha256 next to the binary), as server/Dockerfile
+ARG RUSTUP_VERSION="1.29.3"
+ARG RUSTUP_SHA256="b1c8cb14e30889e7e2999e6b69e62d9e9b9ffc0f4df8180564d306d9680e6c55"
+RUN test "$(uname -m)" = x86_64 || { echo "this image is x86_64 only, got $(uname -m)" >&2; exit 1; }
+RUN curl --proto '=https' --tlsv1.2 -sSfLo /tmp/rustup-init \
+      "https://static.rust-lang.org/rustup/archive/${RUSTUP_VERSION}/x86_64-unknown-linux-gnu/rustup-init" \
+    && echo "${RUSTUP_SHA256}  /tmp/rustup-init" | sha256sum -c - \
+    && chmod +x /tmp/rustup-init \
+    && /tmp/rustup-init -y \
+    && rm /tmp/rustup-init
 ENV PATH="${HOME}/.cargo/bin:${PATH}"
 
 # Cache toolchain

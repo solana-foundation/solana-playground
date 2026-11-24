@@ -49,6 +49,39 @@ describe("redactSecretsWith", () => {
     );
   });
 
+  it("removes the longer of two overlapping secrets whole, whatever their order", () => {
+    // The shorter one is a run inside the longer; taken first, it would split
+    // the longer and leave its first characters too short to match
+    const long = "ab+cdefghijklmnop";
+    const short = "cdefghijklmnop";
+    assert.equal(
+      redactSecretsWith([short, long])(`key=${long}`),
+      "key=[redacted]"
+    );
+  });
+
+  it("removes a key whole when another key shares a long run with it", () => {
+    // The `%20` and `+` encodings of one value: the first is longer, and its
+    // run `Charlie9%2Fsec` sits inside the second
+    const percent = "qry%20Charlie9%2Fsec";
+    const plus = "qry+Charlie9%2Fsec";
+    assert.equal(
+      redactSecretsWith([percent, plus])(`key=${plus}`),
+      "key=[redacted]"
+    );
+  });
+
+  it("takes time linear in the text, even against a long key", () => {
+    // Trying every run of a 1 KiB key against 2 MiB took 15 s and blocked
+    // the server; one run of the key in the text was enough to cause it
+    const long = `t${"k9".repeat(512)}`;
+    const text = `${"k9".repeat(4)}${"z".repeat(2 * 1024 * 1024)}${long}`;
+    const started = performance.now();
+    const out = redactSecretsWith([long])(text);
+    assert.ok(performance.now() - started < 1000, "took over a second");
+    assert.equal(out, `[redacted]${"z".repeat(2 * 1024 * 1024)}[redacted]`);
+  });
+
   it("leaves text without a key unchanged", () => {
     assert.equal(redactSecretsWith([KEY])("slow down"), "slow down");
   });

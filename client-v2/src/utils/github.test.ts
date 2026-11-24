@@ -262,6 +262,15 @@ describe("PgGithub.getFiles", () => {
     });
   });
 
+  it("keeps a TypeError that is not a dropped connection as it is", async () => {
+    const bug = new TypeError("Failed to execute 'fetch': Invalid URL");
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(bug);
+
+    await expect(
+      PgGithub.getFiles("https://github.com/solana-labs/example")
+    ).rejects.toBe(bug);
+  });
+
   it.each([
     ["a refusal that is not the hourly limit", { status: 403, body: "" }],
     ["a server error", { status: 500, body: "" }],

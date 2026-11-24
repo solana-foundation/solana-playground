@@ -42,12 +42,17 @@ export const useModalId = () => {
 export const useModalIdIfAny = () => useContext(ModalIdContext);
 
 /**
- * Set by `ModalHost` for the top dialog: while its submit runs, the dialog
- * cannot be dismissed (Escape, a press outside, the header's Close), so the
- * submit's answer reaches the dialog that asked for it.
+ * Set by `ModalHost` for the top dialog: while its submit runs, or a key
+ * panel inside it is busy (`useBusyPanels`), the dialog cannot be dismissed
+ * (Escape, a press outside, the header's Close), so the answer reaches the
+ * dialog that asked for it. Each holder takes a hold and releases only its
+ * own, so the dialog stays blocked while any of them works: a submit can be
+ * waiting while a panel's import starts and finishes.
+ *
+ * @returns the function that releases this hold; a second call does nothing
  */
-export const ModalDismissContext = createContext<(blocked: boolean) => void>(
-  () => {}
+export const ModalDismissContext = createContext<() => () => void>(
+  () => () => {}
 );
 
 export const useBlockDismiss = () => useContext(ModalDismissContext);

@@ -6,7 +6,7 @@ FROM ubuntu:24.04@sha256:80dd3c3b9c6cecb9f1667e9290b3bc61b78c2678c02cbdae5f0fea9
 # Install build deps
 ARG DEBIAN_FRONTEND="noninteractive"
 RUN apt-get update -qq && apt-get upgrade -qq && apt-get install -qq \
-    build-essential curl pkg-config libssl-dev libudev-dev
+    build-essential bzip2 curl pkg-config libssl-dev libudev-dev
 
 # Create a non-root user
 ARG USER
@@ -15,8 +15,17 @@ USER ${USER}
 ENV HOME="/home/${USER}"
 WORKDIR ${HOME}
 
-# Install Rust
-RUN sh -c "$(curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs)" -- -y
+# Install Rust: rustup-init at a pinned version, checked against its SHA-256
+# (rustup publishes rustup-init.sha256 next to the binary), as server/Dockerfile
+ARG RUSTUP_VERSION="1.29.3"
+ARG RUSTUP_SHA256="b1c8cb14e30889e7e2999e6b69e62d9e9b9ffc0f4df8180564d306d9680e6c55"
+RUN test "$(uname -m)" = x86_64 || { echo "this image is x86_64 only, got $(uname -m)" >&2; exit 1; }
+RUN curl --proto '=https' --tlsv1.2 -sSfLo /tmp/rustup-init \
+      "https://static.rust-lang.org/rustup/archive/${RUSTUP_VERSION}/x86_64-unknown-linux-gnu/rustup-init" \
+    && echo "${RUSTUP_SHA256}  /tmp/rustup-init" | sha256sum -c - \
+    && chmod +x /tmp/rustup-init \
+    && /tmp/rustup-init -y \
+    && rm /tmp/rustup-init
 ENV PATH="${HOME}/.cargo/bin:${PATH}"
 
 FROM base AS binary
@@ -36,14 +45,59 @@ ARG BIN
 COPY src src
 RUN cargo build --release --bin ${BIN} --features unstable
 
-FROM base AS final
+FROM base AS solana
 
-# Install Solana
+# Install Solana, in the layout of Agave's installer, from the tarball that
+# installer fetches, checked against the SHA-256 pinned here for each version a
+# template uses (`solana_version` in src/templates). A version missing here
+# fails the build: add its checksum with the template.
 ARG SOLANA_VERSION
-RUN sh -c "$(curl -sSfL https://release.anza.xyz/v${SOLANA_VERSION}/install)"
+RUN case "${SOLANA_VERSION}" in \
+      1.17.25) sum="8c33eca52ed79b009050c9788db6d910ac84c1b11feae77110cabc7f7d5ed5a3" ;; \
+      3.1.10) sum="a7205ff29bcf0f7199740225ecae2b85a28ea9668892d5ec21bd9749882984a1" ;; \
+      *) echo "no pinned checksum for Solana ${SOLANA_VERSION}" >&2; exit 1 ;; \
+    esac \
+    && curl --proto '=https' --tlsv1.2 -sSfLo /tmp/solana-release.tar.bz2 \
+      "https://release.anza.xyz/v${SOLANA_VERSION}/solana-release-x86_64-unknown-linux-gnu.tar.bz2" \
+    && echo "${sum}  /tmp/solana-release.tar.bz2" | sha256sum -c - \
+    && mkdir -p "${HOME}/.local/share/solana/install/releases/${SOLANA_VERSION}" \
+    && tar -xjf /tmp/solana-release.tar.bz2 -C "${HOME}/.local/share/solana/install/releases/${SOLANA_VERSION}" \
+    && ln -s "${HOME}/.local/share/solana/install/releases/${SOLANA_VERSION}/solana-release" \
+      "${HOME}/.local/share/solana/install/active_release" \
+    && rm /tmp/solana-release.tar.bz2
 ENV PATH="${HOME}/.local/share/solana/install/active_release/bin:${PATH}"
 
-# Run the installation command
+# The platform tools and Criterion that version's SDK would download unchecked
+# on its first build, placed where it looks first
+# (~/.cache/solana/<version>/<name>), each checked against a pinned SHA-256.
+# The versions are the ones that Solana version's SDK names. GitHub publishes
+# a digest for platform tools v1.52; the others have none, so theirs were taken
+# from the download.
+RUN case "${SOLANA_VERSION}" in \
+      1.17.25) tools="v1.37" tools_sum="8d5153589dbe19635affe937663cf4555a7e69a62d91ab4a1df064aaa8d5f066" ;; \
+      3.1.10) tools="v1.52" tools_sum="8b3861e93daf085ec12b65c4fac374d9bec4587a3de16871da6b08ab0c1d907e" ;; \
+      *) echo "no pinned platform tools for Solana ${SOLANA_VERSION}" >&2; exit 1 ;; \
+    esac \
+    && criterion="v2.3.3" criterion_sum="ee7f92d7268563848aa3ae90bbf5df86604b8d0fb0e4942b0ecfbf6201596550" \
+    && curl --proto '=https' --tlsv1.2 -sSfLo /tmp/platform-tools.tar.bz2 \
+      "https://github.com/anza-xyz/platform-tools/releases/download/${tools}/platform-tools-linux-x86_64.tar.bz2" \
+    && echo "${tools_sum}  /tmp/platform-tools.tar.bz2" | sha256sum -c - \
+    && mkdir -p "${HOME}/.cache/solana/${tools}/platform-tools" \
+    && tar -xjf /tmp/platform-tools.tar.bz2 -C "${HOME}/.cache/solana/${tools}/platform-tools" \
+    && rm /tmp/platform-tools.tar.bz2 \
+    && curl --proto '=https' --tlsv1.2 -sSfLo /tmp/criterion.tar.bz2 \
+      "https://github.com/Snaipe/Criterion/releases/download/${criterion}/criterion-${criterion}-linux-x86_64.tar.bz2" \
+    && echo "${criterion_sum}  /tmp/criterion.tar.bz2" | sha256sum -c - \
+    && mkdir -p "${HOME}/.cache/solana/${criterion}/criterion" \
+    && tar --strip-components 1 -xjf /tmp/criterion.tar.bz2 -C "${HOME}/.cache/solana/${criterion}/criterion" \
+    && rm /tmp/criterion.tar.bz2
+
+FROM solana AS final
+
+# Run the installation command. `avm` is pinned to a revision (src/templates);
+# `avm install` builds Anchor < 0.31 from its git tag with --locked, and checks
+# a downloaded Anchor >= 0.31 binary's build provenance attestation before
+# installing it.
 ARG INSTALLATION_COMMAND
 RUN sh -c "${INSTALLATION_COMMAND}"
 
@@ -57,6 +111,9 @@ ARG TEMPLATE
 COPY --chown=${USER}:${USER} templates/${TEMPLATE}/ .
 
 # Build the default program to cache
+# Unlike server/Dockerfile, nothing checks after this build that the SDK took
+# only the pre-placed tools: CI builds this image only up to the `solana` stage,
+# so such a check would never run there.
 ARG INITIAL_BUILD_COMMAND
 RUN sh -c "${INITIAL_BUILD_COMMAND}"
 

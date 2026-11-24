@@ -7,6 +7,7 @@ import {
   currentProject,
   editorTookFocus,
   expect,
+  filesDropdown,
   filesToggle,
   HELP_TAIL,
   home,
@@ -23,6 +24,7 @@ import {
 import { lineOf, linesOn, linesRead } from "./telemetry";
 import {
   DESK,
+  DOCK_DESK,
   openPhoneMenu,
   openPhonePreview,
   PHONE,
@@ -30,6 +32,11 @@ import {
   waitForPhonePage,
   WIDE_DESK,
 } from "./viewports";
+
+// These tests drive the project tree as its docked column, which needs a code
+// area of 1100 px or more; the default window is too narrow and shows the
+// dropdown instead
+test.use({ viewport: DOCK_DESK });
 
 /**
  * The one event line with this name: waits for it, then a moment more, so a
@@ -286,8 +293,10 @@ test("client-v2-layout: An unreadable saved layout", async ({
 }) => {
   await page.evaluate(() => localStorage.setItem("layout", "{"));
   await page.reload();
-  // A first visit's layout: the tree closed under the head
-  await expect(filesToggle(page)).toHaveAttribute("aria-pressed", "false");
+  // A first visit's layout: the tree docked, which this spec's 1920 px
+  // window has room for
+  await expect(filesPanel(page).locator("#root-dir")).toBeVisible();
+  await expect(filesToggle(page)).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".monaco-editor")).toBeVisible();
 });
 
@@ -391,22 +400,30 @@ test("client-v2-layout: Folding the project panel", async ({
   const files = filesPanel(page);
   await expect(files).toHaveJSProperty("offsetWidth", 240);
   await leaveEditor(page);
+  // ⌘E undocks a docked tree: the column is out of the layout and takes no
+  // width
   await page.keyboard.press("ControlOrMeta+e");
-  // Hidden: the column is out of the layout and takes no width
   await expect(files).toHaveCount(0);
-  // The fold is kept over a reload
+  // Undocked is kept over a reload
   await reloadAndBoot(page);
   await expect(files).toHaveCount(0);
+  // "Files" then opens the dropdown, whose pin docks the tree again
   await filesToggle(page).click();
+  await expect(filesDropdown(page).locator("#root-dir")).toBeVisible();
+  await expect(files).toHaveCount(0);
+  await page.getByRole("button", { name: "Dock beside the editor" }).click();
   await expect(files).toHaveJSProperty("offsetWidth", 240);
   await expect(files.locator("#root-dir")).toBeVisible();
+  await expect(filesDropdown(page)).toHaveCount(0);
 });
 
 test("client-v2-layout: The files column keeps its tree", async ({
   seededPage: page,
 }) => {
-  // Short enough that the tree, with its folders open, scrolls
-  await page.setViewportSize({ width: 1280, height: 280 });
+  // Short enough that the tree, with its folders open, scrolls (the column
+  // has no footer since New file moved to the editor head); wide enough to
+  // dock it
+  await page.setViewportSize({ width: 1920, height: 220 });
   const files = filesPanel(page);
   const body = page.locator("#flow-left-tabpanel");
   const folder = (path: string) =>
@@ -428,12 +445,24 @@ test("client-v2-layout: The files column keeps its tree", async ({
   for (const path of opened) await folder(path).click();
   for (const path of opened) await expect(folder(path)).toHaveClass(/\bopen\b/);
 
+  // Partway, not to the end: the end moves by a scrollbar's height as the
+  // tree's widest row comes and goes, and the restore is clamped to it
   const scrolled = await body.evaluate((el) => {
-    el.scrollTop = el.scrollHeight;
+    el.scrollTop = 16;
     return el.scrollTop;
   });
-  expect(scrolled).toBeGreaterThan(0);
-  const hideAndShow = {
+  expect(scrolled).toBe(16);
+  /** The folders and the selection as they were, wherever the tree shows */
+  const keptTree = async () => {
+    for (const path of opened) {
+      await expect(folder(path)).toHaveClass(/\bopen\b/);
+    }
+    await expect(
+      page.locator(`#root-dir [data-path="${current}"]`)
+    ).toHaveClass(/\bselected\b/);
+  };
+  // Each undocks the tree, then opens it as the dropdown
+  const undockAndOpen = {
     // The folder clicks above took the focus out of the editor, which keeps
     // ⌘E for itself
     "⌘E": async () => {
@@ -447,16 +476,17 @@ test("client-v2-layout: The files column keeps its tree", async ({
       await filesToggle(page).click();
     },
   };
-  for (const [via, toggle] of Object.entries(hideAndShow)) {
+  for (const [via, toggle] of Object.entries(undockAndOpen)) {
     await test.step(via, async () => {
       await toggle();
+      await expect(filesDropdown(page).locator("#root-dir")).toBeVisible();
+      await keptTree();
+      // Docked again, the column is back where it was scrolled to
+      await page
+        .getByRole("button", { name: "Dock beside the editor" })
+        .click();
       await expect(files.locator("#root-dir")).toBeVisible();
-      for (const path of opened) {
-        await expect(folder(path)).toHaveClass(/\bopen\b/);
-      }
-      await expect(
-        page.locator(`#root-dir [data-path="${current}"]`)
-      ).toHaveClass(/\bselected\b/);
+      await keptTree();
       await expect
         .poll(() => body.evaluate((el) => el.scrollTop))
         .toBe(scrolled);
@@ -1109,7 +1139,8 @@ test("client-v2-layout: A corrupt saved layout is reported", async ({
   await page.evaluate(() => localStorage.setItem("layout", "{"));
   const lines = linesOn(page);
   await page.reload();
-  await expect(filesToggle(page)).toHaveAttribute("aria-pressed", "false");
+  // Restored as a first visit: the tree docked
+  await expect(filesToggle(page)).toHaveAttribute("aria-pressed", "true");
   await expect.poll(() => lineOf(lines, "layout_restore_failed")).toBeTruthy();
   expect(lineOf(lines, "layout_restore_failed")).toContain("reason: corrupt");
 });
@@ -1309,7 +1340,7 @@ const boxOf = async (locator: ReturnType<Page["locator"]>) =>
   );
 
 test("client-v2-layout: A wide window", async ({ seededPage: page }) => {
-  await page.setViewportSize(DESK);
+  // This spec's 1920 px window, wide enough for the tree's column
   await expect(filesPanel(page).locator("#root-dir")).toBeVisible();
   await expect(stagePanel(page)).toBeVisible();
   await expect(assistantPanel(page)).toBeVisible();
@@ -1346,7 +1377,6 @@ test("client-v2-layout: A wide window", async ({ seededPage: page }) => {
 test("client-v2-layout: Everything the header did", async ({
   seededPage: page,
 }) => {
-  await page.setViewportSize(DESK);
   const current = currentProject(page);
   await expect(current).toHaveText("e2e-project");
 
@@ -1389,9 +1419,18 @@ test.describe("on a tablet", () => {
     await expect(
       nav(page).getByRole("button", { name: "Expand navigation" })
     ).toBeVisible();
-    await expect(filesPanel(page).locator("#root-dir")).toBeVisible();
+    // Too narrow to dock: no column, and "Files" opens the tree as the
+    // dropdown, with no pin
+    await expect(filesPanel(page)).toHaveCount(0);
     await expect(stagePanel(page)).toBeVisible();
     await expect(assistantPanel(page)).toHaveCount(0);
+    await filesToggle(page).click();
+    await expect(filesDropdown(page).locator("#root-dir")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Dock beside the editor" })
+    ).toHaveCount(0);
+    await filesToggle(page).click();
+    await expect(filesDropdown(page)).toHaveCount(0);
 
     await page.getByRole("button", { name: "Expand assistant" }).click();
     await expect(page.getByRole("dialog", { name: "Assistant" })).toBeVisible();
@@ -1456,29 +1495,28 @@ test("client-v2-layout: Picking Tutorials", async ({ seededPage: page }) => {
 test.describe("on a 1024 px window", () => {
   test.use({ viewport: { width: 1024, height: 768 } });
 
-  // The narrowest window with all four columns: the work area's minimum
-  // (the files column's 12 rem, a handle and the stage's 240 px) fits only
-  // because the assistant gives way below its default width
-  test("the four columns fit side by side, none below its minimum", async ({
+  // Too narrow a code area to dock the tree: the navigation, the assistant
+  // and the stage side by side, the tree in its dropdown, nothing past the
+  // window's edge
+  test("the three columns fit side by side, the tree drops down", async ({
     seededPage: page,
   }) => {
     await expect(
       nav(page).getByRole("button", { name: "Collapse navigation" })
     ).toBeVisible();
-    await expect(filesPanel(page).locator("#root-dir")).toBeVisible();
+    await expect(filesPanel(page)).toHaveCount(0);
     await expect(stagePanel(page)).toBeVisible();
     await expect(assistantPanel(page)).toBeVisible();
 
     const navBox = await boxOf(navColumn(page));
     const assistantBox = await boxOf(assistantPanel(page));
-    const filesBox = await boxOf(filesPanel(page));
     const stageBox = await boxOf(stagePanel(page));
 
     expect(navBox.x + navBox.width).toBeLessThanOrEqual(assistantBox.x);
-    expect(assistantBox.x + assistantBox.width).toBeLessThanOrEqual(filesBox.x);
-    expect(filesBox.x + filesBox.width).toBeLessThanOrEqual(stageBox.x);
-    expect(filesBox.width).toBeGreaterThanOrEqual(192);
+    expect(assistantBox.x + assistantBox.width).toBeLessThanOrEqual(stageBox.x);
     expect(stageBox.width).toBeGreaterThanOrEqual(240);
+    await filesToggle(page).click();
+    await expect(filesDropdown(page).locator("#root-dir")).toBeVisible();
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth)
     ).toBeLessThanOrEqual(1024);
@@ -1539,6 +1577,20 @@ test("the account menu opens inside the window, its Sign out on top", async ({
   expect(onTop).toBe(true);
 });
 
+/**
+ * The stage tabs' row, as `barOf` reads it: the stepper's nearest ancestor
+ * taller than the 34 px stepper itself
+ */
+const stageTabsRowOf = (page: Page) =>
+  page.locator('[data-slot="stepper-list"]').evaluate((list) => {
+    let row: Element | null = list.parentElement;
+    while (row && row.getBoundingClientRect().height < 40) {
+      row = row.parentElement;
+    }
+    const box = (row ?? list).getBoundingClientRect();
+    return { y: Math.round(box.y), height: Math.round(box.height) };
+  });
+
 /** The top edge and height of an element, in px */
 const barOf = async (locator: ReturnType<Page["locator"]>) => {
   const box = requireFor("the bounding box of locator")(
@@ -1561,9 +1613,13 @@ test("client-v2-layout: The frame at 1440", async ({ seededPage: page }) => {
   const head = assistantPanel(page)
     .getByRole("heading", { level: 2 })
     .locator("..");
-  const stageBar = page.locator('[data-slot="stage-bar"]');
+  // No stage bar: the stage tabs' row is the work's top row, 44 px like the
+  // assistant's head, so their lines meet
+  await expect(
+    page.locator('#work[data-panel] [data-slot="stage-bar"]')
+  ).toHaveCount(0);
   await expect.poll(() => barOf(head)).toEqual({ y: 0, height: 44 });
-  await expect.poll(() => barOf(stageBar)).toEqual({ y: 0, height: 44 });
+  await expect.poll(() => stageTabsRowOf(page)).toEqual({ y: 0, height: 44 });
   // The stage tabs span the files column and the stage together
   const tabs = requireFor("the stepper list's box")(
     await page.locator('[data-slot="stepper-list"]').boundingBox()
@@ -1572,7 +1628,8 @@ test("client-v2-layout: The frame at 1440", async ({ seededPage: page }) => {
     await page.locator("#work[data-panel]").boundingBox()
   );
   expect(tabs.width).toBeGreaterThan(work.width - 20);
-  // The prototype's widths: nav 232, assistant 368, files 240
+  // The prototype's widths: nav 232, assistant 368 (the files column's
+  // 240 needs a wider code area to dock: "Folding the project panel")
   expect(
     Math.round(
       requireFor("the bounding box of navColumn")(
@@ -1581,7 +1638,6 @@ test("client-v2-layout: The frame at 1440", async ({ seededPage: page }) => {
     )
   ).toBe(232);
   expect(Math.round(await widthOf(page))).toBe(368);
-  await expect(filesPanel(page)).toHaveJSProperty("offsetWidth", 240);
   // One background, separated by 1 px lines: no gutter between the columns
   const assistant = requireFor("the bounding box of assistantPanel")(
     await assistantPanel(page).boundingBox()
@@ -1593,23 +1649,39 @@ test("client-v2-layout: The frame at 1440", async ({ seededPage: page }) => {
   expect(Math.round(work.x - (assistant.x + assistant.width))).toBe(1);
 });
 
-test("client-v2-layout: Hiding the assistant from the stage bar", async ({
+test("client-v2-layout: The lines meet", async ({ seededPage: page }) => {
+  await page.setViewportSize(WIDE_DESK);
+  const head = assistantPanel(page)
+    .getByRole("heading", { level: 2 })
+    .locator("..");
+  // Both rows start at the top and are 44 px tall, so their bottom lines
+  // are level
+  await expect.poll(() => barOf(head)).toEqual({ y: 0, height: 44 });
+  await expect.poll(() => stageTabsRowOf(page)).toEqual({ y: 0, height: 44 });
+});
+
+test("client-v2-layout: No stage bar in a project", async ({
   seededPage: page,
 }) => {
   await page.setViewportSize(WIDE_DESK);
   const before = await widthOf(page);
-  const stageBar = page.locator('[data-slot="stage-bar"]');
-  // The bar names the project whether the assistant shows or not: the
-  // assistant's head names the model, not the project
-  await expect(stageBar).toContainText("e2e-project");
-  await page.getByRole("button", { name: "Hide the assistant" }).click();
+  await expect(
+    page.locator('#work[data-panel] [data-slot="stage-bar"]')
+  ).toHaveCount(0);
+  // The assistant's head names the project, the composer the model
+  const heading = assistantPanel(page).getByRole("heading", { level: 2 });
+  await expect(heading).toHaveText("e2e-project");
+  // Hidden by its head's Collapse, back from the editor head
+  await page.getByRole("button", { name: "Collapse assistant" }).click();
   await expect.poll(() => widthOf(page)).toBe(0);
-  await expect(stageBar).toContainText("e2e-project");
-  await page.getByRole("button", { name: "Expand assistant" }).click();
+  await page
+    .locator("#editor-head")
+    .getByRole("button", { name: "Expand assistant" })
+    .click();
   await expect
     .poll(async () => Math.abs((await widthOf(page)) - before))
     .toBeLessThanOrEqual(2);
-  await expect(stageBar).toContainText("e2e-project");
+  await expect(heading).toHaveText("e2e-project");
 });
 
 test("client-v2-layout: A layout saved before the column bars", async ({
@@ -1675,7 +1747,7 @@ test("a widened assistant, hidden and shown, opens at the width it had before", 
   const before = await widthOf(page);
   await page.getByRole("button", { name: "Widen the assistant" }).click();
   await expect.poll(() => widthOf(page)).toBeGreaterThan(before + 100);
-  await page.getByRole("button", { name: "Hide the assistant" }).click();
+  await page.getByRole("button", { name: "Collapse assistant" }).click();
   await expect.poll(() => widthOf(page)).toBe(0);
   await page.getByRole("button", { name: "Expand assistant" }).click();
   await expect

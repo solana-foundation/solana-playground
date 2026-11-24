@@ -5,6 +5,7 @@ extern crate serde_derive;
 
 mod client;
 mod constants;
+pub mod deferred_signer;
 mod error;
 mod methods;
 mod provider;

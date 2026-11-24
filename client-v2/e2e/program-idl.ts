@@ -114,6 +114,9 @@ const uiAnswerFor = (network: Network) => (cluster: Cluster) => {
       case "getSlot":
         slot += 1;
         return slot;
+      // A deploy prices its writes from them; a local cluster has none
+      case "getRecentPrioritizationFees":
+        return [];
       case "getBalance":
         return {
           context: { slot: 1 },

@@ -16,7 +16,7 @@ const app = vi.hoisted(() => {
       return { dispose: () => listeners.delete(cb) };
     },
     showFiles: vi.fn(),
-    createItem: vi.fn(async () => {}),
+    requestNewFile: vi.fn(),
   };
 });
 vi.mock("@/utils/explorer", () => ({
@@ -28,9 +28,8 @@ vi.mock("@/utils/explorer", () => ({
 vi.mock("@/utils/view", () => ({
   PgView: { showFiles: app.showFiles },
 }));
-vi.mock("@/utils/common", () => ({ PgCommon: { sleep: async () => {} } }));
-vi.mock("@/views/sidebar/explorer/Component/useCreateItem", () => ({
-  useCreateItem: () => ({ createItem: app.createItem }),
+vi.mock("../model/new-file-request", () => ({
+  requestNewFile: app.requestNewFile,
 }));
 
 import NoFileOpen from "./NoFileOpen";
@@ -56,12 +55,11 @@ it("switches to the no-files state once the last file goes", () => {
   ).toBeTruthy();
 });
 
-it("adds a file through the Files column's own New file flow", async () => {
+it("adds a file by asking the Files tree for one", async () => {
   app.files = [];
   render(<NoFileOpen onStartProject={() => {}} />);
   await userEvent.click(screen.getByRole("button", { name: "Add a file" }));
-  expect(app.showFiles).toHaveBeenCalledTimes(1);
-  expect(app.createItem).toHaveBeenCalledTimes(1);
+  expect(app.requestNewFile).toHaveBeenCalledTimes(1);
 });
 
 it("hands Start a project to the caller", async () => {

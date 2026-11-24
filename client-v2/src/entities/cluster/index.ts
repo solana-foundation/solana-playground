@@ -34,6 +34,7 @@ export {
   hostOf,
   isSameRpc,
   maskRpcUrl,
+  maskUrlsIn,
   PgCustomRpcs,
   RPC_NAME_MAX,
 } from "./model/custom-rpcs";

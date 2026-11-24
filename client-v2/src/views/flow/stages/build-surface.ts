@@ -1,4 +1,5 @@
 import type { BuildOutput } from "../../sidebar/assistant/bridge/build-output";
+import { isBuildRefusal } from "../state/sign-in-refusal";
 import type { BuildFailure, FlowState, StageStatus } from "../state/stage";
 
 /**
@@ -72,6 +73,13 @@ export const buildSurface = ({
   own: BuildOutput | null;
 }): BuildSurface => {
   const settled = flow.build === "running" ? flow.buildSettled : flow.build;
+
+  // A refusal for sign-in or a busy service keeps the build where it was
+  // settled, so it is read from the failure, not the status (HOO-2422,
+  // HOO-2907)
+  if (isBuildRefusal(flow.buildFailure)) {
+    return { kind: "unreached", failure: flow.buildFailure };
+  }
 
   // `own` only fills in once a build reaches the compiler and returns; a
   // build that fails before that (e.g. the build server is unreachable)
@@ -176,6 +184,33 @@ if (import.meta.vitest) {
       buildStartedAt,
       buildMs,
       buildFailure: NO_ANSWER,
+    });
+
+    it("asks for sign-in after a refused build, whatever settled before", () => {
+      for (const buildSettled of ["upcoming", "done"] as const) {
+        expect(
+          buildSurface({
+            flow: {
+              build: buildSettled,
+              buildSettled,
+              buildStartedAt: 5,
+              buildMs: 0,
+              buildFailure: {
+                kind: "signed-out",
+                message: "Sign in with GitHub to build.",
+              },
+            },
+            // An earlier report does not outrank the refusal
+            own: report(true, 1),
+          })
+        ).toEqual({
+          kind: "unreached",
+          failure: {
+            kind: "signed-out",
+            message: "Sign in with GitHub to build.",
+          },
+        });
+      }
     });
 
     const NO_ANSWER = {

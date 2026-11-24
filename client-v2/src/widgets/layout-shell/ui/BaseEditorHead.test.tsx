@@ -1,6 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
 
@@ -34,6 +34,8 @@ const draw = (props: BaseEditorHeadProps) =>
         hostRef={props.hostRef}
         filesKey={props.filesKey}
         terminalKey={props.terminalKey}
+        title={props.title}
+        onNewFile={props.onNewFile}
       />
     </TooltipProvider>
   );
@@ -129,4 +131,120 @@ it("names the keys in the toggles' hints", async () => {
   );
   await userEvent.hover(screen.getByRole("button", { name: "Files" }));
   expect((await screen.findAllByText("Files (⌘E)")).length).toBeGreaterThan(0);
+});
+
+describe("the tree's dropdown", () => {
+  const tree = (choice: { open?: boolean; canDock?: boolean }) => ({
+    open: choice.open ?? true,
+    canDock: choice.canDock ?? true,
+    onClose: vi.fn(),
+    onDock: vi.fn(),
+    onClick: vi.fn(),
+    body: <div>tree body</div>,
+  });
+  const drawWithTree = (dropdown: ReturnType<typeof tree>) =>
+    render(
+      <TooltipProvider>
+        <BaseEditorHead
+          files={{ open: dropdown.open, onToggle: vi.fn() }}
+          terminal={closed()}
+          showTabs
+          hostRef={vi.fn()}
+          filesKey="⌘E"
+          terminalKey="⌘J"
+          tree={dropdown}
+          onNewFile={vi.fn()}
+        />
+        {/* Stands for a menu the tree opened, portalled out of it */}
+        <div role="menu">
+          <button type="button">Rename</button>
+        </div>
+        <button type="button">Elsewhere</button>
+      </TooltipProvider>
+    );
+
+  it("shows the body under the head, named Files, with the pin", async () => {
+    const dropdown = tree({});
+    drawWithTree(dropdown);
+    const sheet = screen.getByRole("dialog", { name: "Files" });
+    expect(within(sheet).getByText("tree body")).toBeTruthy();
+    await userEvent.click(
+      within(sheet).getByRole("button", { name: "Dock beside the editor" })
+    );
+    expect(dropdown.onDock).toHaveBeenCalledTimes(1);
+  });
+
+  it("hands a click inside it to the caller, by what it landed on", async () => {
+    const dropdown = tree({});
+    drawWithTree(dropdown);
+    const body = screen.getByText("tree body");
+    await userEvent.click(body);
+    expect(dropdown.onClick).toHaveBeenCalledWith(body);
+  });
+
+  it("offers no pin while the code area is too narrow to dock", () => {
+    drawWithTree(tree({ canDock: false }));
+    const sheet = screen.getByRole("dialog", { name: "Files" });
+    expect(
+      within(sheet).queryByRole("button", { name: "Dock beside the editor" })
+    ).toBeNull();
+  });
+
+  it("draws nothing while closed", () => {
+    drawWithTree(tree({ open: false }));
+    expect(screen.queryByRole("dialog", { name: "Files" })).toBeNull();
+    expect(screen.queryByText("tree body")).toBeNull();
+  });
+
+  it("stays open for a press in a menu it opened, on Files or on New file, and closes for one elsewhere", async () => {
+    const dropdown = tree({});
+    drawWithTree(dropdown);
+    await userEvent.click(screen.getByRole("button", { name: "Rename" }));
+    await userEvent.click(screen.getByRole("button", { name: "Files" }));
+    await userEvent.click(screen.getByRole("button", { name: "New file" }));
+    expect(dropdown.onClose).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Elsewhere" }));
+    expect(dropdown.onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+const withTabs = (showTabs: boolean) => ({
+  files: closed(),
+  terminal: closed(),
+  showTabs,
+  hostRef: vi.fn(),
+  filesKey: "Ctrl+E",
+  terminalKey: "Ctrl+J",
+  onNewFile: vi.fn(),
+});
+
+it("calls onNewFile from the + after the tabs", async () => {
+  const props = withTabs(true);
+  draw(props);
+  await userEvent.click(screen.getByRole("button", { name: "New file" }));
+  expect(props.onNewFile).toHaveBeenCalledTimes(1);
+});
+
+it("draws no + while the tab row is hidden", () => {
+  draw(withTabs(false));
+  expect(screen.queryByRole("button", { name: "New file" })).toBeNull();
+});
+
+it("names the project only when given a title", () => {
+  const { rerender } = draw(withTabs(true));
+  expect(headElement().textContent).not.toContain("anchor-demo");
+  rerender(
+    <TooltipProvider>
+      <BaseEditorHead
+        files={closed()}
+        terminal={closed()}
+        showTabs
+        hostRef={vi.fn()}
+        filesKey="Ctrl+E"
+        terminalKey="Ctrl+J"
+        title="anchor-demo"
+      />
+    </TooltipProvider>
+  );
+  expect(headElement().textContent).toContain("anchor-demo");
 });

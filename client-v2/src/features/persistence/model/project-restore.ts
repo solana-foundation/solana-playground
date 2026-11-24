@@ -96,16 +96,27 @@ const isClean = async (projectId: string, localName: string) =>
  *   account signing in is asked again, since its mark still names a row that
  *   is gone, and another account never uploads it
  *   (`PgSyncMark.belongsToAnotherAccount`).
+ * - An edit the editor has not saved. The store holds typing only once the
+ *   editor's autosave has run, so a buffer that differs from the stored file
+ *   is work the account never had. Read through `PgExplorer.editorBuffers`.
  */
 const isReleasable = async (projectId: string, localName: string) => {
   if (PgProjectSync.conflictFor(projectId)) return false;
   const mark = await PgSyncMark.read(projectId);
   const { files } = await snapshotOf(localName);
-  if (!(await isCleanAgainst(mark, localName, files))) return false;
+  if (!mark || !(await isCleanAgainst(mark, localName, files))) return false;
   const hashes = await hashFiles({ files });
-  return SYNCED_WORKSPACE_FILES.every(
-    (path) => hashes[path] === mark!.files[path]
-  );
+  if (
+    !SYNCED_WORKSPACE_FILES.every((path) => hashes[path] === mark.files[path])
+  ) {
+    return false;
+  }
+  // Last, with no await after it: typing during the reads above still counts
+  const buffers = PgExplorer.editorBuffers;
+  return Object.entries(files).every(([path, stored]) => {
+    const buffer = buffers?.read(`/${localName}/${path}`);
+    return buffer === undefined || buffer === stored;
+  });
 };
 
 /**
@@ -663,6 +674,65 @@ const pushNeverSynced = async (serverIds: Set<string>, result: SyncResult) => {
  * @returns the local names of the workspaces removed
  */
 export const releaseLocalProjects = async (): Promise<string[]> =>
+  releaseWhere(isReleasable);
+
+/**
+ * Each local project's sync mark for the signed-in account, as it read at
+ * one moment, keyed by project id: the read half of
+ * `releaseProjectsUnchangedSince`. A project with no mark is left out.
+ */
+export type MarkReading = ReadonlyMap<string, string>;
+
+/** The mark as one comparable string: `read` builds it in a fixed key order */
+const fingerprintOf = (mark: SyncMark) => JSON.stringify(mark);
+
+/**
+ * Read every local project's sync mark, for `releaseProjectsUnchangedSince`.
+ *
+ * Taken before an account deletion's request, while `PgSession.isEnding`
+ * holds this tab's pushes. Another tab's pushes are not held: one that lands
+ * between this read and the teardown writes a new mark, and the content it
+ * uploaded reached only a server copy that is about to be deleted.
+ */
+export const readProjectMarks = async (): Promise<MarkReading> => {
+  const reading = new Map<string, string>();
+  for (const name of PgExplorer.allWorkspaceNames ?? []) {
+    const id = PgExplorer.workspaceIdOf(name);
+    if (!id) continue;
+    const mark = await PgSyncMark.read(id);
+    if (mark) reading.set(id, fingerprintOf(mark));
+  }
+  return reading;
+};
+
+/**
+ * `releaseLocalProjects`, limited to projects whose sync mark is what
+ * `readProjectMarks` read: an account deletion's teardown.
+ *
+ * A mark that changed or appeared since the read means a push (another
+ * tab's, most likely) reached the account after the read, so the server copy
+ * that matched it is gone with the account and the local copy is the only
+ * one left. Such a project stays.
+ *
+ * @returns the local names of the workspaces removed
+ */
+export const releaseProjectsUnchangedSince = async (
+  reading: MarkReading
+): Promise<string[]> =>
+  releaseWhere(async (projectId, localName) => {
+    // The mark is read last: another tab may write it while `isReleasable` reads
+    if (!(await isReleasable(projectId, localName))) return false;
+    const mark = await PgSyncMark.read(projectId);
+    return !!mark && reading.get(projectId) === fingerprintOf(mark);
+  });
+
+/**
+ * Delete every local workspace `isRemovable` allows, inside
+ * `whileSigningOut` (see `releaseLocalProjects`).
+ */
+const releaseWhere = async (
+  isRemovable: (projectId: string, localName: string) => Promise<boolean>
+): Promise<string[]> =>
   PgProjectSync.whileSigningOut(async () => {
     // Copied, because `deleteWorkspace` mutates the explorer's own list and
     // iterating it while it shrinks skips every other entry
@@ -675,7 +745,7 @@ export const releaseLocalProjects = async (): Promise<string[]> =>
         // No id means nothing was ever synced under it, and `isReleasable` is
         // false for a project with no mark -- either way it is not ours to
         // delete
-        if (!id || !(await isReleasable(id, name))) continue;
+        if (!id || !(await isRemovable(id, name))) continue;
 
         await PgExplorer.deleteWorkspace(name);
         removed.push(name);

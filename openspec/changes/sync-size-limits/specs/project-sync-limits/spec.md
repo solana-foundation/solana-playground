@@ -80,7 +80,8 @@ An account's project count SHALL be the number of its live projects (not
 deleted) of kind `project` that hold at least one synced file; its tutorial
 count SHALL be the same for kind `tutorial`. A project the account holds counts
 whether or not the device writing holds it. A deleted project, and a project
-row that holds no file (the parent a chat turn creates), SHALL NOT count.
+row that holds no file (the parent a chat turn created before HOO-2882, after
+which a conversation push no longer creates one), SHALL NOT count.
 
 `PUT /api/projects` SHALL refuse a write that makes a project count, and so
 brings its kind's count to 11 projects or 33 tutorials, with status 413 and a
@@ -125,8 +126,8 @@ start a tutorial for the count, signed in or not.
 - **THEN** the tutorial's create is accepted
 
 #### Scenario: An empty row does not count, and filling it does (manual)
-- **WHEN** an account holds 10 projects and a chat turn creates an empty row for an 11th
-- **THEN** the row is created
+- **WHEN** an account holds 10 projects and an empty row for an 11th, left by a chat turn before HOO-2882
+- **THEN** the row does not count
 - **AND** a write that puts files in that row is refused with `reason: "too-many-projects"`
 
 ### Requirement: A project over the account cap stays in the browser

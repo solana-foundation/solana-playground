@@ -1,11 +1,20 @@
 import type { Idl } from "@coral-xyz/anchor";
 
+import { createLogger } from "@/shared/lib/logger";
+
+import { BUILD_SERVER_ROUTE } from "../settings/server/default-endpoint";
 import { PgCommon } from "./common";
 import type { TupleFiles } from "./explorer";
-import { PgServerError, UNREADABLE_BODY } from "./server-error";
+import {
+  parseRetryAfter,
+  PgServerError,
+  UNREADABLE_BODY,
+} from "./server-error";
 import { PgSettings } from "./settings";
 
 export { PgServerError };
+
+const log = createLogger("utils:server");
 
 /** Rust `Option` type */
 type Option<T> = T | null;
@@ -25,6 +34,11 @@ interface BuildRequest {
     /** Whether to enable Anchor safety checks */
     safetyChecks?: Option<boolean>;
   }>;
+  /**
+   * The project being built, for the audit `/api/build-server` keeps. Sent
+   * only to that route: another server has no use for the workspace's name.
+   */
+  project?: { id: string; name: string };
 }
 
 export class PgServer {
@@ -45,8 +59,12 @@ export class PgServer {
       idl: Option<Idl>;
     }
 
+    const isRoute = PgSettings.server.endpoint === BUILD_SERVER_ROUTE;
+    const body = isRoute
+      ? req
+      : { files: req.files, uuid: req.uuid, flags: req.flags };
     const response = await this._send("/build", {
-      post: { body: JSON.stringify(req) },
+      post: { body: JSON.stringify(body) },
       unstable: PgSettings.experimental.unstable,
       signal: opts?.signal,
     });
@@ -118,9 +136,38 @@ export class PgServer {
         url: requestUrl,
         status: response.status,
         body,
+        refusal: refusalOf(body),
+        retryAfterSeconds: retryAfterOf(response),
       });
     }
 
     return response;
   }
 }
+
+/**
+ * How long a `429` or `503` asks to wait. Another status's `Retry-After` is
+ * not a busy server's, so it is left unread. `headers` is optional because
+ * the tests' responses are plain objects.
+ */
+const retryAfterOf = (response: Response) =>
+  response.status === 429 || response.status === 503
+    ? parseRetryAfter(response.headers?.get("retry-after"))
+    : undefined;
+
+/**
+ * A refusal `/api/build-server` explains: JSON with the words to show and,
+ * where the client acts on it, a `reason` such as `"signed-out"`. The build
+ * server's own errors are plain text and are not one.
+ */
+const refusalOf = (text: string) => {
+  try {
+    const { error, reason } = JSON.parse(text) ?? {};
+    if (typeof error !== "string") return undefined;
+    return { error, reason: typeof reason === "string" ? reason : undefined };
+  } catch {
+    // Expected: the build server answers its own errors in plain text
+    log.debug("server error is not JSON; shown as text");
+    return undefined;
+  }
+};

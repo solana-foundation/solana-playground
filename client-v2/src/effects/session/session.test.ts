@@ -8,6 +8,7 @@ import type { SyncResult } from "../../features/persistence/model/project-restor
 import * as restore from "../../features/persistence/model/project-restore";
 import { PgProjectSync } from "../../features/persistence/model/project-sync";
 import { PgSyncClient } from "../../features/persistence/model/sync-client";
+import { PgThreadFence } from "../../features/persistence/model/thread-fence";
 import { PgThreadIndex } from "../../features/persistence/model/thread-index";
 import { requireFor } from "../../test-utils/require-for";
 import { PgExplorer } from "../../utils/explorer/explorer";
@@ -723,8 +724,10 @@ describe("signing out", () => {
     await PgSession.signOut();
 
     expect(order).toEqual([
-      "pushChats",
+      // The project first: a thread whose project has no row yet is refused
+      // with `no-project` (HOO-2882)
       "pushProject",
+      "pushChats",
       "request",
       "stopTurn",
       "closeThread",
@@ -773,7 +776,7 @@ describe("signing out", () => {
     const effect = await mount();
     await expect(PgSession.signOut()).rejects.toThrow();
 
-    expect(order).toEqual(["pushChats", "pushProject", "request"]);
+    expect(order).toEqual(["pushProject", "pushChats", "request"]);
     expect(PgSession.get()).toEqual(user);
     expect(PgProjectSync.conflictFor("tut:hello")).not.toBeNull();
     effect.dispose();
@@ -808,5 +811,408 @@ describe("signing out", () => {
     // the last user is a question the next one cannot answer
     expect(PgProjectSync.conflictFor("tut:hello")).toBeNull();
     effect.dispose();
+  });
+});
+
+describe("deleting the account", () => {
+  let order: string[];
+  const held = { handedOver: [{ id: "t1", hash: "h1" }], complete: true };
+  const marks = new Map([["tut:hello", "mark as read"]]);
+
+  beforeEach(async () => {
+    order = [];
+    PgSession.reset();
+    vi.spyOn(PgExplorer, "isInitialized", "get").mockReturnValue(true);
+    vi.spyOn(PgSession, "refresh").mockResolvedValue(undefined);
+    await PgSession.refreshWith(user);
+    vi.spyOn(PgChatSync, "pushAll").mockImplementation(async () => {
+      order.push("pushChats");
+      return { handedOver: [{ id: "t1", hash: "h1" }], complete: true };
+    });
+    vi.spyOn(PgChatSync, "push").mockImplementation(async () => {
+      order.push("pushChat");
+      return "pushed";
+    });
+    vi.spyOn(PgProjectSync, "pushCurrent").mockImplementation(async () => {
+      order.push("pushProject");
+      return "ok";
+    });
+    vi.spyOn(PgChatSync, "adoptAccountThreads").mockResolvedValue(undefined);
+    vi.spyOn(restore, "reconcile").mockResolvedValue(result());
+    vi.spyOn(PgChatSync, "forget").mockImplementation(async () => {
+      order.push("forgetChats");
+    });
+    vi.spyOn(PgChatSync, "syncedThreads").mockImplementation(async () => {
+      order.push("readChats");
+      return held;
+    });
+    vi.spyOn(PgThreadFence, "claimUnowned").mockImplementation(async (id) => {
+      order.push(`claimChats ${id}`);
+      return true;
+    });
+    vi.spyOn(restore, "readProjectMarks").mockImplementation(async () => {
+      order.push("readMarks");
+      return marks;
+    });
+    vi.spyOn(restore, "releaseProjectsUnchangedSince").mockImplementation(
+      async () => {
+        order.push("releaseProjects");
+        return [];
+      }
+    );
+    vi.spyOn(PgAssistant, "stopTurn").mockImplementation(
+      () => order.push("stopTurn") as unknown as void
+    );
+    vi.spyOn(PgAssistant, "closeThread").mockImplementation(
+      () => order.push("closeThread") as unknown as void
+    );
+    vi.spyOn(PgAssistant, "clear").mockImplementation(
+      () => order.push("clear") as unknown as void
+    );
+    vi.spyOn(PgAssistant, "whenPersisted").mockImplementation(async () => {
+      order.push("whenPersisted");
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    PgProjectSync.forgetAccount();
+  });
+
+  const mount = async () => {
+    const effect = session();
+    await settle();
+    order.length = 0;
+    // The sign-in's own dump ran on mount; only what the deletion does counts
+    vi.mocked(PgChatSync.pushAll).mockClear();
+    vi.mocked(PgChatSync.push).mockClear();
+    vi.mocked(PgProjectSync.pushCurrent).mockClear();
+    return effect;
+  };
+
+  const serverDeletes = (answer: Partial<Response>) =>
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_, init) => {
+      order.push(`request ${init?.method}`);
+      return answer as Response;
+    });
+
+  const accepted = {
+    ok: true,
+    status: 200,
+    json: async () => ({ githubRevoked: true }),
+  };
+
+  it("reads before the request, uploads nothing, and tears down only after the server's 200", async () => {
+    serverDeletes(accepted);
+
+    const effect = await mount();
+    await PgSession.deleteAccount();
+
+    expect(order).toEqual([
+      "claimChats u1",
+      "readChats",
+      "readMarks",
+      // The one request, and no POST
+      "request DELETE",
+      "stopTurn",
+      "closeThread",
+      "clear",
+      "whenPersisted",
+      "forgetChats",
+      "releaseProjects",
+      "closeThread",
+    ]);
+    expect(PgChatSync.pushAll).not.toHaveBeenCalled();
+    expect(PgChatSync.push).not.toHaveBeenCalled();
+    expect(PgProjectSync.pushCurrent).not.toHaveBeenCalled();
+    expect(PgSession.get()).toBeUndefined();
+    effect.dispose();
+  });
+
+  it("counts the projects the release left in this browser", async () => {
+    serverDeletes(accepted);
+    const names = vi.spyOn(PgExplorer, "storedWorkspaceNames", "get");
+    vi.mocked(restore.releaseProjectsUnchangedSince).mockImplementation(
+      async () => {
+        // "Newest" matched the server's copy and left; "Hello Anchor" stays
+        names.mockReturnValue(["Hello Anchor"]);
+        return ["Newest"];
+      }
+    );
+
+    const effect = await mount();
+
+    expect(await PgSession.deleteAccount()).toEqual({
+      githubRevoked: true,
+      kept: 1,
+    });
+    effect.dispose();
+  });
+
+  it("counts the stored projects when the account is deleted from a temporary view", async () => {
+    serverDeletes(accepted);
+    // A repository, gist or docs link: no workspace is open, and the stored
+    // ones stay listed beside it
+    vi.spyOn(PgExplorer, "allWorkspaceNames", "get").mockReturnValue(undefined);
+    vi.spyOn(PgExplorer, "storedWorkspaceNames", "get").mockReturnValue([
+      "Hello Anchor",
+      "Newest",
+    ]);
+
+    const effect = await mount();
+
+    expect(await PgSession.deleteAccount()).toEqual({
+      githubRevoked: true,
+      kept: 2,
+    });
+    effect.dispose();
+  });
+
+  it("forgets exactly what the read found on the server", async () => {
+    serverDeletes(accepted);
+
+    const effect = await mount();
+    await PgSession.deleteAccount();
+
+    expect(PgChatSync.forget).toHaveBeenCalledExactlyOnceWith(held);
+    effect.dispose();
+  });
+
+  it("releases only projects against the marks read before the request", async () => {
+    serverDeletes(accepted);
+
+    const effect = await mount();
+    await PgSession.deleteAccount();
+
+    expect(
+      restore.releaseProjectsUnchangedSince
+    ).toHaveBeenCalledExactlyOnceWith(marks);
+    effect.dispose();
+  });
+
+  it("releases no project when the marks cannot be read", async () => {
+    vi.mocked(restore.readProjectMarks).mockRejectedValue(new Error("quota"));
+    serverDeletes(accepted);
+
+    const effect = await mount();
+    await PgSession.deleteAccount();
+
+    expect(
+      restore.releaseProjectsUnchangedSince
+    ).toHaveBeenCalledExactlyOnceWith(new Map());
+    effect.dispose();
+  });
+
+  it("keeps every thread when the read fails, and still releases projects", async () => {
+    vi.spyOn(PgChatSync, "syncedThreads").mockRejectedValue(
+      new Error("offline")
+    );
+    serverDeletes(accepted);
+
+    const effect = await mount();
+    await PgSession.deleteAccount();
+
+    // eslint-disable-next-line unicorn/no-null -- `forget`'s "nothing known, keep every thread"
+    expect(PgChatSync.forget).toHaveBeenCalledExactlyOnceWith(null);
+    expect(order).toContain("releaseProjects");
+    effect.dispose();
+  });
+
+  it.each([
+    ["is refused", () => serverDeletes({ ok: false, status: 500 })],
+    [
+      "fails on the network",
+      () =>
+        // The session read that follows fails too, so the account may stand
+        vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+          if (String(input) === "/api/account") order.push("request DELETE");
+          throw new Error("offline");
+        }),
+    ],
+  ])("keeps everything when the request %s", async (_, arrange) => {
+    arrange();
+    PgProjectSync.raise({ projectId: "tut:hello", kind: "divergent" });
+
+    const effect = await mount();
+    await expect(PgSession.deleteAccount()).rejects.toThrow();
+
+    // Read, but nothing forgotten
+    expect(order).toEqual([
+      "claimChats u1",
+      "readChats",
+      "readMarks",
+      "request DELETE",
+    ]);
+    expect(PgChatSync.forget).not.toHaveBeenCalled();
+    expect(PgSession.get()).toEqual(user);
+    expect(PgProjectSync.conflictFor("tut:hello")).not.toBeNull();
+    effect.dispose();
+  });
+
+  it("forgets the account even when a step before it fails", async () => {
+    vi.spyOn(restore, "releaseProjectsUnchangedSince").mockRejectedValue(
+      new Error("quota")
+    );
+    serverDeletes(accepted);
+    PgProjectSync.raise({ projectId: "tut:hello", kind: "divergent" });
+
+    const effect = await mount();
+    await PgSession.deleteAccount();
+
+    expect(PgProjectSync.conflictFor("tut:hello")).toBeNull();
+    effect.dispose();
+  });
+
+  it("stops tearing down once the effect is gone", async () => {
+    serverDeletes(accepted);
+
+    const effect = await mount();
+    effect.dispose();
+    await PgSession.deleteAccount();
+
+    expect(order).toEqual(["request DELETE"]);
+  });
+});
+
+describe("another account after a session ended", () => {
+  const ada = {
+    id: "ada",
+    name: undefined,
+    image: undefined,
+    login: undefined,
+  };
+  const bob = {
+    id: "bob",
+    name: undefined,
+    image: undefined,
+    login: undefined,
+  };
+
+  /** Who `/api/auth/get-session` answers with; nobody is a 401 */
+  let who: typeof ada | undefined;
+  /** The thread id of every conversation POST, in order */
+  let posted: string[];
+  let effect: ReturnType<typeof session>;
+
+  const json = (status: number, body: unknown) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { "content-type": "application/json" },
+    });
+
+  const answer = async (url: string, init: RequestInit | undefined) => {
+    if (url === "/api/auth/get-session") {
+      return who ? json(200, { user: who }) : json(401, {});
+    }
+    if (url === "/api/sync") return json(200, { enabled: true, db: "ok" });
+    if (url === "/api/conversations" && init?.method === "POST") {
+      posted.push(JSON.parse(String(init.body)).threadId);
+      return json(200, { written: 1 });
+    }
+    if (url.startsWith("/api/conversations?projectId=")) {
+      return json(200, { threads: [] });
+    }
+    return json(404, {});
+  };
+
+  const message: ChatItem = {
+    kind: "user",
+    id: "6f1c2b0e-0000-4000-8000-000000000001",
+    createdAt: new Date(1000).toISOString(),
+    text: "ada's question",
+  };
+
+  /** A session read, and the sign-in pass it starts, landed */
+  const read = async (next: typeof ada | undefined) => {
+    who = next;
+    const passes = vi.mocked(restore.reconcile).mock.calls.length;
+    await PgSession.refresh();
+    if (next) {
+      await vi.waitFor(() =>
+        expect(vi.mocked(restore.reconcile).mock.calls.length).toBe(passes + 1)
+      );
+    }
+    await settle();
+  };
+
+  beforeEach(async () => {
+    posted = [];
+    who = undefined;
+    PgSession.reset();
+    PgSyncClient.reset();
+    await PgChatStorage.clear();
+    await PgThreadIndex.clear();
+    await PgThreadFence.clearOwner();
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) =>
+      answer(String(input), init)
+    );
+    vi.spyOn(restore, "reconcile").mockResolvedValue(result());
+    vi.spyOn(PgProjectSync, "holdPushes").mockReturnValue(undefined);
+    vi.spyOn(PgProjectSync, "releasePushes").mockReturnValue(undefined);
+    vi.spyOn(PgExplorer, "isInitialized", "get").mockReturnValue(true);
+    vi.spyOn(PgExplorer, "currentWorkspaceId", "get").mockReturnValue("w1");
+    vi.spyOn(PgExplorer, "currentWorkspaceName", "get").mockReturnValue(
+      undefined
+    );
+    vi.spyOn(PgExplorer, "switchWorkspace").mockResolvedValue(
+      undefined as never
+    );
+
+    effect = session();
+    await read(ada);
+    const threadId = await PgThreadIndex.ensure("w1");
+    await PgChatStorage.write(threadId, [message]);
+    await PgAssistant.loadThread(threadId);
+    // Ada's session ends without a sign-out
+    await read(undefined);
+    expect(PgSession.expiredUser?.id).toBe("ada");
+    posted.length = 0;
+  });
+
+  afterEach(() => {
+    effect.dispose();
+    vi.restoreAllMocks();
+  });
+
+  it("uploads none of the ended account's threads under the next one", async () => {
+    const adas = await PgChatStorage.threadIds();
+
+    await read(bob);
+
+    expect(adas).toHaveLength(1);
+    expect(posted.filter((id) => adas?.includes(id))).toEqual([]);
+  });
+
+  it("shows the next account none of the ended account's messages", async () => {
+    const adas = await PgChatStorage.threadIds();
+
+    await read(bob);
+
+    expect(PgAssistant.threadId).toBeTruthy();
+    expect(PgAssistant.threadId).not.toBe(adas?.[0]);
+    expect(PgAssistant.items.map(({ id }) => id)).not.toContain(message.id);
+  });
+
+  it("gives the ended account its threads back when it signs in again", async () => {
+    const adas = await PgChatStorage.threadIds();
+    await read(bob);
+    // Bob's session ends too, and Ada is the one who signs in next
+    await read(undefined);
+
+    await read(ada);
+
+    expect(adas).toHaveLength(1);
+    expect(posted).toContain(adas?.[0]);
+    expect(await PgThreadIndex.get("w1")).toBe(adas?.[0]);
+  });
+
+  it("uploads nothing when the fence cannot finish", async () => {
+    vi.spyOn(PgThreadFence, "settle").mockResolvedValue(false);
+    const pushAll = vi.spyOn(PgChatSync, "pushAll");
+
+    await read(bob);
+
+    expect(pushAll).not.toHaveBeenCalled();
+    expect(posted).toEqual([]);
   });
 });

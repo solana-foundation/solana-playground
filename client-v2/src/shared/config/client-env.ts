@@ -50,3 +50,14 @@ export const observabilityEnv = () => ({
   GA_MEASUREMENT_ID: process.env.REACT_APP_GA_MEASUREMENT_ID,
   LOG_LEVEL: process.env.REACT_APP_LOG_LEVEL,
 });
+
+/**
+ * Where the built-in wallet's keys live: the key page's origin, and the app
+ * origin the key page answers. `loopback` swaps `localhost` and `127.0.0.1`;
+ * an unset key origin keeps the keys in the page. A getter, read when called,
+ * because tests stub these per case.
+ */
+export const walletOriginEnv = () => ({
+  KEY_ORIGIN: process.env.REACT_APP_WALLET_KEY_ORIGIN,
+  APP_ORIGIN: process.env.REACT_APP_WALLET_APP_ORIGIN,
+});

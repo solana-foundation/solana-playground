@@ -17,6 +17,19 @@ export const importReasonOf = (error: unknown): ImportReason => {
   return "other";
 };
 
+/**
+ * Whether an import or a GitHub link view failed for a reason the link or
+ * the user's network caused: every reason but `other`, which is the failure
+ * nobody expected. Such a failure is logged, not reported, so telemetry's
+ * `reason` is its only count: a regression that fails every link with one
+ * reason (say, `no-source` from a broken file filter) shows as that reason's
+ * share rising, not in error tracking.
+ *
+ * @param error what the import threw
+ */
+export const isExpectedImportFailure = (error: unknown) =>
+  importReasonOf(error) !== "other";
+
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
@@ -35,6 +48,19 @@ if (import.meta.vitest) {
       ["other", "a string"],
     ] as const)("reads %s from the error's type", (reason, error) => {
       expect(importReasonOf(error)).toBe(reason);
+    });
+
+    it.each([
+      [true, new GithubImportError("not found", "not-found")],
+      [true, new GithubImportError("no code", "no-source")],
+      [true, new GithubImportError("no answer", "network")],
+      [true, new GithubImportError("limit", "rate-limited")],
+      [true, new GithubImportError("truncated", "too-large")],
+      [true, new ConversionError("not a program", "unsupported")],
+      [false, new GithubImportError("status 500", "other")],
+      [false, new TypeError("Cannot read properties of undefined")],
+    ] as const)("says %s for %s", (expected, error) => {
+      expect(isExpectedImportFailure(error)).toBe(expected);
     });
 
     it("ignores the message", () => {

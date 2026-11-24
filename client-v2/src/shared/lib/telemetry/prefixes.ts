@@ -9,6 +9,7 @@ export const EVENT_PREFIXES = {
   "app-nav": "nav",
   assistant: "assistant",
   catalog: "catalog",
+  "client-project-bar": "client_project",
   "cli-deploy": "cli",
   deploy: "deploy",
   "docs-link": "docs_link",
