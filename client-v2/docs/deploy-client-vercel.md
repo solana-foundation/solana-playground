@@ -836,9 +836,11 @@ Set once:
 - **The staging host's Production environment:** `AUTH_BASE_URL` (its own
   origin), `AUTH_SECRET`, the staging OAuth app's `GITHUB_CLIENT_ID` and
   `GITHUB_CLIENT_SECRET`, `AUTH_OAUTH_PROXY_SECRET`,
-  `AUTH_OAUTH_PROXY_HOST=true`, `SYNC_ENABLED=true` and a database of its own
-  (any provider; a Neon database or one on `solpg-preview`, never
-  production's). The staging OAuth app's callback is
+  `AUTH_OAUTH_PROXY_HOST=true`, `SYNC_ENABLED=true` and a Neon database of
+  its own, never production's. Not Cloud SQL: the host is a Production
+  build, and the `cloud-sql` provider lets Production open only instance
+  `solpg`, database `solpg`, so a host on `solpg-preview` answers sign-in
+  with 503. The staging OAuth app's callback is
   `<staging origin>/api/auth/callback/github`. The host is a Production
   build, so every production build check applies to it too: it also needs
   `REACT_APP_SERVER_URL` (public, production's value is fine),
