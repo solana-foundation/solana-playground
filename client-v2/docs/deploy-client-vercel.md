@@ -298,6 +298,16 @@ In CI, only `preview.yml` needs a Vercel token: it deploys with the
 `VERCEL_TOKEN` secret. Vercel's Git integration builds on Vercel's own
 infrastructure, authenticated through the GitHub app connection.
 
+`preview.yml` never lets the token meet the PR's code. Its `prepare` job pulls
+the Preview settings and fetches the two Remote Cache archives with the token,
+and hands the build the Preview environment with every value except the public
+ones (`REACT_APP_*`, a few `VERCEL_*` and Node settings) replaced by a
+placeholder (`.github/scripts/preview-build-env.mjs`). Its `build` job runs
+`vercel build` with no token, so it can neither read nor write Remote Cache,
+and its `deploy` job uploads the output with the token without running
+anything from it. The jobs and what each one holds are listed above the
+`database` job in `preview.yml`.
+
 ## Assistant default backend
 
 `api/agent.mjs` is the assistant's **Default** backend: the panel posts a

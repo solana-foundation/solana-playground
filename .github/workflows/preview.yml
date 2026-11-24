@@ -79,8 +79,26 @@ env:
   CLOUD_SQL_LOGIN_USER: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
 
 jobs:
-  deploy:
-    name: deploy preview branch
+  # A labelled PR's preview, in five jobs so that no job both runs the PR's
+  # code and holds a credential (HOO-2888). The PR's code here means what
+  # `vercel build` runs, client-v2's scripts and every dependency `yarn
+  # install` fetches; the jobs with a credential run only the workflow's own
+  # scripts under .github/scripts, dbmate and the Vercel CLI, and read
+  # client-v2/Makefile.vercel only for the CLI's version.
+  #
+  #   database  provisions and migrates the PR's database   (Google or Neon)
+  #   keys      keys the wasm and crate caches              (no credential)
+  #   prepare   pulls the Preview settings, fetches caches  (VERCEL_TOKEN)
+  #   build     `vercel build`, the PR's code               (no credential)
+  #   deploy    uploads build's output, comments on the PR  (VERCEL_TOKEN, GitHub)
+  #
+  # One chain, not parallel jobs, so that every job can share the concurrency
+  # group with teardown: a push cancels the run it supersedes and a close
+  # cancels a run still going, whichever job it is in. Jobs of one run never
+  # overlap, so they never cancel each other. Only `database` carries the
+  # conditions; the others follow it through `needs`.
+  database:
+    name: preview database
     # A fork's PR gets no secrets, and Dependabot gets only Dependabot
     # secrets. A Dependabot PR never deploys, even labelled by a human: the
     # run would build its code with the deploy secrets. Unrelated label
@@ -96,49 +114,41 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'preview') &&
       (contains(fromJSON('["opened", "reopened", "synchronize"]'), github.event.action) ||
        (github.event.action == 'labeled' && github.event.label.name == 'preview'))
-    # Job-level, shared with teardown: a push cancels the deploy it supersedes,
-    # and a close cancels a deploy still running. A workflow-level group would
-    # also let every skipped run (an unrelated label) cancel a live deploy.
     concurrency:
       group: preview-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
-    # A wasm Remote Cache miss rebuilds the packages, about an hour.
-    timeout-minutes: 120
+    timeout-minutes: 30
     permissions:
       contents: read
-      pull-requests: write
       # The GitHub OIDC token google-github-actions/auth exchanges on Cloud SQL
       id-token: write
+    outputs:
+      cloud-sql-database: ${{ steps.cloud-sql.outputs.CLOUD_SQL_DATABASE }}
     env:
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
-      # vercel-install.sh's Remote Cache credentials, which a Vercel build is
-      # given and a runner is not.
-      VERCEL_ARTIFACTS_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_ARTIFACTS_OWNER: ${{ vars.VERCEL_ORG_ID }}
-      GH_TOKEN: ${{ github.token }}
       PR: ${{ github.event.pull_request.number }}
-      SHA: ${{ github.event.pull_request.head.sha }}
     steps:
-      # The head commit, not the merge commit `pull_request` checks out by
-      # default: the preview shows the branch as pushed. Submodule with full
-      # history, as in client-v2.yml: update-static dates tutorials from it.
+      # The scripts and the migrations, no submodule: dbmate sends the
+      # migrations to the database server, and nothing here runs client-v2's
+      # code. The runner's own Node runs preview-name.mjs.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha }}
-          submodules: true
-          fetch-depth: 0
+          sparse-checkout: |
+            .github/scripts
+            client-v2/scripts/db
+            client-v2/db/migrations
 
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
-        with:
-          node-version-file: client-v2/.nvmrc
-
+      # First in the chain, so a half-configured repository fails before a
+      # database is made. Whether the token is set, never its value.
       - name: Check configuration
+        env:
+          HAS_VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN != '' }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
         run: |
-          : "${VERCEL_TOKEN:?VERCEL_TOKEN secret is unset}"
+          [ "$HAS_VERCEL_TOKEN" = true ] || { echo "::error::VERCEL_TOKEN secret is unset"; exit 1; }
           : "${VERCEL_ORG_ID:?VERCEL_ORG_ID variable is unset}"
           : "${VERCEL_PROJECT_ID:?VERCEL_PROJECT_ID variable is unset}"
           case "$PREVIEW_DB_PROVIDER" in
@@ -207,23 +217,296 @@ jobs:
           case "$url" in *sslmode=*) ;; *) echo "::error::Neon returned a URL without sslmode"; exit 1 ;; esac
           DATABASE_URL="$url" dbmate --wait --wait-timeout 60s --no-dump-schema up
 
-      # The same chain as Makefile.vercel's deploy-client-to-vercel-preview,
-      # with its CLI version: pull, pin the Root Directory, build here, deploy
-      # the prebuilt output. The Git integration deploys an integration
-      # branch's push on its own, on the shared database, and skips a ticket
-      # branch's (client-v2/scripts/vercel-ignore-build.mjs); this deployment
-      # differs in its database, the PR's own, and is a ticket branch's only
-      # preview. A prebuilt deploy never runs the ignore step. DB_PROVIDER is
-      # given on both paths, so the Preview environment's cannot pair one
-      # provider with the other's database.
-      - name: Build and deploy
-        id: deploy
+  # The cache keys vercel-install.sh will look up, computed by its own code
+  # from the PR's files, so `prepare` can fetch them without running any of
+  # it. Without them the build, which has no Remote Cache token, rebuilds the
+  # wasm packages: about an hour.
+  keys:
+    name: preview cache keys
+    needs: database
+    concurrency:
+      group: preview-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      wasm: ${{ steps.key.outputs.wasm }}
+      crates: ${{ steps.key.outputs.crates }}
+    defaults:
+      run:
+        working-directory: client-v2
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+          sparse-checkout: |
+            wasm
+            client-v2/scripts
+
+      # The crates' key covers the Node major and its brotli: the same Node
+      # as the build.
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: client-v2/.nvmrc
+
+      # The keys restore_wasm_packages and restore_default_crates compute.
+      - name: Key the caches
+        id: key
+        run: |
+          . scripts/vercel-install.sh
+          # Each on its own line: set -e ignores a failure inside a command
+          # substitution used as an argument.
+          wasm=$(wasm_source_key)
+          inputs=$(node scripts/generate-default-crates.mjs --key)
+          crates=$(printf 'default-crates-%s' "$inputs" | sha256 | cut -d' ' -f1)
+          echo "wasm=$wasm" >> "$GITHUB_OUTPUT"
+          echo "crates=$crates" >> "$GITHUB_OUTPUT"
+
+  # Everything the build would need a credential for, fetched here and handed
+  # over as the artifact `preview-inputs`: the project settings, the Preview
+  # environment with every value but the public ones replaced
+  # (.github/scripts/preview-build-env.mjs), and the two cache archives. The
+  # artifact is readable by anyone who can read the repository, so nothing
+  # secret goes into it.
+  prepare:
+    name: preview settings and caches
+    needs: keys
+    concurrency:
+      group: preview-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      WASM_KEY: ${{ needs.keys.outputs.wasm }}
+      CRATES_KEY: ${{ needs.keys.outputs.crates }}
+    steps:
+      # Two files, and no root files either: non-cone mode, so no .npmrc
+      # reaches the npx calls below.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/scripts/preview-build-env.mjs
+            /client-v2/Makefile.vercel
+
+      # The version is the PR's to choose, the package is not: anything but
+      # vercel@x.y.z would run as whatever npm package it names.
+      - name: Vercel CLI version
+        id: cli
+        run: |
+          cli=$(sed -n 's/^VERCEL_CLI := //p' client-v2/Makefile.vercel)
+          [[ "$cli" =~ ^vercel@[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+            { echo "::error::VERCEL_CLI in client-v2/Makefile.vercel is \"$cli\"; expected vercel@x.y.z"; exit 1; }
+          echo "cli=$cli" >> "$GITHUB_OUTPUT"
+
+      # The same pull as Makefile.vercel's deploy-client-to-vercel-preview,
+      # with the Root Directory pinned, since the build runs at the root.
+      - name: Pull the Preview settings
         env:
-          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
-          CLOUD_SQL_DATABASE: ${{ steps.cloud-sql.outputs.CLOUD_SQL_DATABASE }}
+          CLI: ${{ steps.cli.outputs.cli }}
+        run: |
+          npx --yes "$CLI" pull --yes --environment=preview --token="$VERCEL_TOKEN"
+          mkdir -p inputs/.vercel
+          jq '.settings.rootDirectory = "client-v2"' .vercel/project.json > inputs/.vercel/project.json
+          node .github/scripts/preview-build-env.mjs .vercel/.env.preview.local inputs/.vercel/.env.preview.local
+          rm -rf .vercel
+
+      # vercel-install.sh's Remote Cache lookups, read-only. A miss is not a
+      # failure: the build makes what is missing and, with no token, keeps it.
+      - name: Fetch the cache archives
+        run: |
+          for key in "$WASM_KEY" "$CRATES_KEY"; do
+            [[ "$key" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::cache key \"$key\" is not a sha256"; exit 1; }
+          done
+          fetch() { # $1: key, $2: destination
+            mkdir -p "$(dirname "$2")"
+            status=$(curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" -o "$2" -w '%{http_code}' \
+              "https://api.vercel.com/v8/artifacts/$1?teamId=$VERCEL_ORG_ID" || true)
+            case "$status" in
+              2??) echo "$1: HIT" ;;
+              *) rm -f "$2"; echo "::notice::Remote Cache has no $1 (HTTP $status); the build makes it" ;;
+            esac
+          }
+          fetch "$WASM_KEY" "inputs/wasm-pkg/$WASM_KEY.tar"
+          fetch "$CRATES_KEY" "inputs/default-crates/$CRATES_KEY.tar.gz"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: preview-inputs
+          path: inputs
+          include-hidden-files: true
+          retention-days: 1
+          if-no-files-found: error
+
+  # The PR's code, with no credential: no Vercel, Neon or Google secret, no
+  # GitHub token beyond the checkout's, which is not kept, and no OIDC token.
+  # What it hands on is the build output, as the artifact `preview-output`,
+  # which `deploy` only uploads.
+  build:
+    name: build preview
+    needs: prepare
+    concurrency:
+      group: preview-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    # A cache archive `prepare` could not fetch is rebuilt here: the wasm
+    # packages take about an hour.
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      # Fails the job if the workflow ever hands this job a credential.
+      - name: No credential in the environment
+        run: |
+          found=""
+          for name in VERCEL_TOKEN VERCEL_ARTIFACTS_TOKEN GH_TOKEN GITHUB_TOKEN NEON_API_KEY \
+            ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_ID_TOKEN_REQUEST_URL GOOGLE_APPLICATION_CREDENTIALS; do
+            [ -z "${!name:-}" ] || found="$found $name"
+          done
+          [ -z "$found" ] || { echo "::error::the build job must hold no credential; set:$found"; exit 1; }
+          echo "No credential in the build's environment."
+
+      # The head commit, not the merge commit `pull_request` checks out by
+      # default: the preview shows the branch as pushed. Submodule with full
+      # history, as in client-v2.yml: update-static dates tutorials from it.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+          submodules: true
+          fetch-depth: 0
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: client-v2/.nvmrc
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: preview-inputs
+          path: ${{ runner.temp }}/inputs
+
+      # Where vercel-install.sh's Build Cache lookups find the archives, so it
+      # never asks the Remote Cache, which it has no token for.
+      - name: Place the settings and caches
+        env:
+          INPUTS: ${{ runner.temp }}/inputs
+        run: |
+          mv "$INPUTS/.vercel" .vercel
+          cache=client-v2/node_modules/.cache
+          mkdir -p "$cache"
+          for dir in wasm-pkg default-crates; do
+            [ ! -d "$INPUTS/$dir" ] || mv "$INPUTS/$dir" "$cache/$dir"
+          done
+
+      # `vercel build` reads the settings and the environment `prepare`
+      # pulled, and needs no token for it.
+      - name: Build
         run: |
           cli=$(sed -n 's/^VERCEL_CLI := //p' client-v2/Makefile.vercel)
           [ -n "$cli" ] || { echo "::error::no VERCEL_CLI in client-v2/Makefile.vercel"; exit 1; }
+          # Separate lines: `-e` does not stop on a failure inside an && list.
+          set -a
+          . ./.vercel/.env.preview.local
+          set +a
+          npx --yes "$cli" build
+          tar -czf "$RUNNER_TEMP/preview-output.tgz" .vercel/output .vercel/project.json
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: preview-output
+          path: ${{ runner.temp }}/preview-output.tgz
+          retention-days: 1
+          if-no-files-found: error
+
+  # Uploads what `build` made. Runs nothing from the build: the archive is
+  # unpacked into a folder of its own, checked to hold only the build output,
+  # and sent to Vercel as it is.
+  deploy:
+    name: deploy preview
+    needs: [database, build]
+    concurrency:
+      group: preview-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+      SHA: ${{ github.event.pull_request.head.sha }}
+      CLOUD_SQL_DATABASE: ${{ needs.database.outputs.cloud-sql-database }}
+    steps:
+      # Non-cone, as in `prepare`: no root files, so no .npmrc.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/scripts/
+            /client-v2/Makefile.vercel
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: preview-output
+          path: ${{ runner.temp }}
+
+      # Only .vercel/output and .vercel/project.json, and no path that climbs
+      # out of the folder. The Root Directory the settings pin must exist for
+      # the CLI, and stays empty.
+      - name: Unpack the build output
+        run: |
+          archive="$RUNNER_TEMP/preview-output.tgz"
+          unexpected=$(tar -tzf "$archive" | grep -vE '^\.vercel/(output(/.*)?|project\.json)?$' || true)
+          [ -z "$unexpected" ] || { echo "::error::the build archive holds more than .vercel/output: $(head -5 <<<"$unexpected")"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/out/client-v2"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/out" --no-same-owner --no-same-permissions
+          # The CLI packs what a link points at, so a link out of the output
+          # would upload a runner file, this job's environment included, into
+          # the public deployment.
+          output=$(realpath "$RUNNER_TEMP/out/.vercel/output")
+          while IFS= read -r -d '' link; do
+            case "$(realpath -m "$link")" in
+              "$output"/*) ;;
+              *) echo "::error::the build output links out of itself: ${link#"$RUNNER_TEMP/out/"}"; exit 1 ;;
+            esac
+          done < <(find "$RUNNER_TEMP/out" -type l -print0)
+          # Every file under api/ becomes a public function unless
+          # client-v2/.vercelignore drops it, and a test there writes to the
+          # database it is given (HOO-2175).
+          tests=$(find "$RUNNER_TEMP/out/.vercel/output/functions" -name '*.test.func')
+          [ -z "$tests" ] || { echo "::error::test files deployed as functions: $tests"; exit 1; }
+
+      # The Git integration deploys an integration branch's push on its own,
+      # on the shared database, and skips a ticket branch's
+      # (client-v2/scripts/vercel-ignore-build.mjs); this deployment differs in
+      # its database, the PR's own, and is a ticket branch's only preview. A
+      # prebuilt deploy never runs the ignore step. DB_PROVIDER is given on
+      # both paths, so the Preview environment's cannot pair one provider with
+      # the other's database.
+      - name: Deploy
+        id: deploy
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+        run: |
+          cli=$(sed -n 's/^VERCEL_CLI := //p' client-v2/Makefile.vercel)
+          [[ "$cli" =~ ^vercel@[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+            { echo "::error::VERCEL_CLI in client-v2/Makefile.vercel is \"$cli\"; expected vercel@x.y.z"; exit 1; }
           if [ "$PREVIEW_DB_PROVIDER" = cloud-sql ]; then
             : "${CLOUD_SQL_DATABASE:?create-preview-db printed no CLOUD_SQL_DATABASE}"
             db_env=(-e DB_PROVIDER=cloud-sql -e CLOUD_SQL_DATABASE="$CLOUD_SQL_DATABASE")
@@ -232,26 +515,8 @@ jobs:
             echo "::add-mask::$db"
             db_env=(-e DB_PROVIDER=url -e DATABASE_URL="$db")
           fi
-          # Nothing below needs them, and `vercel build` runs the PR's code:
-          # the Neon key, the Google credentials file, and what would mint a
-          # new GitHub OIDC token.
-          [ -z "${GOOGLE_GHA_CREDS_PATH:-}" ] || rm -f "$GOOGLE_GHA_CREDS_PATH"
-          unset NEON_API_KEY GOOGLE_APPLICATION_CREDENTIALS GOOGLE_GHA_CREDS_PATH \
-            CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE ACTIONS_ID_TOKEN_REQUEST_TOKEN \
-            ACTIONS_ID_TOKEN_REQUEST_URL
-          npx --yes "$cli" pull --yes --environment=preview --token="$VERCEL_TOKEN"
-          jq '.settings.rootDirectory = "client-v2"' .vercel/project.json > .vercel/project.json.next
-          mv .vercel/project.json.next .vercel/project.json
-          # Separate lines: `-e` does not stop on a failure inside an && list.
-          set -a
-          . ./.vercel/.env.preview.local
-          set +a
-          npx --yes "$cli" build --token="$VERCEL_TOKEN"
-          # Every file under api/ becomes a public function unless
-          # client-v2/.vercelignore drops it, and a test there writes to the
-          # database it is given (HOO-2175).
-          tests=$(find .vercel/output/functions -name '*.test.func')
-          [ -z "$tests" ] || { echo "::error::test files deployed as functions: $tests"; exit 1; }
+          unset NEON_API_KEY
+          cd "$RUNNER_TEMP/out"
           # --archive=tgz: the prebuilt output is over the upload API's 15000-file cap.
           url=$(npx --yes "$cli" deploy --prebuilt --archive=tgz --token="$VERCEL_TOKEN" \
             "${db_env[@]}" --meta githubPrId="$PR" --meta githubCommitSha="$SHA")
@@ -262,7 +527,6 @@ jobs:
       - name: Comment on the PR
         env:
           URL: ${{ steps.deploy.outputs.url }}
-          CLOUD_SQL_DATABASE: ${{ steps.cloud-sql.outputs.CLOUD_SQL_DATABASE }}
         run: |
           if [ "$PREVIEW_DB_PROVIDER" = cloud-sql ]; then
             db="Cloud SQL database \`$CLOUD_SQL_DATABASE\` on the preview instance"
@@ -273,9 +537,32 @@ jobs:
 
           Commit \`${SHA::7}\`, database: $db, migrated. Remove the \`$PREVIEW_LABEL\` label or close the PR to drop the database."
 
-      # Not on cancel: a newer push's run or the teardown writes the comment.
+  # Whichever job of the chain failed. Not on cancel: a newer push's run or
+  # the teardown writes the comment. Outside the concurrency group, which it
+  # would otherwise share with a teardown it could cancel.
+  report:
+    name: report a failed preview
+    needs: [database, keys, prepare, build, deploy]
+    if: failure()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+      SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/scripts/
+
       - name: Report the failure on the PR
-        if: failure()
         run: |
           bash .github/scripts/preview-comment.sh "$PR" "**Preview deploy failed** for commit \`${SHA::7}\`: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
 
