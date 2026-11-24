@@ -286,7 +286,9 @@ const WalletChip = ({ isSignedOut, isSignInFailure }: WalletChipProps) => {
         }
         onConnect={isDeploying ? undefined : (name) => void handleConnect(name)}
         isDisconnectHeld={isDeploying}
-        onManage={() => (PgWallet.show = true)}
+        // A deploy keeps the signer it started with: a switch mid-deploy
+        // would name another account than the one paying
+        onManage={isDeploying ? undefined : () => (PgWallet.show = true)}
         account={
           !owner && PgWallet.accounts.length > 1 ? wallet.name : undefined
         }

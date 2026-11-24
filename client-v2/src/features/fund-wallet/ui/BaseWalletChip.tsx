@@ -226,12 +226,6 @@ const BaseWalletChip = ({
               )}
             </>
           )}
-          {/* Mid-deploy there is nothing to connect, the accounts stay */}
-          {!owner && onManage && !(onConnect && onConnectOpen) && (
-            <div className="mt-3">
-              <AccountsButton onManage={onManage} />
-            </div>
-          )}
           {!owner && onConnect && onConnectOpen && (
             <ConnectBlock
               wallets={wallets}

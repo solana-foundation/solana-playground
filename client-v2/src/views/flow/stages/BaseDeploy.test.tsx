@@ -678,6 +678,24 @@ describe("BaseDeploy", () => {
         {...props({
           built: true,
           history: [],
+          payer: {
+            address: WALLET,
+            balance: 4.2,
+            playground: true,
+            account: "Wallet 2",
+          },
+        })}
+      />
+    );
+    expect(screen.getByLabelText("Who pays").textContent).toBe(
+      `From your Playground wallet · Wallet 2 · ${shortKey(WALLET)} · 4.2 SOL`
+    );
+
+    rerender(
+      <BaseDeploy
+        {...props({
+          built: true,
+          history: [],
           payer: undefined,
         })}
       />

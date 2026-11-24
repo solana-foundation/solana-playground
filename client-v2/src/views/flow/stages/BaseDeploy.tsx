@@ -181,10 +181,13 @@ const payerLine = (p: BaseDeployProps) => {
   if (!payer.playground && payer.name) {
     return `From ${payer.name} · ${shortKey(payer.address)}${balance}`;
   }
-  const which = payer.playground
-    ? `your Playground wallet${payer.account ? ` · ${payer.account}` : ""}`
-    : "your wallet";
-  return `From ${which} · ${shortKey(payer.address)}${balance}`;
+  if (!payer.playground) {
+    return `From your wallet · ${shortKey(payer.address)}${balance}`;
+  }
+  const account = payer.account ? ` · ${payer.account}` : "";
+  return `From your Playground wallet${account} · ${shortKey(
+    payer.address
+  )}${balance}`;
 };
 
 /**

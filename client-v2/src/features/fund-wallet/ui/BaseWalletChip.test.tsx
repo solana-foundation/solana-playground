@@ -268,10 +268,11 @@ describe("features/fund-wallet/ui/BaseWalletChip", () => {
       expect(screen.queryByRole("button", { name: "Accounts" })).toBeNull();
     });
 
-    it("keeps Accounts while nothing can be connected", () => {
-      renderChip({ onManage: vi.fn() });
+    it("offers no Accounts while a deploy holds the signer", () => {
+      // Mid-deploy the container passes neither onConnect nor onManage
+      renderChip({});
       open();
-      expect(screen.getByRole("button", { name: "Accounts" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Accounts" })).toBeNull();
       expect(
         screen.queryByRole("button", { name: "Connect a wallet" })
       ).toBeNull();
