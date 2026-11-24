@@ -43,16 +43,20 @@ const isInside = (root, target) => {
 
 /** @param {string} dir @returns {string[]} every path under `dir`, links not followed */
 const walk = (dir) =>
-  readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const full = path.join(dir, entry.name);
-    return entry.isDirectory() ? [full, ...walk(full)] : [full];
-  });
+  // Sorted, so the problems come out in the same order on every filesystem.
+  readdirSync(dir, { withFileTypes: true })
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+    .flatMap((entry) => {
+      const full = path.join(dir, entry.name);
+      return entry.isDirectory() ? [full, ...walk(full)] : [full];
+    });
 
 /** @param {string} folder the folder holding .vercel @returns {string[]} the problems found */
 export const outputProblems = (folder) => {
   const problems = [];
   const extra = (dir, allowed) =>
     readdirSync(dir)
+      .sort()
       .filter((name) => !allowed.includes(name))
       .map((name) => path.relative(folder, path.join(dir, name)));
 

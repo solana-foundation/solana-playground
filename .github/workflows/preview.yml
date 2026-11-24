@@ -99,7 +99,8 @@ jobs:
   # A labelled PR's preview, in a chain of jobs that keeps the workflow's
   # credentials away from the code nobody reviews line by line: `yarn install`'s
   # dependencies and what `vercel build` runs over them (HOO-2888). Those run
-  # only in `keys` and `build`, which hold no credential. The jobs that do hold
+  # only in `build`; `keys` runs two of the PR's own scripts and installs
+  # nothing. Neither job holds a credential. The jobs that do hold
   # one run the workflow's own scripts under .github/scripts, the database
   # scripts under client-v2/scripts/db, dbmate and the Vercel CLI, and read
   # client-v2/Makefile.vercel only for the CLI's version. Those scripts come
@@ -383,7 +384,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      # Fails the job if the workflow ever hands this job a credential.
+      # Fails the job if any credential this workflow uses, listed below,
+      # reaches its environment. A credential added to the workflow is added here.
       - name: No credential in the environment
         run: |
           found=""
