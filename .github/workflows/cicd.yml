@@ -12,8 +12,8 @@ permissions:
 
 jobs:
   # Resolve the App Engine version from the tag at HEAD. Push to master deploys
-  # only when that commit is tagged; manual dispatch falls back to the latest
-  # reachable tag so it always has a version to deploy.
+  # only when that commit is tagged; manual dispatch fails unless it is, since
+  # deploying HEAD under an older tag would overwrite that version.
   resolve_version:
     name: Resolve deploy version
     runs-on: ubuntu-latest
@@ -49,10 +49,15 @@ jobs:
           fi
           # Tags are already present from checkout (fetch-depth: 0); no network fetch needed.
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-            # Manual deploy: use the latest reachable tag; fail loudly rather than deploy a sentinel version.
+            # Manual deploy: redeploy the latest tag, which must be on HEAD; fail loudly rather than deploy a sentinel version.
             TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
             if [ -z "$TAG" ]; then
               echo "::error::No git tag found to derive a deploy version; create a tag before dispatching." >&2
+              exit 1
+            fi
+            # A version name must match its code: deploying master's head under an older tag would overwrite that version.
+            if [ "$(git rev-parse "$TAG^{commit}")" != "$(git rev-parse HEAD)" ]; then
+              echo "::error::$TAG is not on master's head; tag the head before dispatching." >&2
               exit 1
             fi
           else

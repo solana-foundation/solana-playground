@@ -30,7 +30,9 @@ Both workflows sign in through [gcp-auth](../.github/actions/gcp-auth/action.yml
 
 ### Only `master` reaches the deploy identity
 
-Three locks, each enough on its own once set up, so that a workflow on any other branch cannot deploy or move traffic:
+Three locks keep a workflow on any other branch from deploying or moving traffic. Locks 1 and 2 are settings outside
+this repository; step 10 of the [production runbook](../client-v2/docs/production-runbook.md#step-10-the-build-servers-releases-and-its-sign-in-to-gcp)
+sets both. Lock 1 alone covers the OIDC path; while `GCP_KEY` exists, only lock 2 covers the key path.
 
 1. **The OIDC provider.** Its attribute condition admits a token only when `repository_id` is this repository's
    and `ref` is `refs/heads/master`. A workflow edited on a branch, or a run dispatched from one, gets no token. The
@@ -53,7 +55,7 @@ the role that lets the service account move traffic, the Workload Identity pool 
 the variable, the checks, and deleting the key.
 
 The provider's condition admits only tokens from `master` of this repository, by its id: a workflow edited on a
-branch gets no token, whatever it says, and neither does a **Server: deploy** run dispatched from a branch, so once the
-variable is set, deploys start from `master`. Until `GCP_KEY` is deleted, the key path relies on lock 2 above: while
-the key is still a repository secret rather than an environment secret, a workflow file on a branch can read it. After the key is deleted, drop the key path from `gcp-auth` and the
+branch gets no token, whatever it says. Until `GCP_KEY` is deleted, the key path relies on lock 2 above: while the
+key is still a repository secret rather than a `playground-server` environment secret, a workflow file on a branch
+can read it. After the key is deleted, drop the key path from `gcp-auth` and the
 `GCP_KEY` row from `server/README.md`.

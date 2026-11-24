@@ -202,7 +202,7 @@ Optional. Without them the app uses the public Solana endpoints.
 | --- | --- | --- | --- |
 | `client-v2/.env` in your checkout (gitignored) | `VERCEL_DEPLOY_TEAM`, `VERCEL_DEPLOY_PROJECT_ID` | `<TEAM_SLUG>` and `<VERCEL_PROJECT_ID>`. Every Makefile target refuses a checkout linked to another project | Step 1 |
 | GitHub, `solana-foundation/solana-playground` → Settings → Secrets and variables → Actions → Repository secrets | `VERCEL_AUTOMATION_BYPASS_SECRET` | Vercel → the project → Settings → Deployment Protection → Protection Bypass for Automation. **Why:** after each push to `master`, the `smoke` job of `.github/workflows/client-v2.yml` waits for that commit's production deployment and calls `GET /api/sync` on the deployment's own URL, which Deployment Protection hides; the job sends this secret to get past it. The run fails unless production answers `{"enabled":true,"db":"ok"}`, so a production that cannot reach its database shows as a red run. Without the secret the job passes with a warning and checks nothing | Step 8 |
-| GitHub, the same page → Variables → Repository variables | `GCP_WORKLOAD_IDENTITY_PROVIDER` | The full resource name of the server's Workload Identity provider. Set, the server's deploys and releases sign in to GCP through OIDC; empty, through the `GCP_KEY` secret. The secrets `GCP_KEY`, `SERVICE_ACCOUNT` and `PROJECT_ID` already exist there | Step 10 |
+| GitHub, the same page → Variables → Repository variables | `GCP_WORKLOAD_IDENTITY_PROVIDER` | The full resource name of the server's Workload Identity provider. Set, the server's deploys and releases sign in to GCP through OIDC; empty, through the `GCP_KEY` secret. The secrets `GCP_KEY`, `SERVICE_ACCOUNT` and `PROJECT_ID` already exist there, and step 10 moves them into the `playground-server` environment | Step 10 |
 | The build server's environment | `PG_API_KEYS` | A comma-separated list of keys, one per client of the server; set it from a GCP secret, never in `app.yaml`. Generate each key with `openssl rand -hex 32`, so every key has one length and holds no space or comma. `PG_BUILD_SERVER_API_KEY` is one entry. Set, the server answers `401` to `/build`, `/deploy` and `/unstable/*` unless `x-api-key` matches an entry, so only a client holding a key gets in. Removing an entry and redeploying the server revokes that client alone: the server reads its keys once, at start. After a change, check each client's key with the `curl` of [D-9](../../docs/testing.md#d-9-the-server-builds-a-program-without-a-client): a listed key passes, a removed one gets `401`. `PG_API_KEY`, a single key, is read only while `PG_API_KEYS` holds no key: once the list is set, the old key stops working unless it is also an entry, so put the Playground's key in the list and unset `PG_API_KEY` after the move. Either variable set without a key, or with a key holding a space or a character outside visible ASCII, stops the server at start. Both unset, those routes stay open and the server logs an error at start, the one level App Engine prints without `RUST_LOG`. Set `PG_BUILD_SERVER_API_KEY` on Vercel first: a key on the server alone refuses every build, while a key Vercel sends to a server without one is ignored | Step 6 |
 | The build server's environment | `PG_CLIENT_URLS` | Must include `https://<VERCEL_APP_DOMAIN>` and, from step 9, `https://<CUSTOM_DOMAIN>`, or the browser's build requests are refused by CORS | Before step 7; step 9 |
 
@@ -713,9 +713,23 @@ OIDC.
 **Rollback:** clear the variable `GCP_WORKLOAD_IDENTITY_PROVIDER`; both workflows sign in with `GCP_KEY` again.
 This works only until the key is deleted below.
 
+**Protect the `playground-server` environment.** The two jobs that sign in to GCP run in it
+([server-release.md](../../docs/server-release.md#only-master-reaches-the-deploy-identity)). GitHub creates it,
+unprotected, on the first run that names it; until it is protected, it reads the repository secrets and nothing changes.
+
+1. GitHub → Settings → Environments → `playground-server` (create it under that exact name if it is not listed) →
+   Deployment branches and tags → **Selected branches and tags** → add the rule `master`. Leave the administrators'
+   bypass off.
+2. On the same page, add the environment secrets `GCP_KEY` (skip it if the key is already retired),
+   `SERVICE_ACCOUNT` and `PROJECT_ID`, with the values of the repository secrets of the same names. Then delete
+   those three repository secrets. The variable `GCP_WORKLOAD_IDENTITY_PROVIDER` stays a repository variable.
+3. Check: **Server: deploy** dispatched on `master` runs its deploy job in `playground-server` and signs in;
+   dispatched from another branch, it fails at **Resolve deploy version** with "Deploy from master".
+
 **Then retire the key**, once checks 1, 3 and 4 passed:
 
-1. Delete the repository secret `GCP_KEY` on GitHub.
+1. Delete the secret `GCP_KEY` on GitHub: the `playground-server` environment secret, or the repository secret if
+   it was never moved.
 2. Delete the key in GCP. List the account's user-managed keys:
    `gcloud iam service-accounts keys list --iam-account="$SERVER_SA" --managed-by=user`. The one stored as `GCP_KEY`
    has the id in its JSON's `private_key_id`; without the file, and with more than one key listed, ask whoever
