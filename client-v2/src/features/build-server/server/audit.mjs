@@ -28,6 +28,12 @@ const GITHUB_ID = `select "accountId" from account
  * Open the row for a build. Throws when it cannot be written, and the route
  * refuses the build then: an unrecorded build is the thing this prevents.
  *
+ * The insert reads the user row `for share`, so it orders against account
+ * deletion, which deletes that row and then scrubs the user's rows in one
+ * transaction ({@link scrubIdentity}): an insert that locked first commits
+ * before the delete, and the scrub then sees its row; one that comes after
+ * finds no user, writes nothing and throws.
+ *
  * @param {Query} query
  * @returns {(build: {
  *   userId: string;
@@ -43,11 +49,14 @@ export const startAuditWith =
       `insert into build_audit
        (user_id, login, github_id, project_id, project_name, unstable,
         request_bytes)
-     values ($1, (select login from "user" where id = $1), (${GITHUB_ID}),
-             $2, $3, $4, $5)
+     select u.id, u.login, (${GITHUB_ID}), $2, $3, $4, $5
+       from "user" u
+      where u.id = $1
+        for share of u
      returning id`,
       [userId, project.id, project.name, unstable, bytes]
     );
+    if (!rows.length) throw new Error("the account no longer exists");
     return Number(rows[0].id);
   };
 
@@ -105,3 +114,40 @@ export const finishAuditWithin =
 
 /** `finishAuditWithin` with the production deadline */
 export const finishAuditWith = finishAuditWithin(FINISH_DEADLINE_MS);
+
+/** How long a `build_audit` row is kept, in days */
+export const AUDIT_RETENTION_DAYS = 90;
+
+/**
+ * Delete the rows older than {@link AUDIT_RETENTION_DAYS}. Run daily by the
+ * retention job.
+ *
+ * @param {(text: string, params?: unknown[]) => Promise<{ rowCount: number | null }>} query
+ * @returns {Promise<number>} how many rows were deleted
+ */
+export const deleteExpiredAudit = async (query) => {
+  const { rowCount } = await query(
+    `delete from build_audit
+      where at < now() - make_interval(days => $1)`,
+    [AUDIT_RETENTION_DAYS]
+  );
+  return rowCount ?? 0;
+};
+
+/**
+ * Remove the GitHub identity from a user's rows, keeping the rest. The table
+ * has no foreign key on purpose, so deleting the account does not reach it;
+ * account deletion runs this after the `user` delete, in the same
+ * transaction, so a row a concurrent build inserted is scrubbed too
+ * ({@link startAuditWith}).
+ *
+ * @param {Query} query the transaction's, so the update rolls back with it
+ * @param {string} userId
+ */
+export const scrubIdentity = async (query, userId) => {
+  await query(
+    `update build_audit set login = null, github_id = null
+      where user_id = $1`,
+    [userId]
+  );
+};

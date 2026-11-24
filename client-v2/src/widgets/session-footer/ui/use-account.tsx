@@ -2,23 +2,36 @@ import { useRef, useState } from "react";
 
 import { connectWallet } from "@/commands/connect/connect-wallet";
 import { isSetupRejected } from "@/commands/connect/setup-rejected";
-import { isSignInFailure, PgSession } from "@/features/auth";
+import { isDeletionFailure, isSignInFailure, PgSession } from "@/features/auth";
 import { FeedbackMenuItems, useFeedbackSend } from "@/features/feedback";
 import { openFundDialog } from "@/features/fund-wallet";
 import { useBalance, useRenderOnChange, useWallet } from "@/hooks";
 import { useOnline } from "@/shared/lib/hooks/use-online";
 import { createLogger } from "@/shared/lib/logger";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import type { SettingsRequest } from "@/shared/lib/settings-request";
 import { PgCommon, PgExplorer, PgView, PgWallet } from "@/utils";
+import { ExportWorkspace } from "@/views/sidebar/explorer/Component/Modals/ExportWorkspace";
 
 import type {
   AccountItem,
   AccountSession,
   AccountSurface,
   AccountView,
+  DeleteAccountState,
   SignOutState,
 } from "../model/account";
-import { sessionWith, shownSignOutState } from "../model/account";
+import {
+  ACCOUNT_DELETED,
+  DELETE_ACCOUNT_FAILED,
+  DELETE_ACCOUNT_RETRY,
+  GITHUB_APPLICATIONS_URL,
+  leftoversText,
+  REVOKE_AT_GITHUB,
+  sessionWith,
+  shownDeleteAccountState,
+  shownSignOutState,
+} from "../model/account";
 import { sessionTelemetry } from "../model/telemetry";
 import { useClusterStatus } from "../model/use-cluster-status";
 import BaseAccountMenu from "./BaseAccountMenu";
@@ -34,6 +47,50 @@ const warnWallet = () =>
       </span>
     ),
     { options: { name: "wallet-failed" } }
+  );
+
+/**
+ * A deletion that succeeded behind a closed menu, GitHub's grant revoked,
+ * with the leftovers line when projects stayed
+ */
+const toastAccountDeleted = (kept: number) =>
+  PgView.setToast(
+    () => (
+      <span>
+        <strong>{ACCOUNT_DELETED}</strong> {leftoversText(kept)}
+      </span>
+    ),
+    { options: { name: "account-deleted" } }
+  );
+
+/** A deletion that succeeded behind a closed menu, GitHub's grant left standing */
+const toastRevokeAtGithub = (kept: number) =>
+  PgView.setToast(
+    () => (
+      <span>
+        <strong>{ACCOUNT_DELETED}</strong> {leftoversText(kept)}{" "}
+        <a
+          href={GITHUB_APPLICATIONS_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline underline-offset-2"
+        >
+          {REVOKE_AT_GITHUB}
+        </a>
+      </span>
+    ),
+    { options: { name: "account-deleted-revoke" } }
+  );
+
+/** A deletion that failed behind a closed menu; still signed in */
+const toastDeleteFailed = (reason: string) =>
+  PgView.setToast(
+    () => (
+      <span>
+        <strong>{DELETE_ACCOUNT_FAILED}</strong> {reason}
+      </span>
+    ),
+    { options: { name: "account-delete-failed" } }
   );
 
 interface UseAccountOptions {
@@ -71,6 +128,11 @@ export const useAccount = ({
   const [signOutState, setSignOutState] = useState<SignOutState>({
     status: "idle",
   });
+  const [deleteState, setDeleteState] = useState<DeleteAccountState>({
+    status: "idle",
+  });
+  // The deletion under way: counted when it ends, never as a cancel
+  const deleting = useRef<Promise<void> | undefined>(undefined);
   // The question's busy item already stops a second press; this stops a
   // second question (the footer and the rail swap) from starting another
   const signingOut = useRef<Promise<void> | null>(null);
@@ -133,7 +195,9 @@ export const useAccount = ({
     // Links: the anchor opens the tab, the pick is only counted
     "github-profile": () => undefined,
     docs: () => undefined,
+    "privacy-policy": () => undefined,
     "sign-out": () => setSignOutState({ status: "asking" }),
+    "delete-account": () => setDeleteState({ status: "asking" }),
     // The item unmounts with its menu, so focus comes back to the trigger
     settings: () =>
       onToggleSettings({
@@ -183,6 +247,18 @@ export const useAccount = ({
       cancelSignOut();
       return;
     }
+    // Likewise the deletion; a question left open after a refusal is a cancel
+    if (
+      (deleteState.status === "asking" || deleteState.status === "failed") &&
+      !deleting.current
+    ) {
+      handleDeleteAccountCancel();
+      return;
+    }
+    if (deleteState.status === "done") {
+      setDeleteState({ status: "idle" });
+      return;
+    }
     // The leftovers line is said once, in the menu that signed out. Only
     // then a render: a close that re-renders would hand a pick deferred to
     // the close (`BaseAccountMenu`'s `closeAfterPick`) a stale render
@@ -196,8 +272,9 @@ export const useAccount = ({
       .then(() => {
         // Everything still in the browser once the release ran
         // (`releaseLocalProjects`): projects the account does not hold, or
-        // holds without this browser's latest edits
-        const kept = PgExplorer.allWorkspaceNames?.length ?? 0;
+        // holds without this browser's latest edits. The stored names, which
+        // a temporary view lists too
+        const kept = PgExplorer.storedWorkspaceNames?.length ?? 0;
         sessionTelemetry.track("session_sign_out_ended", {
           outcome: "ok",
           items_kept: kept,
@@ -221,6 +298,77 @@ export const useAccount = ({
     await signingOut.current;
   };
 
+  /** The deletion question closed unanswered: its Cancel, or the menu closing over it */
+  const handleDeleteAccountCancel = () => {
+    sessionTelemetry.track("session_delete_account_ended", {
+      outcome: "cancelled",
+    });
+    setDeleteState({ status: "idle" });
+  };
+
+  const handleDeleteAccount = () => {
+    // The question's busy item stops a second press; this stops a second
+    // question (the footer and the rail swap) from starting another
+    if (deleting.current) return;
+    setDeleteState({ status: "running" });
+    deleting.current = PgSession.deleteAccount()
+      .then(({ githubRevoked, kept }) => {
+        sessionTelemetry.track("session_delete_account_ended", {
+          outcome: "ok",
+        });
+        // Said in the menu that deleted, never in one opened later. The
+        // GitHub line and the leftovers line go with it: the person can still
+        // remove the app there, and what stayed is still here. Closed over
+        // meanwhile, what the menu would say is a toast, since nothing else
+        // would ever say it
+        if (menuOpen.current) {
+          setDeleteState({ status: "done", githubRevoked, kept });
+          return;
+        }
+        setDeleteState({ status: "idle" });
+        if (githubRevoked) toastAccountDeleted(kept);
+        else toastRevokeAtGithub(kept);
+      })
+      .catch((error: unknown) => {
+        // `PgSession.deleteAccount` has logged and reported a refusal; the
+        // reason is the person's to read. Anything else is a defect of ours.
+        // Closed over meanwhile, the menu opens on its items next time
+        if (isDeletionFailure(error)) {
+          log.info("account deletion failed; still signed in", {
+            context: { reason: error.reason, status: error.status },
+          });
+        } else {
+          log.error(error, {
+            report: true,
+            context: { item: "delete-account" },
+          });
+        }
+        const reason = isDeletionFailure(error)
+          ? error.message
+          : DELETE_ACCOUNT_RETRY;
+        if (menuOpen.current) {
+          setDeleteState({ status: "failed", reason });
+          return;
+        }
+        setDeleteState({ status: "idle" });
+        toastDeleteFailed(reason);
+      })
+      .finally(() => {
+        deleting.current = undefined;
+      });
+  };
+
+  // The export dialog the explorer and the project list open, for the open project
+  const handleExportProject = () => {
+    PgView.setModal(ExportWorkspace).catch(
+      reportButtonFailure("export this project")
+    );
+  };
+
+  const shownDelete = shownDeleteAccountState(deleteState, {
+    signedIn: !!user,
+  });
+
   const shownSignOut = shownSignOutState(signOutState, {
     signedIn: !!user,
     running: !!signingOut.current,
@@ -236,6 +384,10 @@ export const useAccount = ({
       signOut={shownSignOut}
       onSignOutConfirm={signOut}
       onSignOutCancel={cancelSignOut}
+      deleteAccount={shownDelete}
+      onDeleteAccountConfirm={handleDeleteAccount}
+      onDeleteAccountCancel={handleDeleteAccountCancel}
+      onExportProject={handleExportProject}
       page={page}
     />
   );

@@ -5,7 +5,12 @@
  * the route with no build step. The audit's statements run on a `query` the
  * route passes in, so this feature imports no other.
  */
-export { finishAuditWith, startAuditWith } from "./server/audit.mjs";
+export {
+  deleteExpiredAudit,
+  finishAuditWith,
+  scrubIdentity,
+  startAuditWith,
+} from "./server/audit.mjs";
 export {
   CALLER_LEFT,
   checkBuildLimitWith,

@@ -358,3 +358,11 @@ export const authEnv = () => ({
   AUTH_OAUTH_PROXY_SECRET: read("AUTH_OAUTH_PROXY_SECRET"),
   VERCEL_ENV: read("VERCEL_ENV"),
 });
+
+/**
+ * The secret Vercel Cron sends as `Authorization: Bearer <secret>` to the
+ * routes it calls (`api/retention.mjs`). Unset, the route refuses to run.
+ */
+export const cronEnv = () => ({
+  CRON_SECRET: read("CRON_SECRET"),
+});

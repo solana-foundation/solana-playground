@@ -11,7 +11,11 @@ import {
 } from "vitest";
 
 import { SETUP_REJECTED } from "@/commands/connect/setup-rejected";
+import type { AccountDeleted } from "@/features/auth";
 import { PgSession } from "@/features/auth";
+// Past the slice's entry, which exports only the type: this stands in for
+// `deleteAccount`'s own rejection
+import { DeletionFailure } from "@/features/auth/model/session";
 import {
   initLogger,
   memoryProvider as logMemory,
@@ -45,7 +49,7 @@ const walletWindow = vi.hoisted(() => ({
 const balance = vi.hoisted(() => ({ current: 2.4 as number | undefined }));
 const setToast = vi.hoisted(() => vi.fn());
 const explorer = vi.hoisted(() => ({
-  allWorkspaceNames: [] as string[] | null,
+  storedWorkspaceNames: [] as string[] | null,
 }));
 
 vi.mock("../model/use-cluster-status", () => ({
@@ -113,7 +117,7 @@ afterEach(() => {
   walletWindow.show = false;
   balance.current = 2.4;
   setToast.mockReset();
-  explorer.allWorkspaceNames = [];
+  explorer.storedWorkspaceNames = [];
   PgSession.reset();
 });
 
@@ -216,7 +220,7 @@ it("counts a menu closed over the question as a cancel", async () => {
 
 it("signs out on the confirmation and says how many projects stayed", async () => {
   await signInAsTester();
-  explorer.allWorkspaceNames = ["counter", "voting"];
+  explorer.storedWorkspaceNames = ["counter", "voting"];
   const signOut = vi
     .spyOn(PgSession, "signOut")
     .mockImplementation(async () => {
@@ -241,10 +245,10 @@ it("signs out on the confirmation and says how many projects stayed", async () =
 
 it("counts what is left after the sign-out released the account's projects", async () => {
   await signInAsTester();
-  explorer.allWorkspaceNames = ["counter", "voting", "local"];
+  explorer.storedWorkspaceNames = ["counter", "voting", "local"];
   vi.spyOn(PgSession, "signOut").mockImplementation(async () => {
     // The release runs inside the sign-out, before it settles
-    explorer.allWorkspaceNames = ["local"];
+    explorer.storedWorkspaceNames = ["local"];
     PgSession.reset();
   });
   draw("footer");
@@ -265,7 +269,7 @@ it("counts what is left after the sign-out released the account's projects", asy
 
 it("says nothing more after a sign-out that left nothing, and counts zero", async () => {
   await signInAsTester();
-  explorer.allWorkspaceNames = [];
+  explorer.storedWorkspaceNames = [];
   vi.spyOn(PgSession, "signOut").mockImplementation(async () => {
     PgSession.reset();
   });
@@ -285,7 +289,7 @@ it("says nothing more after a sign-out that left nothing, and counts zero", asyn
 
 it("says the leftovers once: the next opening of the menu has no note", async () => {
   await signInAsTester();
-  explorer.allWorkspaceNames = ["local"];
+  explorer.storedWorkspaceNames = ["local"];
   vi.spyOn(PgSession, "signOut").mockImplementation(async () => {
     PgSession.reset();
   });
@@ -587,4 +591,320 @@ it("disconnects a wallet through the same command", async () => {
   draw("footer");
   await pick("Disconnect wallet");
   expect(connectWallet).toHaveBeenCalledOnce();
+});
+
+it("counts a pick of the privacy policy, signed out", async () => {
+  draw("footer");
+  await pick("Privacy policy");
+  expect(eventsNamed("session_account_item_picked")).toEqual([
+    { item: "privacy-policy" },
+  ]);
+});
+
+const deleteQuestion = () =>
+  screen.findByText("Delete your Playground account?");
+
+/** The question's destructive item, its spinner's label aside */
+const confirmDelete = () =>
+  userEvent.click(screen.getByRole("menuitem", { name: /^Delete account/ }));
+
+it("asks before deleting the account, and counts the pick and a cancel", async () => {
+  await signInAsTester();
+  const deleteAccount = vi.spyOn(PgSession, "deleteAccount");
+  draw("footer");
+
+  await pick("Delete account");
+  await deleteQuestion();
+  await userEvent.click(screen.getByRole("menuitem", { name: "Cancel" }));
+
+  expect(
+    await screen.findByRole("menuitem", { name: "Delete account" })
+  ).toBeTruthy();
+  expect(screen.queryByText("Delete your Playground account?")).toBeNull();
+  expect(deleteAccount).not.toHaveBeenCalled();
+  expect(eventsNamed("session_account_item_picked")).toEqual([
+    { item: "delete-account" },
+  ]);
+  expect(eventsNamed("session_delete_account_ended")).toEqual([
+    { outcome: "cancelled" },
+  ]);
+});
+
+it("counts a menu closed over the deletion question as a cancel", async () => {
+  await signInAsTester();
+  draw("footer");
+
+  await pick("Delete account");
+  await deleteQuestion();
+  await userEvent.keyboard("{Escape}");
+  await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+
+  expect(eventsNamed("session_delete_account_ended")).toEqual([
+    { outcome: "cancelled" },
+  ]);
+  // The next opening is on the items
+  await openMenu();
+  expect(
+    await screen.findByRole("menuitem", { name: "Delete account" })
+  ).toBeTruthy();
+});
+
+it("deletes on the confirmation, says so with the GitHub line, and counts ok once", async () => {
+  await signInAsTester();
+  const deleteAccount = vi
+    .spyOn(PgSession, "deleteAccount")
+    .mockImplementation(async () => {
+      PgSession.reset();
+      return { githubRevoked: false, kept: 0 };
+    });
+  draw("footer");
+
+  await pick("Delete account");
+  await deleteQuestion();
+  await confirmDelete();
+
+  expect(await screen.findByText("Your account was deleted.")).toBeTruthy();
+  // Nothing stayed, so no leftovers line
+  expect(screen.queryByText(/stayed in this browser/)).toBeNull();
+  expect(
+    screen
+      .getByRole("link", {
+        name: "Remove Playground from your GitHub settings too.",
+      })
+      .getAttribute("href")
+  ).toBe("https://github.com/settings/applications");
+  expect(
+    screen.getByRole("menuitem", { name: "Sign in with GitHub" })
+  ).toBeTruthy();
+  expect(deleteAccount).toHaveBeenCalledOnce();
+  expect(eventsNamed("session_delete_account_ended")).toEqual([
+    { outcome: "ok" },
+  ]);
+
+  // Said once: closing the menu that deleted counts nothing more
+  await userEvent.keyboard("{Escape}");
+  await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+  await openMenu();
+  await screen.findByRole("menu");
+  expect(screen.queryByText("Your account was deleted.")).toBeNull();
+  expect(eventsNamed("session_delete_account_ended")).toHaveLength(1);
+});
+
+it("leaves the GitHub line out when GitHub revoked the grant", async () => {
+  await signInAsTester();
+  vi.spyOn(PgSession, "deleteAccount").mockImplementation(async () => {
+    PgSession.reset();
+    return { githubRevoked: true, kept: 0 };
+  });
+  draw("footer");
+
+  await pick("Delete account");
+  await deleteQuestion();
+  await confirmDelete();
+
+  expect(await screen.findByText("Your account was deleted.")).toBeTruthy();
+  expect(screen.queryByText(/GitHub settings/)).toBeNull();
+});
+
+it("says how many projects stayed in this browser, in the sign-out's words", async () => {
+  await signInAsTester();
+  vi.spyOn(PgSession, "deleteAccount").mockImplementation(async () => {
+    PgSession.reset();
+    return { githubRevoked: true, kept: 2 };
+  });
+  draw("footer");
+
+  await pick("Delete account");
+  await deleteQuestion();
+  await confirmDelete();
+
+  expect(await screen.findByText("Your account was deleted.")).toBeTruthy();
+  expect(
+    screen.getByText(
+      "2 projects stayed in this browser because they weren't saved to your account."
+    )
+  ).toBeTruthy();
+});
+
+it("keeps the question after a refused deletion, with the reason, and counts nothing", async () => {
+  await signInAsTester();
+  const deleteAccount = vi
+    .spyOn(PgSession, "deleteAccount")
+    .mockRejectedValue(new DeletionFailure({ reason: "refused", status: 500 }));
+  draw("footer");
+
+  await pick("Delete account");
+  await deleteQuestion();
+  await confirmDelete();
+
+  expect((await screen.findByRole("alert")).textContent).toBe(
+    "Couldn't delete your account. Try again."
+  );
+  expect(screen.getByText("Delete your Playground account?")).toBeTruthy();
+  expect(eventsNamed("session_delete_account_ended")).toEqual([]);
+  expect(PgSession.get()?.id).toBe("u1");
+
+  // A retry the server accepts
+  deleteAccount.mockImplementation(async () => {
+    PgSession.reset();
+    return { githubRevoked: true, kept: 0 };
+  });
+  await confirmDelete();
+  expect(await screen.findByText("Your account was deleted.")).toBeTruthy();
+  expect(eventsNamed("session_delete_account_ended")).toEqual([
+    { outcome: "ok" },
+  ]);
+});
+
+it("keeps the deletion busy so it cannot run twice, and counts a close while it runs as ok", async () => {
+  await signInAsTester();
+  let finish: () => void = () => {};
+  const deleteAccount = vi.spyOn(PgSession, "deleteAccount").mockReturnValue(
+    new Promise((resolve) => {
+      finish = () => {
+        PgSession.reset();
+        resolve({ githubRevoked: true, kept: 0 });
+      };
+    })
+  );
+  draw("footer");
+
+  await pick("Delete account");
+  await deleteQuestion();
+  await confirmDelete();
+  const confirm = screen.getByRole("menuitem", { name: /^Delete account/ });
+  await waitFor(() => expect(confirm.getAttribute("aria-busy")).toBe("true"));
+  await userEvent.click(confirm);
+  expect(deleteAccount).toHaveBeenCalledOnce();
+
+  await userEvent.keyboard("{Escape}");
+  await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+  expect(eventsNamed("session_delete_account_ended")).toEqual([]);
+  finish();
+
+  await waitFor(() =>
+    expect(eventsNamed("session_delete_account_ended")).toEqual([
+      { outcome: "ok" },
+    ])
+  );
+  // Settled into a closed menu: the next one opens on its items
+  await openMenu();
+  expect(
+    await screen.findByRole("menuitem", { name: "Sign in with GitHub" })
+  ).toBeTruthy();
+  expect(screen.queryByText("Your account was deleted.")).toBeNull();
+});
+
+describe("a deletion that settles after the menu closed", () => {
+  /**
+   * Starts a deletion that waits, closes the menu over it, and returns how to
+   * settle it
+   */
+  const deleteThenClose = async () => {
+    let settle: (outcome: () => Promise<AccountDeleted>) => void = () => {};
+    vi.spyOn(PgSession, "deleteAccount").mockReturnValue(
+      new Promise((resolve, reject) => {
+        settle = (outcome) => {
+          outcome().then(resolve, reject);
+        };
+      })
+    );
+    draw("footer");
+    await pick("Delete account");
+    await deleteQuestion();
+    await confirmDelete();
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    return settle;
+  };
+
+  /** The one toast's body, drawn */
+  const drawnToast = (toast: typeof setToast) => {
+    const [Body] = toast.mock.calls[0] as [() => React.JSX.Element];
+    render(<Body />);
+  };
+
+  it("toasts the GitHub line with its link when GitHub kept the grant", async () => {
+    await signInAsTester();
+    const settle = await deleteThenClose();
+
+    settle(async () => {
+      PgSession.reset();
+      return { githubRevoked: false, kept: 1 };
+    });
+
+    await waitFor(() => expect(setToast).toHaveBeenCalledTimes(1));
+    drawnToast(setToast);
+    expect(screen.getByText("Your account was deleted.")).toBeTruthy();
+    expect(
+      screen.getByText(
+        /1 project stayed in this browser because it wasn't saved to your account\./
+      )
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", {
+          name: "Remove Playground from your GitHub settings too.",
+        })
+        .getAttribute("href")
+    ).toBe("https://github.com/settings/applications");
+  });
+
+  it("toasts the deletion alone when GitHub revoked the grant", async () => {
+    await signInAsTester();
+    const settle = await deleteThenClose();
+
+    settle(async () => {
+      PgSession.reset();
+      return { githubRevoked: true, kept: 0 };
+    });
+
+    await waitFor(() => expect(setToast).toHaveBeenCalledTimes(1));
+    expect(eventsNamed("session_delete_account_ended")).toEqual([
+      { outcome: "ok" },
+    ]);
+    drawnToast(setToast);
+    expect(screen.getByText("Your account was deleted.")).toBeTruthy();
+    expect(screen.queryByText(/stayed in this browser/)).toBeNull();
+    expect(
+      screen.queryByRole("link", {
+        name: "Remove Playground from your GitHub settings too.",
+      })
+    ).toBeNull();
+  });
+
+  it("toasts the failure with its reason", async () => {
+    await signInAsTester();
+    const settle = await deleteThenClose();
+
+    settle(async () => {
+      throw new DeletionFailure({ reason: "unknown-outcome" });
+    });
+
+    await waitFor(() => expect(setToast).toHaveBeenCalledTimes(1));
+    drawnToast(setToast);
+    expect(
+      screen.getByText("Couldn't delete your account.").parentElement
+        ?.textContent
+    ).toBe(
+      "Couldn't delete your account. We couldn't tell whether your account was deleted. Reload Playground to check."
+    );
+    expect(PgSession.get()?.id).toBe("u1");
+  });
+
+  it("toasts the generic retry for a failure that is no deletion failure", async () => {
+    await signInAsTester();
+    const settle = await deleteThenClose();
+
+    settle(async () => {
+      throw new TypeError("a defect");
+    });
+
+    await waitFor(() => expect(setToast).toHaveBeenCalledTimes(1));
+    drawnToast(setToast);
+    expect(
+      screen.getByText("Couldn't delete your account.").parentElement
+        ?.textContent
+    ).toBe("Couldn't delete your account. Try again.");
+  });
 });

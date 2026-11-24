@@ -38,6 +38,9 @@ as soon as the Root Directory points at `client-v2`.
      `api/conversations.mjs` answer its writes with `403`. A production build with `PG_AI_API_KEY` fails
      without it (`scripts/check-agent-env.mjs`).
    - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — see step 3.
+   - `CRON_SECRET`: generated for production; without it the daily
+     retention job answers `503`
+     ([Conversation and project sync](#conversation-and-project-sync)).
    - `SENTRY_AUTH_TOKEN`: a production build fails without it
      (`scripts/upload-sourcemaps.mjs`). A local `vercel build` pulls a
      Sensitive variable as an empty value, which fails the same way, so a
@@ -236,6 +239,12 @@ So `scripts/vercel-install.sh` installs each version itself, into `.cache/rust/w
 `cargo install` runs on the toolchain of the package that resolves the version (`package_toolchain`): `wasm/rust-analyzer/rust-toolchain.toml` for `rust-analyzer`, `wasm/rust-toolchain.toml` for the workspace members. A later Rust refuses to compile `wasm-bindgen` below 0.2.88 (``older versions of the `wasm-bindgen` crate are incompatible with current versions of Rust``), so the workspace's toolchain cannot compile the version `wasm/rust-analyzer/Cargo.toml` pins.
 
 The version comes from the lockfile, the file wasm-pack reads, after `cargo metadata --locked` has accepted it, so a bump without `cargo update` stops the build before wasm-pack asks for a version the script did not install. To bump: change the two manifests, then `cargo update -p wasm-bindgen` in `wasm/` and in `wasm/rust-analyzer/`.
+
+## Crawlers
+
+`scripts/update-static.mjs`, which every build runs, writes `robots.txt` per deployment (`scripts/robots.mjs`). The production site gets `Allow: /` and `Disallow: /api/`, and the log line says `allowed crawlers in robots.txt except /api/`. A preview (`VERCEL_ENV=preview`) disallows the whole site without any setting. A project that is not the public site but builds as production, such as a staging project or hoodies' `solana-playground` project, sets `DISALLOW_ROBOTS=true` (a build-time variable, not `REACT_APP_*`; only the exact value `true` counts) and gets the same disallow-all file; the log line then ends with `disallowed every crawler in robots.txt`. The variable is read at build time, so setting it takes a redeploy. Never set it on the Solana Foundation project that serves `playground.solana.com`: that domain would drop out of crawling.
+
+`vercel.json` also sends `X-Robots-Tag: noindex, nofollow` on every host but `playground.solana.com`, whatever the variable says, since `vercel.json` cannot read the environment. It covers a staging deployment before its project sets the variable, and every page a crawler fetches without reading `robots.txt`. Where `robots.txt` disallows the whole site, a crawler that obeys it never fetches a page and so never reads the header: `Disallow` stops crawling, not listing, and a URL linked from elsewhere can still appear in search results without a snippet.
 
 ## Public variables
 
@@ -643,6 +652,7 @@ before this existed.
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | The OAuth app. Its callback URL must match `AUTH_BASE_URL`; previews carry the host's pair |
 | `AUTH_OAUTH_PROXY_URL` | Previews only: the origin of the host, the deployment whose callback is on the GitHub app |
 | `AUTH_OAUTH_PROXY_SECRET` | The OAuth proxy's encryption key. The same value on the host and every preview, never `AUTH_SECRET`'s. Unset, the proxy is off |
+| `CRON_SECRET` | Production only. Vercel Cron sends it as `Authorization: Bearer` to `/api/retention`, the daily job that deletes expired sessions and old `build_audit` rows and clears deleted projects' names. Unset, the route answers `503` and nothing is removed. Vercel runs crons on production deployments only |
 
 ### GitHub tokens at rest
 
