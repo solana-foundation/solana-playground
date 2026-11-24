@@ -162,14 +162,15 @@ parser removes, as in `/<key>/../v2`, is not sent.
 
 ## Risks / Trade-offs
 
-- [The Web Vitals dashboard reads streamed spans, not static transactions] → Unverified. Task 1.8 checks the dashboard
-  on a preview, before the merge. If it stays empty while the transaction is in Discover, the change returns to the
-  spec and design for stream mode before it merges.
+- [The Web Vitals dashboard reads streamed spans, not static transactions] → Unverified: the preview check planned
+  before the merge was dropped (decided 2026-11-24). The Page loads check of `client-v2/docs/production-runbook.md`
+  reads the dashboard after the first production deploy. If it stays empty while the transaction is in Discover,
+  stream mode needs a change of its own, since `beforeSendTransaction` never runs there (Decision 1).
 - [A sampled page load sends a transaction with dozens of resource spans, each scrubbed] → `redact` already walks
   error events of similar size; the scrub runs on each span through `beforeSendSpan` and once more over the whole
   transaction through `beforeSendTransaction`, after the page settles, outside any user action.
-- [Quota: production traces every page load from the merge on, and an exhausted quota can drop events] → Task 1.8
-  reads the preview's usage in Sentry's usage stats after one day and projects production from it. Setting
+- [Quota: production traces every page load from the merge on, and an exhausted quota can drop events] → Not
+  projected before the merge. Sentry's usage stats show production's volume after the first deploy. Setting
   `REACT_APP_SENTRY_TRACES_SAMPLE_RATE` lower, or to `0`, and redeploying cuts the volume.
 - [The URL masker hides a word that only looks like a token] → Accepted, as on screen: a hidden slug costs a reader a
   guess, a shown key costs the user the key.
@@ -178,7 +179,8 @@ parser removes, as in `/<key>/../v2`, is not sent.
 
 ## Migration Plan
 
-Before the merge, deploy the PR as a preview with `SENTRY_PREVIEW_ENABLED=true` and the variable unset, and check
-the manual scenarios and the usage (task 1.8). If the projected production volume exceeds the quota, set a lower
-`REACT_APP_SENTRY_TRACES_SAMPLE_RATE` in Vercel's production environment before the merge, since CRA inlines the
-value at build time. Rollback is setting the variable to `0` and redeploying.
+The change merges with the variable unset, so production traces every page load and navigation from its first
+deploy. After that deploy, run the Page loads check of `client-v2/docs/production-runbook.md` and read the volume in
+Sentry's usage stats. If the volume runs past the quota, set a lower `REACT_APP_SENTRY_TRACES_SAMPLE_RATE` in
+Vercel's production environment and redeploy, since CRA inlines the value at build time. Rollback is setting the
+variable to `0` and redeploying.
