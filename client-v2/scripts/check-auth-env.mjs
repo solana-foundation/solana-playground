@@ -15,15 +15,15 @@ const value = (name) => process.env[name] || undefined;
 // Vercel's build machine sets CI; a local `vercel build` does not, and pulls a
 // Sensitive variable as "". So "" means unset on Vercel and held locally, as
 // `isSet` in check-agent-env.mjs treats it.
-const onVercel = !!process.env.CI;
+const isOnVercel = !!process.env.CI;
 /** Whether a variable is held, for one that may be Sensitive */
 const isHeld = (name) =>
-  onVercel ? !!process.env[name] : process.env[name] !== undefined;
+  isOnVercel ? !!process.env[name] : process.env[name] !== undefined;
 
 const isPreview = process.env.VERCEL_ENV === "preview";
 const hostFlag = value("AUTH_OAUTH_PROXY_HOST");
-const proxyURL = isHeld("AUTH_OAUTH_PROXY_URL");
-const proxySecret = isHeld("AUTH_OAUTH_PROXY_SECRET");
+const hasProxyURL = isHeld("AUTH_OAUTH_PROXY_URL");
+const hasProxySecret = isHeld("AUTH_OAUTH_PROXY_SECRET");
 
 const problems = [];
 
@@ -44,7 +44,7 @@ if (isPreview) {
   }
   // Without the URL a preview sends GitHub its own callback, which the
   // host's OAuth app rejects, and sign-in fails with nothing said here
-  if (proxySecret && !proxyURL) {
+  if (hasProxySecret && !hasProxyURL) {
     problems.push(
       "AUTH_OAUTH_PROXY_SECRET is set on a preview without " +
         "AUTH_OAUTH_PROXY_URL; set the URL to the staging sign-in host's " +
@@ -52,7 +52,7 @@ if (isPreview) {
     );
   }
 } else if (isHost) {
-  if (!proxySecret) {
+  if (!hasProxySecret) {
     problems.push(
       "AUTH_OAUTH_PROXY_HOST=true without AUTH_OAUTH_PROXY_SECRET: the host " +
         "cannot seal what it hands a preview."
@@ -66,7 +66,7 @@ if (isPreview) {
         "AUTH_OAUTH_PROXY_URL."
     );
   }
-  if (proxyURL) {
+  if (hasProxyURL) {
     problems.push(
       "AUTH_OAUTH_PROXY_URL is set on the sign-in host. Only a preview names " +
         "the host; unset it here."
@@ -74,8 +74,8 @@ if (isPreview) {
   }
 } else {
   const held = [
-    proxyURL && "AUTH_OAUTH_PROXY_URL",
-    proxySecret && "AUTH_OAUTH_PROXY_SECRET",
+    hasProxyURL && "AUTH_OAUTH_PROXY_URL",
+    hasProxySecret && "AUTH_OAUTH_PROXY_SECRET",
   ].filter(Boolean);
   if (held.length) {
     problems.push(
