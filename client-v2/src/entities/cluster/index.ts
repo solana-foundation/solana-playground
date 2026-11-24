@@ -32,6 +32,7 @@ export type {
 export {
   checkRpcUrl,
   hostOf,
+  isMasked,
   isSameRpc,
   maskRpcUrl,
   maskUrlsIn,

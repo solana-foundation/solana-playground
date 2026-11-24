@@ -1,7 +1,15 @@
 // What a report from the browser must never carry: the user's program output,
 // which their tests print to this window's console, and a secret key. The
-// reporter passes these rules to Sentry as `beforeBreadcrumb` and `beforeSend`
-// (`sentryOptions` in `reporter/sentry.ts`).
+// reporter passes these rules to Sentry as `beforeBreadcrumb`, `beforeSend`,
+// `beforeSendTransaction` and `beforeSendSpan` (`sentryOptions` in `reporter/sentry.ts`).
+
+import {
+  maskFragmentWith,
+  maskHostWith,
+  maskPathWith,
+  maskQueryWith,
+  maskUrlWith,
+} from "../url-secret.mjs";
 
 const REDACTED = "[redacted]";
 
@@ -22,11 +30,12 @@ const INDEXED_BYTES = `\\{\\s*"0"\\s*:\\s*${BYTE}(?:\\s*,\\s*"\\d+"\\s*:\\s*${BY
 /**
  * A secret key written out: a hex run of 64+ characters (32+ bytes), a base64
  * run of 86+ (a 64-byte key), a base58 run of 64+, or 32+ bytes as a list,
- * bracketed or not, or as `JSON.stringify` of a typed array. Base58 text of 32
- * to 44 characters stays, so a public key in base58 is kept, and so is a
- * 32-byte seed written in base58 or base64 (43 or 44 characters), which cannot
- * be told from one. Any 32-byte value in hex or as bytes, a public key
- * included, is redacted. Hex goes first: base58 has no `0`, so it would take a
+ * bracketed or not, or as `JSON.stringify` of a typed array. Outside a URL,
+ * base58 text of 32 to 44 characters stays, so a public key in base58 is kept,
+ * and so is a 32-byte seed written in base58 or base64 (43 or 44 characters),
+ * which cannot be told from one; inside a URL, {@link maskUrlsIn} masks it as
+ * a token. Any 32-byte value in hex or as bytes, a public key included, is
+ * redacted. Hex goes first: base58 has no `0`, so it would take a
  * hex key only up to its first zero; base64 goes before base58, whose alphabet
  * lacks `0`, `O`, `I`, `l`, `+` and `/` and would cut a base64 key into
  * shorter runs. A transaction signature looks like a secret key in base58 and
@@ -45,12 +54,150 @@ const SECRET_PATTERNS: [RegExp, string][] = [
 /** Past this depth a value is replaced rather than walked; Sentry's own normalising stops at 3 */
 const MAX_DEPTH = 12;
 
+/** Before a comma that starts another URL, as in endpoints joined by commas: each is masked as a URL of its own */
+const NEXT_URL = /(?=,(?:https?|wss?):\/\/)/i;
+
+/**
+ * An `http(s)://` or `ws(s)://` URL in running text, brackets and parentheses kept for an IPv6 host and a path such as
+ * `/rpc(v1)/`; {@link urlPartOf} trims what only ends or wraps the sentence.
+ */
+const URL_IN_TEXT = /(?:https?|wss?):\/\/[^\s"'`<>{}\\^|]+/gi;
+
+/** Punctuation that ends a sentence after a URL more often than it ends the URL */
+const SENTENCE_END = new Set([".", ",", ";", ":", "!", "?"]);
+
+/** The opening bracket of each closing one a URL may hold */
+const OPENER: Record<string, string> = { ")": "(", "]": "[" };
+
+const countWith = (char: string) => (text: string) =>
+  text.split(char).length - 1;
+
+/** `match` less its trailing sentence punctuation and the closing brackets it does not open, as in `(see https://x.test/a)` */
+const urlPartOf = (match: string) => {
+  let url = match;
+  while (url !== "") {
+    const last = url.slice(-1);
+    const opener = OPENER[last];
+    const isUnopened =
+      opener !== undefined && countWith(last)(url) > countWith(opener)(url);
+    if (!SENTENCE_END.has(last) && !isUnopened) break;
+    url = url.slice(0, -1);
+  }
+  return url;
+};
+
+/** A string that is one `http(s)://` or `ws(s)://` URL from its first character to its last, as a span's `url.full` is */
+const isWholeUrl = (text: string) => {
+  if (!/^(?:https?|wss?):\/\/\S+$/i.test(text) || NEXT_URL.test(text)) {
+    return false;
+  }
+  try {
+    return new URL(text).href !== "";
+  } catch {
+    // Not a URL: the running-text finder still looks inside it
+    return false;
+  }
+};
+
+const maskUrl = maskUrlWith(REDACTED);
+
+/** One URL found in text, a leading comma kept, masked by `mask` with its trailing punctuation kept */
+const maskFoundWith = (mask: (url: string) => string) => (found: string) => {
+  const comma = found.startsWith(",") ? "," : "";
+  const match = found.slice(comma.length);
+  const url = urlPartOf(match);
+  return comma + mask(url) + match.slice(url.length);
+};
+
+/** `text` with each absolute URL in it masked by `mask`, comma-joined URLs each on their own */
+const maskFoundUrlsWith = (mask: (url: string) => string) => (text: string) =>
+  text.replace(URL_IN_TEXT, (match) =>
+    match.split(NEXT_URL).map(maskFoundWith(mask)).join("")
+  );
+
+/** How many URLs deep a URL inside a URL is masked as a URL of its own; a crafted chain of schemes must not exhaust the stack */
+const MAX_NESTED_URLS = 4;
+
+/**
+ * `url` with its secrets masked, each URL inside it first as a URL of its own: a proxy's `?url=` holds another URL's credentials.
+ * One the parser would change, as `/<key>/../` is, is sent as masked, never as written.
+ */
+const maskUrlAt = (depth: number, url: string): string => {
+  const at = url.indexOf("://") + 3;
+  const outer =
+    depth < MAX_NESTED_URLS
+      ? url.slice(0, at) +
+        maskFoundUrlsWith((nested) => maskUrlAt(depth + 1, nested))(
+          url.slice(at)
+        )
+      : url;
+  const { text, outcome } = maskUrl(outer);
+  return outcome === "unchanged" ? outer : text;
+};
+
+const maskedUrl = (url: string) => maskUrlAt(0, url);
+
+const maskFoundUrls = maskFoundUrlsWith(maskedUrl);
+
+const maskPath = maskPathWith(REDACTED);
+const maskQuery = maskQueryWith(REDACTED);
+const maskFragment = maskFragmentWith(REDACTED);
+
+/** A string that is one relative URL from its first character to its last: a single leading `/` and no whitespace */
+const RELATIVE_URL = /^\/(?!\/)\S*$/;
+
+/** `text` cut before its first `mark`: what is before it, and the rest from `mark` on, empty without one */
+const cutWith =
+  (mark: string) =>
+  (text: string): [string, string] => {
+    const at = text.indexOf(mark);
+    return at < 0 ? [text, ""] : [text.slice(0, at), text.slice(at)];
+  };
+
+/** `text`, where it is one relative URL, with each part masked by its rule; cut by hand, so the rest stays relative and as written */
+const maskRelativeUrl = (text: string) => {
+  if (!RELATIVE_URL.test(text)) return text;
+  const [beforeHash, hash] = cutWith("#")(text);
+  const [path, search] = cutWith("?")(beforeHash);
+  return (
+    maskPath(path) +
+    (search && `?${maskQuery(search.slice(1))}`) +
+    (hash && `#${maskFragment(hash.slice(1))}`)
+  );
+};
+
+/** `text` with the secrets of each absolute URL in it masked, and its own where it is one relative URL */
+const maskUrlsIn = (text: string) =>
+  isWholeUrl(text) ? maskedUrl(text) : maskRelativeUrl(maskFoundUrls(text));
+
 const redactText = (text: string) =>
   SECRET_PATTERNS.reduce(
     (scrubbed, [pattern, replacement]) =>
       scrubbed.replace(pattern, replacement),
-    text
+    maskUrlsIn(text)
   );
+
+const maskHost = maskHostWith(REDACTED);
+
+/**
+ * Span attributes that hold one part of a URL without the scheme, `?` or
+ * `#` the URL rule finds it by: Sentry's fetch instrumentation copies them from the URL.
+ */
+const URL_PART_RULES = new Map<string, (text: string) => string>([
+  ["server.address", maskHost],
+  ["url.domain", maskHost],
+  ["url.query", maskQuery],
+  ["url.fragment", maskFragment],
+]);
+
+/** `item` under `key` with its secrets redacted, by the URL rule for a URL part {@link URL_PART_RULES} names */
+const redactEntryWith =
+  (walk: (value: unknown) => unknown) => (key: string, item: unknown) => {
+    const rule = URL_PART_RULES.get(key);
+    return typeof item === "string" && rule !== undefined
+      ? redactText(rule(item))
+      : walk(item);
+  };
 
 const isByte = (value: unknown) =>
   typeof value === "number" &&
@@ -106,10 +253,11 @@ const walkWith =
     // One level down, so a `toJSON` that returns a fresh object each time still ends
     if (data !== value) return walkBelow(data);
     if (Array.isArray(value)) return value.map((item) => walkBelow(item));
+    const redactEntry = redactEntryWith(walkBelow);
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [
         redactText(key),
-        walkBelow(item),
+        redactEntry(key, item),
       ])
     );
   };
@@ -125,6 +273,10 @@ interface Breadcrumb {
   data?: Record<string, unknown>;
 }
 
+interface WithBreadcrumbs {
+  breadcrumbs?: Breadcrumb[];
+}
+
 /** `read()`, or `undefined` if it throws: what a withheld copy keeps of a hostile value */
 const attempt = <T>(read: () => T): T | undefined => {
   try {
@@ -137,6 +289,12 @@ const attempt = <T>(read: () => T): T | undefined => {
 
 const textOf = (value: unknown) =>
   typeof value === "string" ? redactText(value) : undefined;
+
+/** What the scrub threw, by name: an `Error`'s `name`, else the value's type */
+const failureNameOf = (failure: unknown) =>
+  attempt(() =>
+    failure instanceof Error ? textOf(failure.name) : typeof failure
+  );
 
 /**
  * A breadcrumb fit to send, or `null` to drop it. Every `console` breadcrumb
@@ -191,9 +349,7 @@ const withheld = <E extends ScrubbableEvent>(event: E, failure: unknown): E => {
       .filter(Boolean)
       .join(", ")
   );
-  const thrown = attempt(() =>
-    failure instanceof Error ? textOf(failure.name) : typeof failure
-  );
+  const thrown = failureNameOf(failure);
   const tags: Record<string, string> = {};
   if (ns) tags.ns = ns;
   if (types) tags.exception_type = types;
@@ -214,23 +370,172 @@ const withheld = <E extends ScrubbableEvent>(event: E, failure: unknown): E => {
   } as unknown as E;
 };
 
+interface WithProcessingMetadata {
+  sdkProcessingMetadata?: { dynamicSamplingContext?: unknown };
+}
+
+/**
+ * `metadata` with only its sampling context redacted: the envelope header carries that context and drops the rest,
+ * which holds live scopes, so walking them would only cost time and withhold an event over a value never sent.
+ */
+const scrubbedMetadataOf = (
+  metadata: NonNullable<WithProcessingMetadata["sdkProcessingMetadata"]>
+) =>
+  "dynamicSamplingContext" in metadata
+    ? {
+        ...metadata,
+        dynamicSamplingContext: redact(metadata.dynamicSamplingContext),
+      }
+    : metadata;
+
+/**
+ * `event` with its breadcrumbs re-checked and every value it sends redacted, its processing metadata by
+ * {@link scrubbedMetadataOf}; throws when the walk does. Sentry merges the scope's breadcrumbs into transactions too.
+ */
+const scrubbedOf = <E extends object>(event: E): E => {
+  const breadcrumbs = (event as WithBreadcrumbs).breadcrumbs
+    ?.map(scrubBreadcrumb)
+    .filter((crumb): crumb is Breadcrumb => crumb !== null);
+  const { sdkProcessingMetadata: metadata, ...sent } = event as E &
+    WithProcessingMetadata;
+  const scrubbed = redact(sent) as E & WithProcessingMetadata;
+  if (breadcrumbs !== undefined) {
+    (scrubbed as WithBreadcrumbs).breadcrumbs = breadcrumbs;
+  }
+  if (typeof metadata === "object" && metadata !== null) {
+    scrubbed.sdkProcessingMetadata = scrubbedMetadataOf(metadata);
+  }
+  return scrubbed;
+};
+
 /** An error event with its breadcrumbs re-checked and every value in it redacted */
 export const scrubEvent = <E extends ScrubbableEvent>(event: E): E => {
   try {
-    const breadcrumbs = event.breadcrumbs
-      ?.map(scrubBreadcrumb)
-      .filter((crumb): crumb is Breadcrumb => crumb !== null);
-    const scrubbed = redact(event) as E;
-    if (breadcrumbs !== undefined) scrubbed.breadcrumbs = breadcrumbs;
-    return scrubbed;
+    return scrubbedOf(event);
   } catch (failure) {
     // Not logged: the logger reports through this reporter, and would loop
     return withheld(event, failure);
   }
 };
 
+/** The `data` key {@link scrubSpan} sets on a span it could not walk */
+const WITHHELD = "scrub.withheld";
+
+/**
+ * A transaction scrubbed as {@link scrubEvent} scrubs an error, or `null` after `onWithheld` gets the failure's name:
+ * a transaction without its values is worth nothing, unlike an error's withheld stand-in.
+ */
+export const scrubTransactionWith =
+  (onWithheld: (failure: string | undefined) => void) =>
+  <E extends object>(event: E): E | null => {
+    try {
+      return scrubbedOf(event);
+    } catch (failure) {
+      // The logger would close an import cycle (logger, providers/sentry, reporter, scrub), so the caller reports
+      onWithheld(failureNameOf(failure));
+      // eslint-disable-next-line unicorn/no-null -- Sentry's `beforeSendTransaction` drops a transaction only on `null`
+      return null;
+    }
+  };
+
+/**
+ * Redacts, in place, the root span's name in a dynamic sampling context, which every envelope header built from it
+ * carries and no `beforeSend*` hook sees; Sentry's `createDsc` hook passes the context to change.
+ */
+export const scrubSamplingContext = (context: { transaction?: string }) => {
+  try {
+    if (typeof context.transaction === "string") {
+      context.transaction = redactText(context.transaction);
+    }
+  } catch {
+    // `createDsc` is emitted unguarded, so a throw here would lose the event; a name not redacted is not sent
+    delete context.transaction;
+  }
+};
+
+interface ScrubbableSpan {
+  span_id?: string;
+  trace_id?: string;
+  parent_span_id?: string;
+  op?: string;
+  status?: string;
+  start_timestamp?: number;
+  timestamp?: number;
+  measurements?: unknown;
+  data?: unknown;
+}
+
+/** The measurements whose value is a number: what a withheld page-load root span keeps of the Web Vitals set on it */
+const numericMeasurementsOf = (measurements: unknown) => {
+  if (typeof measurements !== "object" || measurements === null) {
+    return undefined;
+  }
+  return Object.fromEntries(
+    Object.entries(measurements).flatMap(([name, measurement]) => {
+      const { value, unit } = (measurement ?? {}) as {
+        value?: unknown;
+        unit?: unknown;
+      };
+      return typeof value === "number"
+        ? [[redactText(name), { value, unit: textOf(unit) }]]
+        : [];
+    })
+  );
+};
+
+/** The `data` key of a span's op: Sentry sends a standalone span's `data`, and no `op` field */
+const OP = "sentry.op";
+
+/** The `data` key of a Web Vital's value, as `browser.web_vital.inp.value` is */
+const WEB_VITAL_VALUE = /^browser\.web_vital\.\w+\.value$/;
+
+/** What a withheld span keeps of its `data`: its op and each Web Vital value that is a number, each read on its own */
+const withheldDataOf = (data: unknown) => {
+  if (typeof data !== "object" || data === null) return {};
+  const source = data as Record<string, unknown>;
+  const names = attempt(() => Object.keys(source)) ?? [];
+  const vitals = names
+    .filter((name) => WEB_VITAL_VALUE.test(name))
+    .flatMap((name): [string, number][] => {
+      const value = attempt(() => source[name]);
+      return typeof value === "number" ? [[redactText(name), value]] : [];
+    });
+  const kept: Record<string, string | number> = Object.fromEntries(vitals);
+  const op = attempt(() => textOf(source[OP]));
+  if (op !== undefined) kept[OP] = op;
+  return kept;
+};
+
+/**
+ * A span with every value redacted, run by `beforeSendSpan` on each span of a transaction, root
+ * included, before {@link scrubTransactionWith}, and on the standalone INP span. One the walk cannot finish keeps
+ * ids, op, status, timing, numeric measurements, and of its `data` what {@link withheldDataOf} keeps, marked {@link WITHHELD}.
+ */
+export const scrubSpan = <S extends ScrubbableSpan>(span: S): S => {
+  try {
+    return redact(span) as S;
+  } catch {
+    // Not logged: the logger would close an import cycle, as `scrubTransactionWith` says; the marker tells a reader
+    return {
+      span_id: attempt(() => textOf(span.span_id)),
+      trace_id: attempt(() => textOf(span.trace_id)),
+      parent_span_id: attempt(() => textOf(span.parent_span_id)),
+      op: attempt(() => textOf(span.op)),
+      status: attempt(() => textOf(span.status)),
+      start_timestamp: attempt(() => span.start_timestamp),
+      timestamp: attempt(() => span.timestamp),
+      measurements: attempt(() => numericMeasurementsOf(span.measurements)),
+      description: "Span withheld: scrubbing it failed",
+      data: {
+        ...attempt(() => withheldDataOf(span.data)),
+        [WITHHELD]: true,
+      },
+    } as unknown as S;
+  }
+};
+
 if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
+  const { describe, it, expect, vi } = import.meta.vitest;
 
   describe("shared/lib/reporter/scrub", () => {
     // A 64-byte secret key's length in base58, and a 44-character public key
@@ -238,6 +543,8 @@ if (import.meta.vitest) {
     const PUBKEY = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin";
     const bytes = (length: number) =>
       Array.from({ length }, (_, i) => (i * 7) % 256);
+    // eslint-disable-next-line no-restricted-syntax -- shared cannot import Endpoint from entities, and the URL is only text here
+    const DEVNET = "https://api.devnet.solana.com/";
 
     describe("redact", () => {
       it("should replace a base58 secret key inside a sentence", () => {
@@ -433,6 +740,265 @@ if (import.meta.vitest) {
         expect(redact(endless())).toBe("[redacted]");
       });
 
+      it.each([
+        {
+          url: "https://solana-mainnet.g.alchemy.com/v2/abc123def456ghi789",
+          shown: "https://solana-mainnet.g.alchemy.com/v2/[redacted]",
+        },
+        {
+          url: "https://x.solana-mainnet.quiknode.pro/0123456789abcdef0123456789abcdef01234567/",
+          shown: "https://x.solana-mainnet.quiknode.pro/[redacted]/",
+        },
+        {
+          url: "https://devnet.helius-rpc.com/?api-key=abc",
+          shown: "https://devnet.helius-rpc.com/?api-key=[redacted]",
+        },
+        // Split at its first `=`, the padding would leave the run the token rule judges
+        {
+          url: "https://rpc.example.test/?MTIzNDU2Nzg5MGFiY2RlZg==",
+          shown: "https://rpc.example.test/?[redacted]",
+        },
+        {
+          url: "https://rpc.example.test/?flag=",
+          shown: "https://rpc.example.test/?flag=",
+        },
+        { url: DEVNET, shown: DEVNET },
+      ])("should show $url as $shown", ({ url, shown }) => {
+        expect(redact(url)).toBe(shown);
+      });
+
+      // Sentry scrubs each span and breadcrumb twice, and the parser refuses a host label `[redacted]`
+      it("should leave a URL masked in every part as it is when it scrubs it again", () => {
+        expect(
+          redact(
+            redact(
+              "https://u:pw@acme-mainnet-4f2a9c1b7d3e.rpc.example.test/v2/abc123def456ghi789?sig=abc#abc123def456ghi789"
+            )
+          )
+        ).toBe(
+          "https://[redacted]@[redacted].rpc.example.test/v2/[redacted]?sig=[redacted]#[redacted]"
+        );
+      });
+
+      it("should mask a URL inside a span description", () => {
+        expect(
+          redact(
+            "POST https://solana-mainnet.g.alchemy.com/v2/abc123def456ghi789 (200)"
+          )
+        ).toBe("POST https://solana-mainnet.g.alchemy.com/v2/[redacted] (200)");
+      });
+
+      it.each([
+        {
+          name: "an IPv6 host, whole",
+          text: "https://[2001:db8::1]/v2/abc123def456ghi789",
+          shown: "https://[2001:db8::1]/v2/[redacted]",
+        },
+        {
+          name: "an IPv6 host, in a sentence",
+          text: "GET https://[2001:db8::1]/v2/abc123def456ghi789 failed",
+          shown: "GET https://[2001:db8::1]/v2/[redacted] failed",
+        },
+        {
+          name: "parentheses in the path, whole",
+          text: "https://rpc.example.com/rpc(v1)/abc123def456ghi789",
+          shown: "https://rpc.example.com/rpc(v1)/[redacted]",
+        },
+        {
+          name: "parentheses in the path, in a sentence",
+          text: "GET https://rpc.example.com/rpc(v1)/abc123def456ghi789 failed",
+          shown: "GET https://rpc.example.com/rpc(v1)/[redacted] failed",
+        },
+        {
+          name: "parentheses around the URL",
+          text: "(see https://x.test/a/abc123def456ghi789)",
+          shown: "(see https://x.test/a/[redacted])",
+        },
+        {
+          name: "a full stop after the URL",
+          text: "Failed at https://x.test/a/abc123def456ghi789.",
+          shown: "Failed at https://x.test/a/[redacted].",
+        },
+        // Whole, the dot is the URL's own: the finder would leave it outside
+        {
+          name: "a whole URL ending in a dot",
+          text: "https://x.test/a/abc123def456ghi789.",
+          shown: "https://x.test/a/[redacted]",
+        },
+        {
+          name: "the devnet URL in a sentence",
+          text: `(see ${DEVNET}).`,
+          shown: `(see ${DEVNET}).`,
+        },
+        {
+          name: "a bare origin in a sentence",
+          text: "see https://x.test then",
+          shown: "see https://x.test then",
+        },
+        {
+          name: "a token segment a dot segment removes",
+          text: "https://x.test/abc123def456ghi789/../v2",
+          shown: "https://x.test/v2",
+        },
+        // The finder stops at the quote, so only the whole-URL rule reaches the token after it
+        {
+          name: "the wss scheme, whole, and a quote in its path",
+          text: "wss://x.test/it's/abc123def456ghi789",
+          shown: "wss://x.test/it's/[redacted]",
+        },
+        {
+          name: "the ws scheme, in a sentence",
+          text: "subscribe ws://localhost:8900/abc123def456ghi789 failed",
+          shown: "subscribe ws://localhost:8900/[redacted] failed",
+        },
+        {
+          name: "the wss scheme, joined to another URL by a comma",
+          text: "https://a.test/v2/abc123def456ghi789,wss://u:pw@b.test/v2/abc123def456ghi789",
+          shown:
+            "https://a.test/v2/[redacted],wss://[redacted]@b.test/v2/[redacted]",
+        },
+        {
+          name: "the credentials of another URL in its query",
+          text: "https://proxy.test/?url=https://u:pw@x.test/",
+          shown: "https://proxy.test/?url=https://[redacted]@x.test/",
+        },
+      ])("should mask a URL with $name", ({ text, shown }) => {
+        expect(redact(text)).toBe(shown);
+      });
+
+      it("should scrub a chain of schemes longer than the stack is deep", () => {
+        expect(() =>
+          redact(`${"https://".repeat(20_000)}x.test/`)
+        ).not.toThrow();
+      });
+
+      it.each([
+        {
+          name: "a token path segment",
+          url: "/v2/abc123def456ghi789",
+          shown: "/v2/[redacted]",
+        },
+        {
+          name: "a key-named query value",
+          url: "/api/mcp?key=abc",
+          shown: "/api/mcp?key=[redacted]",
+        },
+        {
+          name: "a token fragment",
+          url: "/share#abc123def456ghi789",
+          shown: "/share#[redacted]",
+        },
+        // Sentry names a same-origin resource span by this path
+        {
+          name: "the app's bundle",
+          url: "/static/js/main.3f2a1b4c.js",
+          shown: "/static/js/main.3f2a1b4c.js",
+        },
+        {
+          name: "the credentials of an absolute URL in its query",
+          url: "/proxy?url=https://u:pw@x.test/",
+          shown: "/proxy?url=https://[redacted]@x.test/",
+        },
+      ])(
+        "should show a relative URL with $name as $shown",
+        ({ url, shown }) => {
+          expect(redact(url)).toBe(shown);
+        }
+      );
+
+      // Untrimmed, the parser would take the mark into the host, or drop it, and the masked text would move or lose it
+      it.each([",", ";", ":", "!", "?", "]"])(
+        "should keep %s after a bare host with credentials outside the masked URL",
+        (mark) => {
+          expect(redact(`see https://u:pw@x.test${mark} then`)).toBe(
+            `see https://[redacted]@x.test/${mark} then`
+          );
+        }
+      );
+
+      it.each([
+        {
+          name: "the app's bundle",
+          text: "at f (https://playground.test/static/js/main.3f2a1b4c.js:1:2345)",
+          shown:
+            "at f (https://playground.test/static/js/main.3f2a1b4c.js:1:2345)",
+        },
+        {
+          name: "a file whose name part is a token",
+          text: "at f (https://playground.test/static/js/abc123def456ghi789.3f2a1b4c.js:1:2)",
+          shown: "at f (https://playground.test/static/js/[redacted]:1:2)",
+        },
+      ])(
+        "should show a stack trace line with $name as $shown",
+        ({ text, shown }) => {
+          expect(redact(text)).toBe(shown);
+        }
+      );
+
+      it.each([
+        {
+          name: "a media file of the app",
+          url: "https://playground.test/static/media/logo.5d5d9eef2e3a1b7c9d01.svg",
+          shown:
+            "https://playground.test/static/media/logo.5d5d9eef2e3a1b7c9d01.svg",
+        },
+        {
+          name: "a token segment above the app's bundle",
+          url: "https://playground.test/abc123def456ghi789/static/js/main.3f2a1b4c.js",
+          shown:
+            "https://playground.test/[redacted]/static/js/main.3f2a1b4c.js",
+        },
+      ])("should show $name as $shown", ({ url, shown }) => {
+        expect(redact(url)).toBe(shown);
+      });
+
+      it.each([
+        {
+          name: "a character a key is not written in after it",
+          text: "see https://x.test/a/abc123def456ghi789* then",
+          shown: "see https://x.test/a/[redacted]* then",
+        },
+        {
+          name: "a comma and a word after it",
+          text: "https://x.test/v2/abc123def456ghi789,then",
+          shown: "https://x.test/v2/[redacted],then",
+        },
+        {
+          name: "a matrix parameter after it",
+          text: "https://x.test/v2/abc123def456ghi789;v=1",
+          shown: "https://x.test/v2/[redacted];v=1",
+        },
+        {
+          name: "a second URL joined by a comma",
+          text: "https://a.test/v2/abc123def456ghi789,https://u:pw@b.test/v2/abc123def456ghi789",
+          shown:
+            "https://a.test/v2/[redacted],https://[redacted]@b.test/v2/[redacted]",
+        },
+      ])(
+        "should mask a token in a segment with $name, keeping the rest",
+        ({ text, shown }) => {
+          expect(redact(text)).toBe(shown);
+        }
+      );
+
+      it("should mask a token host label before a port in server.address, keeping the port", () => {
+        expect(redact({ "server.address": "abc123def456ghi789:8899" })).toEqual(
+          { "server.address": "[redacted]:8899" }
+        );
+      });
+
+      it("should keep the clean parts of url.query and url.fragment", () => {
+        expect(
+          redact({
+            "url.query": "cluster=devnet&sig=abc",
+            "url.fragment": "section",
+          })
+        ).toEqual({
+          "url.query": "cluster=devnet&sig=[redacted]",
+          "url.fragment": "section",
+        });
+      });
+
       it("should leave numbers, booleans and null as they are", () => {
         // eslint-disable-next-line unicorn/no-null -- a Sentry event carries `null` values, and they pass through
         const nothing = null;
@@ -566,6 +1132,52 @@ if (import.meta.vitest) {
         });
       });
 
+      it("should keep a content-hashed static file name whose name part is not a token in frames and debug images, and mask one whose name part is", () => {
+        const BUNDLE = "https://playground.test/static/js/main.3f2a1b4c.js";
+        const CHUNK = "https://playground.test/static/js/812.a1b2c3d4.chunk.js";
+        const TOKEN =
+          "https://playground.test/static/js/abc123def456ghi789.3f2a1b4c.js";
+
+        expect(
+          scrubEvent({
+            exception: {
+              values: [
+                {
+                  type: "Error",
+                  stacktrace: {
+                    frames: [
+                      { filename: BUNDLE, abs_path: BUNDLE },
+                      { filename: CHUNK, abs_path: CHUNK },
+                      { filename: TOKEN, abs_path: TOKEN },
+                    ],
+                  },
+                },
+              ],
+            },
+            debug_meta: { images: [{ type: "sourcemap", code_file: BUNDLE }] },
+          })
+        ).toEqual({
+          exception: {
+            values: [
+              {
+                type: "Error",
+                stacktrace: {
+                  frames: [
+                    { filename: BUNDLE, abs_path: BUNDLE },
+                    { filename: CHUNK, abs_path: CHUNK },
+                    {
+                      filename: "https://playground.test/static/js/[redacted]",
+                      abs_path: "https://playground.test/static/js/[redacted]",
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+          debug_meta: { images: [{ type: "sourcemap", code_file: BUNDLE }] },
+        });
+      });
+
       it("should leave an event with nothing to scrub as it is", () => {
         expect(scrubEvent({ message: "push rejected" })).toEqual({
           message: "push rejected",
@@ -643,6 +1255,146 @@ if (import.meta.vitest) {
           expect(JSON.stringify(scrubbed)).not.toContain(KEY);
         }
       );
+    });
+
+    describe("scrubTransactionWith", () => {
+      it("should drop a console breadcrumb merged into the transaction, and report nothing", () => {
+        const onWithheld = vi.fn();
+
+        expect(
+          scrubTransactionWith(onWithheld)({
+            type: "transaction",
+            breadcrumbs: [
+              { category: "console", message: "  1) failing test" },
+              { category: "ui.click", message: "button.deploy" },
+            ],
+          })
+        ).toEqual({
+          type: "transaction",
+          breadcrumbs: [{ category: "ui.click", message: "button.deploy" }],
+        });
+        expect(onWithheld).not.toHaveBeenCalled();
+      });
+
+      it("should drop a transaction it cannot walk and pass the failure's name to onWithheld", () => {
+        const onWithheld = vi.fn();
+        const hostile = {
+          get boom(): string {
+            throw new TypeError(`getter ${KEY}`);
+          },
+        };
+
+        expect(
+          scrubTransactionWith(onWithheld)({
+            type: "transaction",
+            spans: [{ data: hostile }],
+          })
+        ).toBeNull();
+        expect(onWithheld.mock.calls).toEqual([["TypeError"]]);
+      });
+    });
+
+    describe("scrubSamplingContext", () => {
+      it.each([
+        {
+          name: "a transaction name",
+          context: { transaction: `/share?k=${KEY}` },
+          scrubbed: { transaction: "/share?k=[redacted]" },
+        },
+        { name: "no transaction name", context: {}, scrubbed: {} },
+      ])("should redact $name in place", ({ context, scrubbed }) => {
+        scrubSamplingContext(context);
+
+        expect(context).toEqual(scrubbed);
+      });
+
+      it("should delete a transaction name it cannot read", () => {
+        const context = {
+          get transaction(): string {
+            throw new TypeError(`getter ${KEY}`);
+          },
+        };
+
+        scrubSamplingContext(context);
+
+        expect("transaction" in context).toBe(false);
+      });
+    });
+
+    describe("scrubSpan", () => {
+      const hostile = {
+        get boom(): string {
+          throw new TypeError(`getter ${KEY}`);
+        },
+      };
+
+      // A page load's root span: Sentry gives it the Web Vitals set on it as measurements
+      it("should keep only the ids, op, status, timing and numeric measurements of a span it cannot walk, marked", () => {
+        expect(
+          scrubSpan({
+            span_id: "s1",
+            trace_id: "t1",
+            parent_span_id: "p1",
+            op: "pageload",
+            status: "ok",
+            start_timestamp: 1,
+            timestamp: 2,
+            description: `/share?k=${KEY}`,
+            data: { hostile },
+            measurements: {
+              lcp: { value: 1200, unit: "millisecond" },
+              note: { value: `k-${KEY}` },
+            },
+          })
+        ).toEqual({
+          span_id: "s1",
+          trace_id: "t1",
+          parent_span_id: "p1",
+          op: "pageload",
+          status: "ok",
+          start_timestamp: 1,
+          timestamp: 2,
+          measurements: { lcp: { value: 1200, unit: "millisecond" } },
+          description: "Span withheld: scrubbing it failed",
+          data: { "scrub.withheld": true },
+        });
+      });
+
+      // The standalone INP span as `@sentry/core` 11.4.0 hands it over: no measurements, and of `op` and `data` only `data` is sent
+      it("should keep the op and the numeric Web Vital value that an INP span it cannot walk holds in its data", () => {
+        expect(
+          scrubSpan({
+            span_id: "s1",
+            trace_id: "t1",
+            op: "ui.interaction.click",
+            status: "ok",
+            start_timestamp: 1,
+            timestamp: 2,
+            description: `button#k-${KEY}`,
+            data: {
+              "sentry.op": "ui.interaction.click",
+              "sentry.origin": "auto.http.browser.inp",
+              "browser.web_vital.inp.value": 120,
+              "browser.web_vital.cls.value": `k-${KEY}`,
+              "sentry.transaction": `/share?k=${KEY}`,
+              hostile,
+            },
+          })
+        ).toEqual({
+          span_id: "s1",
+          trace_id: "t1",
+          op: "ui.interaction.click",
+          status: "ok",
+          start_timestamp: 1,
+          timestamp: 2,
+          description: "Span withheld: scrubbing it failed",
+          data: {
+            "sentry.op": "ui.interaction.click",
+            "browser.web_vital.inp.value": 120,
+            "scrub.withheld": true,
+          },
+        });
+      });
     });
   });
 }

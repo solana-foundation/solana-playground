@@ -1,9 +1,5 @@
 import { createLogger } from "@/shared/lib/logger";
-import {
-  isSecretQueryTerm,
-  isTokenLike,
-  queryTermsOf,
-} from "@/shared/lib/url-secret.mjs";
+import { maskUrlWith } from "@/shared/lib/url-secret.mjs";
 
 import { CLUSTERS, Endpoint, offeredOf } from "./clusters";
 
@@ -59,64 +55,27 @@ export const hostOf = (url: string): string => new URL(url).host;
 /** What stands for a secret: four dots, whatever the secret's length */
 const MASK = "••••";
 
-/** A saved RPC's URL as the page draws it, and whether anything was masked */
-export interface MaskedUrl {
-  /** For display only: never parse or fetch it, its secrets are `••••` */
-  text: string;
-  /** Whether anything was masked, which the "API key" badge says */
-  masked: boolean;
-}
+const maskWithDots = maskUrlWith(MASK);
 
-/** What a stored value that is not a URL shows: nothing of it */
-const UNREADABLE: MaskedUrl = { text: MASK, masked: true };
+/** A saved RPC's URL as the page draws it: `text` is for display only, never parsed or fetched, its secrets are `••••` */
+export type MaskedUrl = ReturnType<typeof maskWithDots>;
+
+/** Whether `••••` stands for anything in the URL, a value that is not a URL included: what the "API key" badge says */
+export const isMasked = ({ outcome }: MaskedUrl) =>
+  outcome === "masked" || outcome === "unparsable";
 
 /**
  * A saved RPC's whole URL with every secret in it as `••••` (spec
- * `client-v2-custom-rpcs`): a non-empty query value under a key-like name;
- * a host label, path segment, query value or bare query term, or fragment
- * that looks like a token; and a username and password. Built from the
- * parsed URL's parts split by hand, not `URLSearchParams`, so names keep
- * their spelling and `••••` is never percent-encoded.
+ * `client-v2-custom-rpcs`), by {@link maskUrlWith}'s rule; a stored value
+ * that is not a URL shows as `••••` alone.
  */
 export const maskRpcUrl = (url: string): MaskedUrl => {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
+  const shown = maskWithDots(url);
+  if (shown.outcome === "unparsable") {
     // Never the value, nor the error quoting it: it may be a key
     log.info("a saved RPC URL does not parse; drawn fully masked");
-    return UNREADABLE;
   }
-  let masked = false;
-  const mask = () => {
-    masked = true;
-    return MASK;
-  };
-  /** The part itself, or `••••` when it reads as a token */
-  const maskToken = (part: string) => (isTokenLike(part) ? mask() : part);
-
-  // A username and a password, either or both, show as one `••••`
-  const auth = parsed.username || parsed.password ? `${mask()}@` : "";
-  const host =
-    parsed.hostname.split(".").map(maskToken).join(".") +
-    (parsed.port ? `:${parsed.port}` : "");
-  const path = parsed.pathname.split("/").map(maskToken).join("/");
-  const query = parsed.search
-    ? "?" +
-      queryTermsOf(parsed.search)
-        .map(([name, value]) => {
-          if (value === undefined) return maskToken(name);
-          return `${name}=${isSecretQueryTerm(name, value) ? mask() : value}`;
-        })
-        .join("&")
-    : "";
-  const hash = parsed.hash.slice(1);
-  const fragment = parsed.hash ? `#${maskToken(hash)}` : "";
-
-  return {
-    text: `${parsed.protocol}//${auth}${host}${path}${query}${fragment}`,
-    masked,
-  };
+  return shown;
 };
 
 /**
@@ -579,6 +538,8 @@ if (import.meta.vitest) {
         ["https://user:pass@r.test/", "https://••••@r.test/"],
         ["https://r.test/#a1b2c3d4e5f6g7h8i9", "https://r.test/#••••"],
         ["https://r.test/?a1b2c3d4e5f6g7h8i9", "https://r.test/?••••"],
+        // A bare term in padded base64: the padding is part of the run
+        ["https://r.test/?MTIzNDU2Nzg5MGFiY2RlZg==", "https://r.test/?••••"],
         // Every key-like name, each with a value too short to be a token
         ["https://r.test/?secret=x", "https://r.test/?secret=••••"],
         ["https://r.test/?auth=x", "https://r.test/?auth=••••"],
@@ -608,7 +569,7 @@ if (import.meta.vitest) {
           "https://r.test/••••/?api-key=••••",
         ],
       ])("masks the key in %s", (url, text) => {
-        expect(maskRpcUrl(url)).toEqual({ text, masked: true });
+        expect(maskRpcUrl(url)).toEqual({ text, outcome: "masked" });
       });
 
       it.each([
@@ -622,15 +583,40 @@ if (import.meta.vitest) {
         "https://r.test/?api-key=",
         "https://r.test/#section",
         "http://[::1]:8899/",
+        "https://r.test/?url=https://u:pw@x.test/", // By decision: a saved RPC holds no second URL with credentials, so its query is not searched for one
       ])("shows %s in full", (url) => {
-        expect(maskRpcUrl(url)).toEqual({ text: url, masked: false });
+        expect(maskRpcUrl(url)).toEqual({ text: url, outcome: "unchanged" });
       });
 
       it("draws a stored value that is not a URL fully masked", () => {
         expect(maskRpcUrl("not a url s3cr3t")).toEqual({
           text: "••••",
-          masked: true,
+          outcome: "unparsable",
         });
+      });
+
+      it.each([
+        {
+          name: "a URL with a key",
+          url: "https://r.test/?api-key=k",
+          badge: true,
+        },
+        { name: "a value that is not a URL", url: "not a url", badge: true },
+        {
+          name: "a URL the parser rewrites",
+          url: "https://R.test/",
+          badge: false,
+        },
+        { name: "a URL with no key", url: "https://r.test/", badge: false },
+      ])("answers $badge for the API key badge of $name", ({ url, badge }) => {
+        expect(isMasked(maskRpcUrl(url))).toBe(badge);
+      });
+
+      // Unhandled, the parser gives a host label `••••` back encoded
+      it("shows a URL masked in every part as it is when it masks it again", () => {
+        const shown = "https://••••@••••.rpc.test:8443/••••?api-key=••••#••••";
+
+        expect(maskRpcUrl(shown).text).toBe(shown);
       });
 
       it("never draws the key's length", () => {

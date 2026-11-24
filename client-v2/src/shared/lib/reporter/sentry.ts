@@ -3,7 +3,13 @@ import * as Sentry from "@sentry/react";
 
 import type { Level } from "../logger/severity";
 import type { LogEntry } from "../logger/types";
-import { scrubBreadcrumb, scrubEvent } from "./scrub";
+import {
+  scrubBreadcrumb,
+  scrubEvent,
+  scrubSamplingContext,
+  scrubSpan,
+  scrubTransactionWith,
+} from "./scrub";
 import type { Feedback, Reporter, ReporterConfig } from "./types";
 
 const SEVERITY: Record<Level, Sentry.SeverityLevel> = {
@@ -21,20 +27,62 @@ const SEVERITY: Record<Level, Sentry.SeverityLevel> = {
  */
 const LEFT_OUT = new Set(["GlobalHandlers", "Console"]);
 
+/** Redacts the span name each sampling context carries into an envelope header */
+const scrubSamplingContextIntegration = () => ({
+  name: "ScrubSamplingContext",
+  setup: (client: Sentry.BrowserClient) => {
+    client.on("createDsc", scrubSamplingContext);
+  },
+});
+
+/** Whether this session has reported a withheld transaction: one message says the scrub fails, more only cost quota */
+let hasReportedWithheld = false;
+
+/** Sends one message per session when a transaction is dropped because scrubbing it threw; `beforeSend` scrubs it */
+const reportWithheldTransaction = (failure: string | undefined) => {
+  if (hasReportedWithheld) return;
+  hasReportedWithheld = true;
+  const scope = new Sentry.Scope();
+  scope.setTag("scrub_error", failure ?? "unknown");
+  // Fresh scopes: the value the scrub threw on usually sits in the app's, and would withhold this message too
+  Sentry.withIsolationScope(new Sentry.Scope(), () =>
+    Sentry.getClient()?.captureMessage(
+      "Transaction withheld: scrubbing it failed",
+      "warning",
+      undefined,
+      scope
+    )
+  );
+};
+
+const scrubTransaction = scrubTransactionWith(reportWithheldTransaction);
+
 /** What `init` passes `Sentry.init`, and the integration test passes it too */
 export const sentryOptions = ({
   dsn,
   release,
   environment,
+  tracesSampleRate,
 }: ReporterConfig): Sentry.BrowserOptions => ({
   dsn,
   release,
   environment,
-  integrations: (defaults) =>
-    defaults.filter((integration) => !LEFT_OUT.has(integration.name)),
+  tracesSampleRate,
+  // No `sentry-trace` or `baggage` on any request, so the API functions sample at their own rate
+  tracePropagationTargets: [],
+  // Only a static transaction runs `beforeSendTransaction`, the one hook that can drop it
+  traceLifecycle: "static",
+  integrations: (defaults) => [
+    ...defaults.filter((integration) => !LEFT_OUT.has(integration.name)),
+    Sentry.browserTracingIntegration(),
+    scrubSamplingContextIntegration(),
+  ],
   // Neither the user's program output nor a secret key leaves the page
   beforeBreadcrumb: scrubBreadcrumb,
   beforeSend: scrubEvent,
+  beforeSendTransaction: scrubTransaction,
+  // Static mode sends INP as a standalone span; only a `withStaticSpan` callback runs on it
+  beforeSendSpan: Sentry.withStaticSpan(scrubSpan),
 });
 
 const init = (config: ReporterConfig) => {

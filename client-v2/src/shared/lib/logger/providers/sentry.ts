@@ -12,14 +12,16 @@ export const sentryProvider = ({
   dsn,
   release,
   environment,
+  tracesSampleRate,
 }: {
   dsn?: string;
   release?: string;
   environment?: string;
+  tracesSampleRate: number;
 }): LogProvider => {
   if (!dsn) return { log: () => {} };
 
-  reporter.init({ dsn, release, environment });
+  reporter.init({ dsn, release, environment, tracesSampleRate });
 
   return {
     log: (entry) => {
