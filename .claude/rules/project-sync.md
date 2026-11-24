@@ -241,6 +241,16 @@ when a session reads a file matching the `paths` in the frontmatter.
   stays local through reconcile and sign-out, and the outstanding question
   stops its pushes until "Try again". The client never counts and the
   explorer never refuses a project for the cap.
+- **Conversations have account caps too, and never create a project.**
+  `appendMessages` measures the account's live threads, messages and
+  `messages.bytes` (a stored generated column) before and after each push,
+  under a per-account `pg_advisory_xact_lock` taken first, and rolls back a
+  push that grows a measure past `CHAT_LIMITS` (`model/chat-limits.mjs`): a
+  413 naming the cap, which `PgChatSync.limit()` holds for the panel's row
+  until a push is taken again. A push for a project id with no row of the
+  account is a 409 `no-project` and creates nothing (HOO-2882): the sign-in
+  dump uploads threads before their projects, so the thread stays owed and
+  `PgProjectSync.onDidAccept` pushes it again (`effects/chat-thread`).
 - **`/api/projects` still takes the pre-hoodieshq/solana-playground#40 client's body.** A tab open
   across that deploy sends `{snapshot: {files}, baseUpdatedAt, force: false}`
   and drops every status but 409 and 413 silently, so `describeWrite` reads

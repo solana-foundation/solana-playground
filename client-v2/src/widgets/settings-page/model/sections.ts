@@ -188,6 +188,19 @@ export const ROWS: Record<string, RowCopy | undefined> = {
   },
 };
 
+/**
+ * The Analytics row of Advanced. Not a `PgSettings` entry, so not in `ROWS`: a
+ * setting is two-valued with a default, and the analytics choice has a third
+ * state, not asked yet (`analytics-consent`).
+ */
+// Annotated rather than `satisfies RowCopy`: the pinned prettier cannot parse
+// `satisfies`
+export const ANALYTICS_ROW: RowCopy = {
+  section: "advanced",
+  label: "Analytics",
+  help: "Send usage events to Google Analytics.",
+};
+
 /** Settings already reported, so a page that re-renders on every scroll reports each once */
 const reported = new Set<string>();
 

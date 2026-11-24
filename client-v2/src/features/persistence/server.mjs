@@ -22,9 +22,13 @@ export {
   getThread,
   listMessages,
   listThreads,
+  NoProject,
   NotYours,
+  OverChatLimit,
   ThreadDeleted,
 } from "./model/conversations.mjs";
+
+export { CHAT_LIMITS, NO_PROJECT_REASON } from "./model/chat-limits.mjs";
 
 export {
   batchPush,
@@ -35,7 +39,13 @@ export {
 
 export { DELETED_REASON, isDeletedScope } from "./model/deleted.mjs";
 
-export { getPool, isConfigured, isEnabled, query } from "./model/db.mjs";
+export {
+  getPool,
+  isConfigured,
+  isEnabled,
+  query,
+  transaction,
+} from "./model/db.mjs";
 
 export { missingDatabaseEnv } from "./config.mjs";
 
@@ -46,6 +56,7 @@ export {
 } from "./model/project-write.mjs";
 
 export {
+  clearDeletedProjectNames,
   deleteProject,
   getProject,
   listProjects,

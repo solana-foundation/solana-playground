@@ -4,11 +4,19 @@
 import { PgSession } from "./model/session";
 
 export {
+  isDeletionFailure,
   isSignInFailure,
   PgSession,
   SIGN_IN_FAILED_UNKNOWN,
 } from "./model/session";
-export type { ReadState, SessionUser, SignInState } from "./model/session";
+export type {
+  AccountDeleted,
+  DeletionFailure,
+  DeletionFailureReason,
+  ReadState,
+  SessionUser,
+  SignInState,
+} from "./model/session";
 export type { SignInFailure } from "./model/telemetry";
 export { SIGNED_OUT_REASON } from "./config.mjs";
 export { useSignedIn } from "./model/use-signed-in";

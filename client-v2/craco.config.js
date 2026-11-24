@@ -29,28 +29,6 @@ const warnAboutMissingObservabilityIds = () => {
 const { assertPublicEnv } = require("./scripts/public-env.mjs");
 
 const HtmlWebpackPlugin = require("html-webpack-plugin");
-const { insertGoogleTag } = require("./scripts/google-tag.mjs");
-
-/** Writes Google's tag into index.html; added to the build only with an id */
-class GoogleTagPlugin {
-  constructor(id) {
-    this.id = id;
-  }
-
-  apply(compiler) {
-    compiler.hooks.compilation.tap("GoogleTagPlugin", (compilation) => {
-      HtmlWebpackPlugin.getHooks(compilation).beforeEmit.tap(
-        "GoogleTagPlugin",
-        // Only the app carries the tag: never the sandbox or the key page
-        (data) =>
-          data.outputName === "index.html"
-            ? { ...data, html: insertGoogleTag(data.html, this.id) }
-            : data
-      );
-    });
-  }
-}
-
 const { DEV_SERVER_ROOT_HEADER } = require("./scripts/dev-server-owner.mjs");
 const { serveApiRoute } = require("./scripts/api-route.mjs");
 const { sentryEnabled } = require("./scripts/sentry-gate.mjs");
@@ -370,10 +348,6 @@ module.exports = {
       }
       const swaps = trackerSwaps(process.env);
       if (swaps.size) webpackConfig.plugins.push(new SwapFilesPlugin(swaps));
-
-      // In <head> from the first byte, rather than once the bundle has run
-      const gaId = process.env.REACT_APP_GA_MEASUREMENT_ID;
-      if (gaId) webpackConfig.plugins.push(new GoogleTagPlugin(gaId));
 
       // Resolve WASM and CommonJS
       webpackConfig.resolve.extensions.push(".wasm");

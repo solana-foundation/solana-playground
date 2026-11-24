@@ -15,6 +15,7 @@
       "maxDuration": 300
     }
   },
+  "crons": [{ "path": "/api/retention", "schedule": "0 3 * * *" }],
   "headers": [
     {
       "source": "/(.*)",
@@ -27,6 +28,11 @@
           "value": "frame-ancestors 'none'; img-src 'self' data: blob: https://avatars.githubusercontent.com https://raw.githubusercontent.com https://*.google-analytics.com https://*.googletagmanager.com https://*.g.doubleclick.net https://www.google.com; connect-src 'self' https: wss: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*"
         }
       ]
+    },
+    {
+      "source": "/(.*)",
+      "missing": [{ "type": "host", "value": "playground.solana.com" }],
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
     },
     {
       "source": "/static/(.*)",

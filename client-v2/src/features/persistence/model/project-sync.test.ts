@@ -187,6 +187,40 @@ describe("PgProjectSync", () => {
     );
   });
 
+  it("tells listeners the server accepted a push, and only then", async () => {
+    // A conversation refused for `no-project` follows its project up on this
+    // signal (HOO-2882); a refusal must not send it
+    let status = 400;
+    stubFetch((url: string) =>
+      url === "/api/sync"
+        ? Promise.resolve(okProbe)
+        : Promise.resolve(
+            status === 200
+              ? {
+                  ok: true,
+                  json: async (): Promise<unknown> => ({ updatedAt: "t1" }),
+                }
+              : {
+                  ok: false,
+                  status,
+                  json: async (): Promise<unknown> => ({ error: "no" }),
+                }
+          )
+    );
+    await signedIn();
+    const accepted = vi.fn();
+    const sub = PgProjectSync.onDidAccept(accepted);
+
+    await PgProjectSync.push("p1", { files: { a: "1" } });
+    expect(accepted).not.toHaveBeenCalled();
+
+    status = 200;
+    expect(await PgProjectSync.push("p1", { files: { a: "1" } })).toBe("ok");
+    expect(accepted).toHaveBeenCalledTimes(1);
+    expect(accepted).toHaveBeenCalledWith("p1");
+    sub.dispose();
+  });
+
   it("records what the server accepted, so the next push is a swap against it", async () => {
     stubFetch((url: string) =>
       url === "/api/sync"

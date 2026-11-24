@@ -59,10 +59,13 @@ describe("BaseRunButton", () => {
 });
 
 describe("BaseRunCallout", () => {
-  it("names the docs page before a run, with a link to it", () => {
+  it("names the page the link claims before a run, with a link to it", () => {
     const { node } = callout({ kind: "idle" });
     expect(node?.getAttribute("data-state")).toBe("source");
-    expect(node?.textContent).toContain("From solana.com: Quickstart");
+    expect(node?.textContent).toContain("Opened from a link: Quickstart");
+    expect(node?.textContent).toContain(
+      "The link says it comes from solana.com. Playground can't check that"
+    );
     const link = screen.getByRole("link", { name: "View the docs page" });
     expect(link.getAttribute("href")).toBe(SOURCE.from);
     expect(link.getAttribute("target")).toBe("_blank");
@@ -73,7 +76,34 @@ describe("BaseRunCallout", () => {
     expect(
       screen.queryByRole("link", { name: "View the docs page" })
     ).toBeNull();
-    expect(screen.getByText("From a docs link: Hello")).toBeTruthy();
+    expect(screen.getByText("Opened from a link: Hello")).toBeTruthy();
+    expect(
+      screen.getByText(/Playground can't check where this code came from/)
+    ).toBeTruthy();
+  });
+
+  it("never vouches for a link's code as solana.com's", () => {
+    // Anyone can write a link with this source and code of their own
+    const { node } = calloutFrom({
+      title: "Official Quickstart",
+      from: "https://solana.com/docs/quickstart",
+    })({ kind: "idle" });
+    expect(node?.textContent).not.toMatch(/From solana\.com/);
+    expect(node?.textContent).toMatch(/read the code before you run it/);
+  });
+
+  it("keeps the callout as it was while the first Run is asked about", () => {
+    const { node } = callout({
+      kind: "confirm",
+      link: {
+        name: "quickstart.ts",
+        code: "x",
+        title: SOURCE.title,
+        from: SOURCE.from,
+      },
+      previous: { kind: "idle" },
+    });
+    expect(node?.getAttribute("data-state")).toBe("source");
   });
 
   it("shows nothing for a project from no link before it is run", () => {
