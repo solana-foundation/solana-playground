@@ -22,6 +22,18 @@ import { PgAssistant } from "../../views/sidebar/assistant/store";
 import { openThread } from "../chat-thread/open-thread";
 
 /**
+ * One step of a teardown (`relinquish`, `releaseDeletedAccount`): a step
+ * that fails is reported under `what` and is no reason to skip the next.
+ */
+const step = async (what: string, fn: () => unknown) => {
+  try {
+    await fn();
+  } catch (e) {
+    report(what, e);
+  }
+};
+
+/**
  * Restore the signed-in user on load, and reconcile this browser with the
  * account.
  *
@@ -288,14 +300,6 @@ export const session = (): Disposable => {
     }
 
     return async () => {
-      const step = async (what: string, fn: () => unknown) => {
-        try {
-          await fn();
-        } catch (e) {
-          report(what, e);
-        }
-      };
-
       // Stopped on its own as well: with no thread open the close below does
       // nothing, and a turn running there would carry on for the next account
       await step("stop turn", () => PgAssistant.stopTurn());
@@ -339,15 +343,6 @@ export const session = (): Disposable => {
    */
   const releaseDeletedAccount = async () => {
     PgAccountList.forget();
-    // One step failing is no reason to skip the next: each reports its own
-    const runReportingFor = (what: string) => async (fn: () => unknown) => {
-      try {
-        await fn();
-      } catch (e) {
-        report(what, e);
-      }
-    };
-
     // eslint-disable-next-line unicorn/no-null -- `forget`'s "nothing known, keep every thread"
     let handed: HandOver | null = null;
     try {
@@ -366,23 +361,17 @@ export const session = (): Disposable => {
     }
 
     return async () => {
-      await runReportingFor("stop turn")(() => PgAssistant.stopTurn());
-      await runReportingFor("close thread")(() => PgAssistant.closeThread());
-      await runReportingFor("drop unsaved messages")(() => PgAssistant.clear());
+      await step("stop turn", () => PgAssistant.stopTurn());
+      await step("close thread", () => PgAssistant.closeThread());
+      await step("drop unsaved messages", () => PgAssistant.clear());
       // A write the panel queued before closing lands now, so `forget` sees it
-      await runReportingFor("wait for chat writes")(() =>
-        PgAssistant.whenPersisted()
-      );
-      await runReportingFor("forget conversations")(() =>
-        PgChatSync.forget(handed)
-      );
-      await runReportingFor("release local projects")(() =>
+      await step("wait for chat writes", () => PgAssistant.whenPersisted());
+      await step("forget conversations", () => PgChatSync.forget(handed));
+      await step("release local projects", () =>
         releaseProjectsUnchangedSince(marks)
       );
-      await runReportingFor("close thread")(() => PgAssistant.closeThread());
-      await runReportingFor("forget account")(() =>
-        PgProjectSync.forgetAccount()
-      );
+      await step("close thread", () => PgAssistant.closeThread());
+      await step("forget account", () => PgProjectSync.forgetAccount());
     };
   };
 

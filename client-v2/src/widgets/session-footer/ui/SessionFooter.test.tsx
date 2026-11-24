@@ -821,7 +821,7 @@ describe("a deletion that settles after the menu closed", () => {
     ).toBe("https://github.com/settings/applications");
   });
 
-  it("toasts nothing when GitHub revoked the grant", async () => {
+  it("toasts the deletion alone when GitHub revoked the grant", async () => {
     await signInAsTester();
     const settle = await deleteThenClose();
 
@@ -830,12 +830,17 @@ describe("a deletion that settles after the menu closed", () => {
       return { githubRevoked: true };
     });
 
-    await waitFor(() =>
-      expect(eventsNamed("session_delete_account_ended")).toEqual([
-        { outcome: "ok" },
-      ])
-    );
-    expect(setToast).not.toHaveBeenCalled();
+    await waitFor(() => expect(setToast).toHaveBeenCalledTimes(1));
+    expect(eventsNamed("session_delete_account_ended")).toEqual([
+      { outcome: "ok" },
+    ]);
+    drawnToast(setToast);
+    expect(screen.getByText("Your account was deleted.")).toBeTruthy();
+    expect(
+      screen.queryByRole("link", {
+        name: "Remove Playground from your GitHub settings too.",
+      })
+    ).toBeNull();
   });
 
   it("toasts the failure with its reason", async () => {

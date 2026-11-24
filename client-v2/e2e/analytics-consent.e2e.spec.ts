@@ -1,8 +1,9 @@
 import type { Page } from "@playwright/test";
 
 import { ANALYTICS_CHOICE_KEY } from "./analytics-choice";
-import { expect, LONG, test } from "./fixtures";
-import { linesOn, linesRead } from "./telemetry";
+import { expect, LONG, seedWorkspace, test } from "./fixtures";
+import { lineOf, linesOn, linesRead } from "./telemetry";
+import { WIDE_DESK } from "./viewports";
 
 const GOOGLE = /googletagmanager\.com|google-analytics\.com/;
 const GTAG = /googletagmanager\.com\/gtag\/js/;
@@ -90,16 +91,37 @@ test("analytics-consent: A fresh browser", async ({ page }) => {
 });
 
 test("analytics-consent: A visitor who declines", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize(WIDE_DESK);
   await asFirstVisit(page);
   const google = await watchGoogle(page);
+  const lines = linesOn(page);
+  // A deploy needs a built program and a cluster; a build that the server
+  // refuses stands in, tracking `build_started` and `build_failed` all the same
+  await page.route("**/build", (route) =>
+    route.fulfill({ status: 500, body: "boom" })
+  );
   await page.goto("/");
 
   await banner(page).getByRole("button", { name: "Decline" }).click();
+  await expect(banner(page)).toBeHidden();
   // Events that would reach GA4 had the visitor allowed it
   await openSettings(page);
   await closeSettings(page);
-  await openSettings(page);
+  await seedWorkspace(page);
+  await page.locator("#flow-stage-tab-build").click();
+  await page.getByRole("button", { name: "Build", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Could not build" })
+  ).toBeVisible(LONG);
+  await expect
+    .poll(async () => {
+      await linesRead(lines);
+      return lineOf(lines, "build_failed") !== undefined;
+    })
+    .toBe(true);
 
+  expect(lineOf(lines, "build_started")).toBeDefined();
   expect(google).toEqual([]);
   expect(await queuedEvents(page)).toBeUndefined();
 });
@@ -178,7 +200,7 @@ test("analytics-consent: The banner after an answer", async ({ page }) => {
 
 test("analytics-consent: Turning analytics off", async ({ page }) => {
   await answered(page, "allowed");
-  await watchGoogle(page);
+  const google = await watchGoogle(page);
   await page.goto("/");
   await expect(
     page.getByRole("heading", { name: "Where should we begin?" })
@@ -196,10 +218,27 @@ test("analytics-consent: Turning analytics off", async ({ page }) => {
   await expect(analyticsSwitch(page)).not.toBeChecked();
   expect(await storedChoice(page)).toBe("declined");
   expect(await page.evaluate(() => document.cookie)).not.toContain("_ga");
-  const before = await queuedEvents(page);
+  const gtagOnWindow = () =>
+    page.evaluate(() => {
+      const { gtag, dataLayer } = window as {
+        gtag?: unknown;
+        dataLayer?: unknown;
+      };
+      return { gtag: typeof gtag, dataLayer: typeof dataLayer };
+    });
+  expect(await gtagOnWindow()).toEqual({
+    gtag: "undefined",
+    dataLayer: "undefined",
+  });
+  const sent = google.length;
+  // Tracked events, which would reach `gtag` were it still on `window`
   await closeSettings(page);
   await openSettings(page);
-  expect(await queuedEvents(page)).toEqual(before);
+  expect(await gtagOnWindow()).toEqual({
+    gtag: "undefined",
+    dataLayer: "undefined",
+  });
+  expect(google).toHaveLength(sent);
 });
 
 test("analytics-consent: Turning analytics on from Settings", async ({

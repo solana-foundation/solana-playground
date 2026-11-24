@@ -34,7 +34,7 @@ request SHALL go to `googletagmanager.com` or `google-analytics.com`, and no
 gtag queue SHALL exist on `window`.
 
 #### Scenario: A visitor who declines
-- **WHEN** a visitor presses Decline on the banner and then builds and deploys a program
+- **WHEN** a visitor presses Decline on the banner and then opens Settings and builds a program
 - **THEN** no request goes to `googletagmanager.com` during the visit
 
 #### Scenario: A visitor who allows

@@ -55,10 +55,7 @@ const isBearer = (header, secret) => {
  * }} deps
  */
 export const handleWith = (deps) => async (req, res) => {
-  if (req.method !== "GET") {
-    res.setHeader("allow", "GET");
-    return sendJson(res, 405, { error: "Use GET." });
-  }
+  // First, so any request to a deployment without the secret answers 503
   const { CRON_SECRET } = cronEnv();
   if (!CRON_SECRET) {
     // Reported: with no secret the job never runs, and nothing else says so
@@ -66,6 +63,10 @@ export const handleWith = (deps) => async (req, res) => {
       report: true,
     });
     return sendJson(res, 503, { error: "The retention job is not configured" });
+  }
+  if (req.method !== "GET") {
+    res.setHeader("allow", "GET");
+    return sendJson(res, 405, { error: "Use GET." });
   }
   if (!isBearer(req.headers.authorization, CRON_SECRET)) {
     // Not reported: anyone can call the route. A run of these in the log

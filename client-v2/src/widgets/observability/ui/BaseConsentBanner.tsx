@@ -17,8 +17,7 @@ export const BaseConsentBanner = ({
   onAllow,
 }: BaseConsentBannerProps) => (
   <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 px-4 pb-4">
-    <div
-      role="region"
+    <section
       aria-label="Analytics consent"
       className="pointer-events-auto mx-auto flex max-w-160 flex-col gap-3 rounded-xl border border-border bg-popover p-4 font-sans text-popover-foreground shadow-lg sm:flex-row sm:items-center sm:gap-4"
     >
@@ -40,6 +39,6 @@ export const BaseConsentBanner = ({
         </Button>
         <Button onClick={onAllow}>Allow</Button>
       </div>
-    </div>
+    </section>
   </div>
 );

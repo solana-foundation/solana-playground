@@ -5,9 +5,6 @@ import { readConsent, subscribeToConsent } from "@/shared/lib/telemetry";
 import { BaseConsentBanner } from "./BaseConsentBanner";
 import { chooseAndTellFor } from "./choose-consent";
 
-const subscribe = (onChange: () => void) =>
-  subscribeToConsent(() => onChange());
-
 const chooseOnBanner = chooseAndTellFor("banner");
 
 /**
@@ -15,7 +12,7 @@ const chooseOnBanner = chooseAndTellFor("banner");
  * and either button stores the answer, which closes it.
  */
 export const ConsentBanner = () => {
-  const choice = useSyncExternalStore(subscribe, readConsent);
+  const choice = useSyncExternalStore(subscribeToConsent, readConsent);
   // eslint-disable-next-line unicorn/no-null -- a component's return type admits `null`, not `undefined`
   if (choice !== "unanswered") return null;
   return (

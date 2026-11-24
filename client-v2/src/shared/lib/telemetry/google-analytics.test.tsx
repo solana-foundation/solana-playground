@@ -3,6 +3,7 @@ import { act, render } from "@testing-library/react";
 import { initLogger, memoryProvider, resetLogger } from "../logger";
 import { writeConsent } from "./consent";
 import { GoogleAnalytics } from "./google-analytics";
+import { ga4Provider } from "./providers/ga4";
 
 const gtagScripts = () =>
   document.querySelectorAll<HTMLScriptElement>(
@@ -16,6 +17,8 @@ afterEach(() => {
   gtagScripts().forEach((script) => script.remove());
   window.localStorage.clear();
   Reflect.deleteProperty(window, "ga-disable-G-TEST");
+  delete window.gtag;
+  delete window.dataLayer;
   document.cookie = "_ga=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
   document.cookie = "_ga_TEST=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
 });
@@ -108,5 +111,42 @@ describe("GoogleAnalytics", () => {
     act(() => writeConsent("allowed"));
 
     expect(disableFlag("G-TEST")).toBe(false);
+  });
+
+  it("should take gtag and its queue off window when the choice turns to declined", () => {
+    writeConsent("allowed");
+    render(<GoogleAnalytics measurementId="G-TEST" />);
+    const provider = ga4Provider({ measurementId: "G-TEST" });
+    provider.send({ name: "dply_started", params: {} });
+    expect(window.gtag).toBeDefined();
+
+    act(() => writeConsent("declined"));
+    provider.send({ name: "dply_succeeded", params: {} });
+
+    expect(window.gtag).toBeUndefined();
+    expect(window.dataLayer).toBeUndefined();
+    // Takes the parked queue back, so no later test inherits it
+    act(() => writeConsent("allowed"));
+  });
+
+  it("should give a later Allow the queue gtag.js already drains, and send to it again", () => {
+    writeConsent("allowed");
+    render(<GoogleAnalytics measurementId="G-TEST" />);
+    const provider = ga4Provider({ measurementId: "G-TEST" });
+    provider.send({ name: "dply_started", params: {} });
+    const drained = window.dataLayer;
+    act(() => writeConsent("declined"));
+    provider.send({ name: "dply_failed", params: {} });
+
+    act(() => writeConsent("allowed"));
+    provider.send({ name: "dply_succeeded", params: {} });
+
+    expect(window.dataLayer).toBe(drained);
+    const events = (window.dataLayer ?? [])
+      .map((call) => Array.from(call as ArrayLike<unknown>))
+      .filter(([command]) => command === "event")
+      .map(([, name]) => name);
+    expect(events).toEqual(["dply_started", "dply_succeeded"]);
+    expect(gtagScripts()).toHaveLength(1);
   });
 });

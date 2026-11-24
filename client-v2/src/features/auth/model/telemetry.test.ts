@@ -191,6 +191,22 @@ describe("auth telemetry", () => {
           .mockResolvedValue({ ok: false, status: 500 } as Response),
     ],
     [
+      "answers 401",
+      () =>
+        vi
+          .spyOn(globalThis, "fetch")
+          .mockResolvedValue({ ok: false, status: 401 } as Response),
+    ],
+    [
+      "times out",
+      () =>
+        vi
+          .spyOn(globalThis, "fetch")
+          .mockRejectedValue(
+            new DOMException("signal timed out", "TimeoutError")
+          ),
+    ],
+    [
       "fails on the network",
       () =>
         vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline")),

@@ -10,8 +10,32 @@ const GTAG_SRC = "https://www.googletagmanager.com/gtag/js";
 const log = createLogger("telemetry:google-analytics");
 
 /** Google's documented switch: while it is true on `window`, gtag.js sends nothing for the id */
-const setDisabled = (measurementId: string, disabled: boolean) => {
-  Reflect.set(window, `ga-disable-${measurementId}`, disabled);
+const disableGa = (measurementId: string) => {
+  Reflect.set(window, `ga-disable-${measurementId}`, true);
+};
+
+const enableGa = (measurementId: string) => {
+  Reflect.set(window, `ga-disable-${measurementId}`, false);
+};
+
+/**
+ * The queue taken off `window` by a decline, kept for a later Allow. gtag.js,
+ * once loaded, drains the array it found by hooking that array's `push`, and
+ * it loads once a page: a fresh array would never be read.
+ */
+let parkedQueue: unknown[] | undefined;
+
+/** Takes the gtag queue off `window`, so none exists while the choice is not `allowed` */
+const parkGtagQueue = () => {
+  if (window.dataLayer) parkedQueue = window.dataLayer;
+  delete window.gtag;
+  delete window.dataLayer;
+};
+
+/** Puts a parked queue back, for `ga4Provider` to install `gtag` on at its next event */
+const restoreGtagQueue = () => {
+  if (parkedQueue && !window.dataLayer) window.dataLayer = parkedQueue;
+  parkedQueue = undefined;
 };
 
 const injectGtag = (measurementId: string) => {
@@ -33,11 +57,13 @@ const injectGtag = (measurementId: string) => {
  * renders nothing. Without an id, or while the choice is not `allowed`,
  * nothing is injected.
  *
- * A choice that turns to `declined` after gtag.js ran sets
- * `ga-disable-<id>`, which stops the script sending; an Allow after that
- * clears the switch. While the choice is `declined` or `unanswered` the
- * `_ga` cookies are expired, including those builds from before the
- * question set without asking.
+ * A choice that turns to `declined` (or `unanswered`) after gtag.js ran sets
+ * `ga-disable-<id>`, which stops the script sending, and takes `gtag` and
+ * `dataLayer` off `window`; an Allow after that clears the switch and puts
+ * the queue back, and `ga4Provider` installs `gtag` again at the next event.
+ * While the choice is `declined` or `unanswered` the `_ga` cookies are
+ * expired, including those builds from before the question set without
+ * asking.
  */
 export const GoogleAnalytics = ({
   measurementId,
@@ -48,12 +74,15 @@ export const GoogleAnalytics = ({
     if (!measurementId) return;
     const apply = (choice: Consent) => {
       if (choice === "allowed") {
-        setDisabled(measurementId, false);
+        enableGa(measurementId);
+        restoreGtagQueue();
         injectGtag(measurementId);
         return;
       }
-      if (choice === "declined") setDisabled(measurementId, true);
-      // Unanswered too: builds before the question set them without asking
+      // Unanswered too: another tab's `localStorage.clear()` forgets an
+      // Allow, and builds before the question set cookies without asking
+      disableGa(measurementId);
+      parkGtagQueue();
       expireGaCookies(window.location.hostname);
     };
     apply(readConsent());

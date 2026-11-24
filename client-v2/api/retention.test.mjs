@@ -95,6 +95,33 @@ describe("/api/retention", () => {
     );
   });
 
+  /** Any request, while CRON_SECRET is unset, answers 503, reported, running nothing */
+  const answers503Unconfigured = async (request) => {
+    delete process.env.CRON_SECRET;
+    let ran = 0;
+    const step = async () => ++ran;
+    const handler = handleWith({
+      steps: { sessions: step, buildAudit: step, projectNames: step },
+    });
+    const res = await call(handler, request);
+    assert.equal(res.statusCode, 503);
+    assert.equal(res.headers.allow, undefined);
+    assert.equal(ran, 0);
+    assert.deepEqual(
+      entries.map(({ level, report }) => ({ level, report })),
+      [{ level: "error", report: true }]
+    );
+  };
+
+  it("answers 503, not 405, to another method while CRON_SECRET is unset", () =>
+    answers503Unconfigured({
+      method: "POST",
+      authorization: `Bearer ${SECRET}`,
+    }));
+
+  it("answers 503, not 401, to a GET without the header while CRON_SECRET is unset", () =>
+    answers503Unconfigured({ method: "GET" }));
+
   for (const [title, authorization] of [
     ["no Authorization header", undefined],
     [

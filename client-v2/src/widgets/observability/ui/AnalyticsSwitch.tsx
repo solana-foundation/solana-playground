@@ -5,9 +5,6 @@ import { Switch } from "@/shared/ui/switch";
 
 import { chooseAndTellFor } from "./choose-consent";
 
-const subscribe = (onChange: () => void) =>
-  subscribeToConsent(() => onChange());
-
 const chooseInSettings = chooseAndTellFor("settings");
 
 interface BaseAnalyticsSwitchProps {
@@ -35,7 +32,7 @@ export const BaseAnalyticsSwitch = ({
  * `allowed`, off for `unanswered` or `declined`.
  */
 export const AnalyticsSwitch = ({ id }: { id?: string }) => {
-  const choice = useSyncExternalStore(subscribe, readConsent);
+  const choice = useSyncExternalStore(subscribeToConsent, readConsent);
   return (
     <BaseAnalyticsSwitch
       id={id}

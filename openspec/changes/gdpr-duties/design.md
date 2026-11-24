@@ -88,9 +88,15 @@ teardown then removes it from the browser seconds before the server deletes it.
 So the session effect registers a second hook, `setOnAccountDeleted`, whose
 teardown is the sign-out teardown minus the upload:
 
-- projects: `releaseLocalProjects` as is. It removes only projects whose files
-  match this account's sync mark, so an unpushed edit or a project never synced
-  stays.
+- projects: before the `DELETE`, `readProjectMarks` reads each project's sync
+  mark; after the `200`, `releaseProjectsUnchangedSince` applies
+  `releaseLocalProjects`' test (files match this account's mark, so an unpushed
+  edit or a project never synced stays) and also keeps any project whose mark
+  changed or appeared since the read. Another tab's push during the deletion
+  updates the shared mark, and that project stays.
+- the read half first runs `PgThreadFence.claimUnowned`, as sign-out does, so
+  threads a failed owner write left unowned stay this account's and never
+  upload into the next one.
 - chats: `PgChatSync.forget` takes the threads that are fully on the server
   without pushing them. `chat-sync` gains a read, `syncedThreads()`, answering
   the same `HandOver` shape `pushAll` returns, for threads whose every local
@@ -122,8 +128,9 @@ first send while `allowed`, and drops the event otherwise. `GoogleAnalytics`
 subscribes and injects `gtag.js` once the choice becomes `allowed`. On every
 `declined` it reads or hears, `GoogleAnalytics` sets
 `window["ga-disable-<measurementId>"] = true`, Google's documented switch that
-stops `gtag.js` from sending, and expires the `_ga` and `_ga_*` cookies on the
-app's domain (`ga-cookies.ts`). It does so only while mounted with a
+stops `gtag.js` from sending, removes `window.gtag` and `window.dataLayer` so no
+queue exists while declined, and expires the `_ga` and `_ga_*` cookies on the
+app's domain (`ga-cookies.ts`). A later Allow reinstalls the queue. It does so only while mounted with a
 measurement id, which is the only case in which GA4 runs.
 
 A Settings entry through `createSetting` was the alternative. A setting is

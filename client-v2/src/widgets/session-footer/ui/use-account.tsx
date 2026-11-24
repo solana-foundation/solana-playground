@@ -47,6 +47,17 @@ const warnWallet = () =>
     { options: { name: "wallet-failed" } }
   );
 
+/** A deletion that succeeded behind a closed menu, GitHub's grant revoked */
+const toastAccountDeleted = () =>
+  PgView.setToast(
+    () => (
+      <span>
+        <strong>{ACCOUNT_DELETED}</strong>
+      </span>
+    ),
+    { options: { name: "account-deleted" } }
+  );
+
 /** A deletion that succeeded behind a closed menu, GitHub's grant left standing */
 const toastRevokeAtGithub = () =>
   PgView.setToast(
@@ -301,14 +312,15 @@ export const useAccount = ({
         });
         // Said in the menu that deleted, never in one opened later. The
         // GitHub line goes with it: the person can still remove the app there.
-        // Closed over meanwhile, that line is a toast, since nothing else
-        // would ever say it
+        // Closed over meanwhile, what the menu would say is a toast, since
+        // nothing else would ever say it
         if (menuOpen.current) {
           setDeleteState({ status: "done", githubRevoked });
           return;
         }
         setDeleteState({ status: "idle" });
-        if (!githubRevoked) toastRevokeAtGithub();
+        if (githubRevoked) toastAccountDeleted();
+        else toastRevokeAtGithub();
       })
       .catch((error: unknown) => {
         // `PgSession.deleteAccount` has logged and reported a refusal; the
