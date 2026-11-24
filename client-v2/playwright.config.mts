@@ -13,6 +13,10 @@ import {
 } from "./scripts/e2e-queue.mjs";
 import { CHROMIUM, FIREFOX } from "./scripts/e2e-projects.mjs";
 import { fullSuiteRefusal } from "./scripts/e2e-scope.mjs";
+import {
+  ANALYTICS_CHOICE_KEY,
+  TEST_MEASUREMENT_ID,
+} from "./e2e/analytics-choice";
 
 // `craco start` binds `PORT`, so the same variable picks the server the run
 // uses. Unset locally, the queue below picks it from the run's slot.
@@ -251,7 +255,13 @@ export default defineConfig({
       origins: [
         {
           origin,
-          localStorage: [{ name: "layout", value: TREE_OPEN_LAYOUT }],
+          localStorage: [
+            { name: "layout", value: TREE_OPEN_LAYOUT },
+            // Already answered, so the consent banner does not sit over the
+            // console bar and the composer; `analytics-consent.e2e.spec.ts`
+            // forgets it to see the banner
+            { name: ANALYTICS_CHOICE_KEY, value: "declined" },
+          ],
         },
       ],
     },
@@ -318,6 +328,9 @@ export default defineConfig({
         process.env.REACT_APP_WALLET_KEY_ORIGIN ?? "",
       REACT_APP_WALLET_APP_ORIGIN:
         process.env.REACT_APP_WALLET_APP_ORIGIN ?? "",
+      // A made-up GA4 id, so the consent banner and the gtag path exist in
+      // the bundle; the choice stored above keeps every other spec off Google
+      REACT_APP_GA_MEASUREMENT_ID: TEST_MEASUREMENT_ID,
       REACT_APP_DEVNET_RPC_URL: "",
       REACT_APP_MAINNET_RPC_URL: "",
       REACT_APP_TESTNET_RPC_URL: "",

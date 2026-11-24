@@ -41,6 +41,9 @@ as soon as the Root Directory points at `client-v2`.
      `api/conversations.mjs` answer its writes with `403`. A production build with `PG_AI_API_KEY` fails
      without it (`scripts/check-agent-env.mjs`).
    - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — see step 3.
+   - `CRON_SECRET`: generated for production; without it the daily
+     retention job answers `503`
+     ([Conversation and project sync](#conversation-and-project-sync)).
    - `SENTRY_AUTH_TOKEN`: a production build fails without it
      (`scripts/upload-sourcemaps.mjs`). A local `vercel build` pulls a
      Sensitive variable as an empty value, which fails the same way, so a
@@ -642,12 +645,61 @@ before this existed.
 | --- | --- |
 | `DATABASE_URL` | Postgres connection string. **Must be a pooled endpoint.** A serverless function opens a connection per invocation and will exhaust `max_connections` against a direct one. TLS is required and the certificate verified unless the URL sets `sslmode` — so a provider needing a looser mode has to say so in the URL, where it is visible in review |
 | `SYNC_ENABLED` | Kill switch. Only the exact string `true` enables sync; unset or anything else keeps the app local-only |
-| `AUTH_SECRET` | Better Auth signing secret. Generate one per environment; rotating it signs everyone out |
+| `AUTH_SECRET` | Better Auth signing secret, and the key the stored GitHub tokens are encrypted with ([GitHub tokens at rest](#github-tokens-at-rest)). Generate one per environment; rotating it signs everyone out and makes the stored GitHub tokens unreadable until each user's next sign-in |
 | `AUTH_BASE_URL` | The deployment's own origin, e.g. `https://example.vercel.app`. Better Auth builds the OAuth callback from it, so a wrong value breaks sign-in with no error at the browser |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | The OAuth app. Its callback URL must match `AUTH_BASE_URL`; previews carry the staging sign-in host's pair, never production's |
 | `AUTH_OAUTH_PROXY_URL` | Previews only: the origin of the staging sign-in host, whose callback is on its GitHub app |
 | `AUTH_OAUTH_PROXY_HOST` | Exactly `true` on the staging sign-in host only; unset on production and on previews ([Sign-in on previews](#sign-in-on-previews)) |
 | `AUTH_OAUTH_PROXY_SECRET` | The OAuth proxy's encryption key. The same value on the host and every preview, never `AUTH_SECRET`'s. Unset, the proxy is off |
+| `CRON_SECRET` | Production only. Vercel Cron sends it as `Authorization: Bearer` to `/api/retention`, the daily job that deletes expired sessions and old `build_audit` rows and clears deleted projects' names. Unset, the route answers `503` and nothing is removed. Vercel runs crons on production deployments only |
+
+### GitHub tokens at rest
+
+The `account` table holds each user's GitHub access token encrypted with
+`AUTH_SECRET` (`encryptOAuthTokens`, `ACCOUNT_OPTIONS` in
+`src/features/auth/model/auth.mjs`), so a row read through a leak, a backup or
+an operator holds no usable token. Routes read the token only through
+`readGithubTokenWith(getAuth)` (`src/features/auth/server.mjs`), which Better
+Auth decrypts, never with SQL; only the one-off backfill below reads the
+column, to encrypt it. A token that no longer decrypts, after `AUTH_SECRET`
+changed, reads as no grant: Share as gist asks the user to sign in again,
+which stores a fresh token, and the route reports the failure to Sentry.
+
+Every sign-in rewrites the row's token. Rows written before encryption and not
+signed in to since stay plaintext until they are encrypted once, after the
+deploy that turned encryption on, never before it (an older deployment would
+send the ciphertext to GitHub):
+
+```sh
+make -f client-v2/Makefile.vercel encrypt-production-github-tokens
+```
+
+It pulls Production's environment as
+[`migrate-production-db`](#migrations) does and takes `AUTH_SECRET` and the
+connection from it. It counts the plaintext rows and, when there are any,
+checks the secret against a token a sign-in already encrypted, then asks for a
+typed `yes` in a terminal. It is safe to run again. If `AUTH_SECRET` is a
+Sensitive variable, the pull leaves it empty and the target stops; run the
+script by hand from `client-v2/`, with `BETTER_AUTH_SECRETS` unset and the
+secret in `AUTH_SECRET`:
+
+```sh
+# DB_PROVIDER url: the unpooled connection
+DATABASE_URL=<unpooled url> AUTH_SECRET=<secret> \
+  node scripts/db/encrypt-github-tokens.mjs --apply
+# DB_PROVIDER cloud-sql: the connection migrate-production-db opens
+CLOUD_SQL_INSTANCE=<instance> CLOUD_SQL_DATABASE=<database> CLOUD_SQL_USER=<user> CLOUD_SQL_LOGIN_USER= \
+  AUTH_SECRET=<secret> scripts/db/cloud-sql/migration-url production -- \
+  node scripts/db/encrypt-github-tokens.mjs --apply
+```
+
+Rolling production back past this change breaks Share as gist, and the
+account-age lookup, for every user whose token is encrypted, until they sign in
+again: an older deployment sends the ciphertext to GitHub as the token.
+
+A synced project's program keypair is stored unencrypted, on purpose: it keeps
+the program id the same on every device, and it can claim the address only
+until the program's first deploy. The Program id panel says so.
 
 ### Sentry on the API functions
 

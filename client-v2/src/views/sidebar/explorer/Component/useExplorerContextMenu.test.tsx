@@ -20,8 +20,20 @@ const explorer = vi.hoisted(() => ({
   getSelectedEl: vi.fn(),
 }));
 const view = vi.hoisted(() => ({ setModal: vi.fn(), setToast: vi.fn() }));
+const run = vi.hoisted(() => {
+  const answer: { is: "run" | "no" | "busy" } = { is: "run" };
+  return {
+    answer,
+    execute: vi.fn(async () => undefined),
+    test: vi.fn(async () => undefined),
+    askFirst: vi.fn(async () => answer.is),
+  };
+});
+vi.mock("@/features/docs-link", () => ({
+  PgClientRun: { askFirst: run.askFirst },
+}));
 vi.mock("../../../../utils", () => ({
-  PgCommand: {},
+  PgCommand: { run: { execute: run.execute }, test: { execute: run.test } },
   PgCommon: { keys: Object.keys },
   PgExplorer: {
     getItemTypeFromEl: explorer.getItemTypeFromEl,
@@ -126,6 +138,83 @@ describe("useExplorerContextMenu modal actions", () => {
       expect(view.setToast.mock.calls[0][1]).toEqual({
         options: { name: "menu-action-failed" },
       });
+    }
+  );
+});
+
+describe("useExplorerContextMenu Run", () => {
+  // A link's code must not run from the menu before the user agreed to it.
+  // Test on a file runs that file, and a link may name its file `a.test.ts`
+  const ASKING = [
+    "runClient",
+    "runClientFolder",
+    "addClient",
+    "runTest",
+  ] as const;
+
+  it.each(ASKING)(
+    "%s asks before the first run of a link's code",
+    async (action) => {
+      run.answer.is = "no";
+      const { result } = renderHook(() => useExplorerContextMenu());
+
+      await result.current[action]();
+
+      expect(run.askFirst).toHaveBeenCalledTimes(1);
+      expect(run.execute).not.toHaveBeenCalled();
+      expect(run.test).not.toHaveBeenCalled();
+    }
+  );
+
+  // Each action's own command, with the item's path where it takes one
+  it.each([
+    { action: "runClient", command: "run", args: ["/client/a.ts"] },
+    { action: "runClientFolder", command: "run", args: [] },
+    { action: "addClient", command: "run", args: [] },
+    { action: "runTest", command: "test", args: ["/client/a.ts"] },
+  ] as const)(
+    "$action runs $command once agreed",
+    async ({ action, command, args }) => {
+      run.answer.is = "run";
+      explorer.getSelectedEl.mockReturnValue({});
+      explorer.getItemPathFromEl.mockReturnValue("/client/a.ts");
+      const { result } = renderHook(() => useExplorerContextMenu());
+
+      await result.current[action]();
+
+      const called = command === "run" ? run.execute : run.test;
+      const other = command === "run" ? run.test : run.execute;
+      expect(called).toHaveBeenCalledTimes(1);
+      expect(called).toHaveBeenCalledWith(...args);
+      expect(other).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(ASKING)(
+    "%s says so in a toast when a run is going, and runs nothing",
+    async (action) => {
+      run.answer.is = "busy";
+      const { result } = renderHook(() => useExplorerContextMenu());
+
+      await result.current[action]();
+
+      expect(view.setToast).toHaveBeenCalledTimes(1);
+      expect(run.execute).not.toHaveBeenCalled();
+      expect(run.test).not.toHaveBeenCalled();
+    }
+  );
+
+  // A bare `test` runs only `tests/`, which holds none of a link's code
+  it.each(["runTestFolder", "addTests"] as const)(
+    "%s runs the tests folder without asking",
+    async (action) => {
+      run.answer.is = "no";
+      const { result } = renderHook(() => useExplorerContextMenu());
+
+      await result.current[action]();
+
+      expect(run.askFirst).not.toHaveBeenCalled();
+      expect(run.test).toHaveBeenCalledTimes(1);
     }
   );
 });

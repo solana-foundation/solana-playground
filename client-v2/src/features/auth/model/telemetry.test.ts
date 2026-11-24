@@ -170,6 +170,58 @@ describe("auth telemetry", () => {
     expect(names()).toEqual([]);
   });
 
+  it("should track an account deletion the server accepted, and no sign-out", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ githubRevoked: true }),
+    } as Response);
+
+    await PgSession.deleteAccount();
+
+    expect(names()).toEqual(["auth_account_deleted"]);
+  });
+
+  it.each([
+    [
+      "is refused",
+      () =>
+        vi
+          .spyOn(globalThis, "fetch")
+          .mockResolvedValue({ ok: false, status: 500 } as Response),
+    ],
+    [
+      "answers 401",
+      () =>
+        vi
+          .spyOn(globalThis, "fetch")
+          .mockResolvedValue({ ok: false, status: 401 } as Response),
+    ],
+    [
+      "times out",
+      () =>
+        vi
+          .spyOn(globalThis, "fetch")
+          .mockRejectedValue(
+            new DOMException("signal timed out", "TimeoutError")
+          ),
+    ],
+    [
+      "fails on the network",
+      () =>
+        vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline")),
+    ],
+  ])(
+    "should not track an account deletion when the request %s",
+    async (_, arrange) => {
+      arrange();
+
+      await expect(PgSession.deleteAccount()).rejects.toThrow();
+
+      expect(names()).toEqual([]);
+    }
+  );
+
   it("should report a failed flush before sign-out", async () => {
     const logged = logMemory();
     initLogger({ providers: [logged] });

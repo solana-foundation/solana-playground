@@ -3,6 +3,12 @@ export type { Tracker } from "./tracker";
 export { initTelemetry, resetTelemetry } from "./collector";
 export { TelemetryScope, useTracker } from "./scope";
 export { GoogleAnalytics } from "./google-analytics";
+export {
+  readConsent,
+  subscribe as subscribeToConsent,
+  writeConsent,
+} from "./consent";
+export type { Consent, ConsentChoice } from "./consent";
 export { EVENT_PREFIXES } from "./prefixes";
 export { ga4Provider } from "./providers/ga4";
 export { logProvider } from "./providers/log";

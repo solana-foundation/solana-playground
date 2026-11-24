@@ -7,12 +7,23 @@
  * reasoning in full.
  */
 export {
+  deleteExpiredSessions,
+  revokeGithubGrantWith,
+  sessionCookieExpiry,
+} from "./model/account.mjs";
+export {
+  ACCOUNT_OPTIONS,
   getAuth,
   isAllowedOrigin,
   missingConfig,
   readSession,
   requireUser,
 } from "./model/auth.mjs";
+export {
+  NoGithubGrant,
+  readGithubToken,
+  readGithubTokenWith,
+} from "./model/github-token.mjs";
 export {
   AUTH_CHANNEL_NAME,
   AUTH_MESSAGE_TYPE,
