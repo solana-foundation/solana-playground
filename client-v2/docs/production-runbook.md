@@ -720,11 +720,15 @@ unprotected, on the first run that names it; until it is protected, it reads the
 1. GitHub → Settings → Environments → `playground-server` (create it under that exact name if it is not listed) →
    Deployment branches and tags → **Selected branches and tags** → add the rule `master`. Leave the administrators'
    bypass off.
-2. On the same page, add the environment secrets `GCP_KEY` (skip it if the key is already retired),
-   `SERVICE_ACCOUNT` and `PROJECT_ID`, with the values of the repository secrets of the same names. Then delete
-   those three repository secrets. The variable `GCP_WORKLOAD_IDENTITY_PROVIDER` stays a repository variable.
-3. Check: **Server: deploy** dispatched on `master` runs its deploy job in `playground-server` and signs in;
-   dispatched from another branch, it fails at **Resolve deploy version** with "Deploy from master".
+2. On the same page, add the environment secrets. GitHub never shows a secret's value again, so take each from its
+   source: `SERVICE_ACCOUNT` is `<SERVER_SA>`, `PROJECT_ID` is `<SERVER_PROJECT_ID>` (item 1 of step 10 finds both),
+   and `GCP_KEY` is the service-account JSON key file. Then delete the repository secrets `SERVICE_ACCOUNT` and
+   `PROJECT_ID`. Delete the repository `GCP_KEY` only once it is an environment secret, or once the key is retired
+   below: without the JSON file, keep it until then, and the key path stays readable from a branch until then too.
+   The variable `GCP_WORKLOAD_IDENTITY_PROVIDER` stays a repository variable.
+3. Check, in Settings: `playground-server` lists the rule `master` and the moved secrets, and Secrets and variables →
+   Actions → Repository secrets no longer lists them. Then run **Server: release** on `master` with the version that
+   is live now (it moves nothing): its **Move traffic** job runs in `playground-server`, signs in, and passes.
 
 **Then retire the key**, once checks 1, 3 and 4 passed:
 

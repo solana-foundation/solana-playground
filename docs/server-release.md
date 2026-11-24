@@ -30,7 +30,7 @@ Both workflows sign in through [gcp-auth](../.github/actions/gcp-auth/action.yml
 
 ### Only `master` reaches the deploy identity
 
-Three locks keep a workflow on any other branch from deploying or moving traffic. Locks 1 and 2 are settings outside
+Three locks keep a workflow on any other branch from deploying or moving traffic. Locks 1 and 2 are settings, not code in
 this repository; step 10 of the [production runbook](../client-v2/docs/production-runbook.md#step-10-the-build-servers-releases-and-its-sign-in-to-gcp)
 sets both. Lock 1 alone covers the OIDC path; while `GCP_KEY` exists, only lock 2 covers the key path.
 
