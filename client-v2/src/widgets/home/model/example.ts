@@ -6,6 +6,8 @@ import {
   PgFramework,
   PgGlobal,
 } from "@/utils";
+import { isBusyRefusalError } from "@/utils/busy-refusal";
+import { isSignInRefusalError } from "@/utils/sign-in-refusal";
 
 const log = createLogger("home:first-run");
 
@@ -21,10 +23,11 @@ const EXAMPLE_NAME = "anchor-example";
 const MOUNT_POLL_MS = 100;
 const MOUNT_WAIT_MS = 15_000;
 
-/** Why the example's build did not run */
+/** Why the example's build did not run, or was refused by the build server */
 type BuildSkipped =
   | "left-example"
   | "already-building"
+  | "refused"
   | "terminal-never-mounted";
 
 /**
@@ -35,6 +38,8 @@ type BuildSkipped =
  * whatever is open, and the user may have moved on during the wait) and no
  * build runs yet (the stage's Build may have been pressed). Gives
  * up after `MOUNT_WAIT_MS`, leaving the Build stage's own Build button.
+ * The build server's refusal, for a sign-in or while it is busy, answers
+ * `refused`: the Build stage shows it, and it is no fault to report.
  */
 const buildWhenMounted = async (): Promise<BuildSkipped | undefined> => {
   const until = Date.now() + MOUNT_WAIT_MS;
@@ -46,6 +51,7 @@ const buildWhenMounted = async (): Promise<BuildSkipped | undefined> => {
       await PgCommand.build.execute();
       return undefined;
     } catch (e) {
+      if (isSignInRefusalError(e) || isBusyRefusalError(e)) return "refused";
       if (!isTerminalUnmounted(e)) throw e;
       if (Date.now() >= until) return "terminal-never-mounted";
     }
@@ -83,10 +89,11 @@ export const runExample = async (): Promise<ExampleRun> => {
   });
   // Not awaited: the example exists now, and the build is the Build stage's
   // to show, however long it runs. A compile error resolves (the stage lists
-  // it), and the user leaving the example or pressing Build is no fault, so
-  // those are only noted. A terminal that never mounted is reported, and so
-  // is a rejection: the stage may show it as an unreached server, but it
-  // could as well be a bug
+  // it). The user leaving the example or pressing Build, and the server
+  // refusing a signed-out or busy build, are no fault, so those are only
+  // noted. A terminal that never mounted is reported, and so is any other
+  // rejection: the stage may show it as an unreached server, but it could as
+  // well be a bug
   buildWhenMounted().then(
     (skipped) => {
       if (skipped === "terminal-never-mounted") {
