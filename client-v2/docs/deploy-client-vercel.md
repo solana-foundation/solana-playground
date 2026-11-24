@@ -239,9 +239,9 @@ The version comes from the lockfile, the file wasm-pack reads, after `cargo meta
 
 ## Crawlers
 
-The build serves upstream's `robots.txt`, which allows every crawler; the production site keeps it. A project that is not the public site, such as hoodies' preview project, sets `DISALLOW_ROBOTS=true` (a build-time variable, not `REACT_APP_*`; only the exact value `true` counts). `scripts/update-static.mjs`, which every build runs, then writes a `robots.txt` that disallows the whole site, and its log line ends with `disallowed every crawler in robots.txt`.
+`scripts/update-static.mjs`, which every build runs, writes `robots.txt` per deployment (`scripts/robots.mjs`). The production site gets `Allow: /` and `Disallow: /api/`, and the log line says `allowed crawlers in robots.txt except /api/`. A preview (`VERCEL_ENV=preview`) disallows the whole site without any setting. A project that is not the public site but builds as production, such as a staging project or hoodies' `solana-playground` project, sets `DISALLOW_ROBOTS=true` (a build-time variable, not `REACT_APP_*`; only the exact value `true` counts) and gets the same disallow-all file; the log line then ends with `disallowed every crawler in robots.txt`. The variable is read at build time, so setting it takes a redeploy. Never set it on the production project.
 
-Vercel already sends `X-Robots-Tag: noindex` on preview deployments, though not on a production deployment or a custom domain. `Disallow` stops crawling, not listing: a URL linked from elsewhere can still appear in search results without a snippet.
+`vercel.json` also sends `X-Robots-Tag: noindex, nofollow` on every host but `playground.solana.com`, whatever the variable says, since `vercel.json` cannot read the environment. A staging deployment is kept out of search results by the header even before its project sets the variable. `Disallow` stops crawling, not listing: a URL linked from elsewhere can still appear in search results without a snippet, which the header prevents.
 
 ## Public variables
 
