@@ -6,6 +6,8 @@ import {
   PgFramework,
   PgGlobal,
 } from "@/utils";
+import { isBusyRefusalError } from "@/utils/busy-refusal";
+import { isSignInRefusalError } from "@/utils/sign-in-refusal";
 
 const log = createLogger("home:first-run");
 
@@ -25,6 +27,7 @@ const MOUNT_WAIT_MS = 15_000;
 type BuildSkipped =
   | "left-example"
   | "already-building"
+  | "refused"
   | "terminal-never-mounted";
 
 /**
@@ -35,6 +38,8 @@ type BuildSkipped =
  * whatever is open, and the user may have moved on during the wait) and no
  * build runs yet (the stage's Build may have been pressed). Gives
  * up after `MOUNT_WAIT_MS`, leaving the Build stage's own Build button.
+ * The build server's refusal, for a sign-in or while it is busy, is an
+ * answer the Build stage shows, not a fault (SOLANA-PLAYGROUND-H).
  */
 const buildWhenMounted = async (): Promise<BuildSkipped | undefined> => {
   const until = Date.now() + MOUNT_WAIT_MS;
@@ -46,6 +51,7 @@ const buildWhenMounted = async (): Promise<BuildSkipped | undefined> => {
       await PgCommand.build.execute();
       return undefined;
     } catch (e) {
+      if (isSignInRefusalError(e) || isBusyRefusalError(e)) return "refused";
       if (!isTerminalUnmounted(e)) throw e;
       if (Date.now() >= until) return "terminal-never-mounted";
     }
@@ -83,8 +89,8 @@ export const runExample = async (): Promise<ExampleRun> => {
   });
   // Not awaited: the example exists now, and the build is the Build stage's
   // to show, however long it runs. A compile error resolves (the stage lists
-  // it), and the user leaving the example or pressing Build is no fault, so
-  // those are only noted. A terminal that never mounted is reported, and so
+  // it), and the user leaving the example, pressing Build, or the server
+  // refusing a signed-out or busy build is no fault, so those are only noted. A terminal that never mounted is reported, and so
   // is a rejection: the stage may show it as an unreached server, but it
   // could as well be a bug
   buildWhenMounted().then(

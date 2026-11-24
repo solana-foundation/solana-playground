@@ -51,7 +51,10 @@ const session = vi.hoisted(() => ({
   refresh: vi.fn(),
   whenRead: vi.fn(),
 }));
-vi.mock("@/features/auth", () => ({ PgSession: session }));
+vi.mock("@/features/auth", () => ({
+  PgSession: session,
+  SIGNED_OUT_REASON: "signed-out",
+}));
 const accountList = vi.hoisted(() => ({
   state: "empty" as "unknown" | "empty" | "holds",
   onDidChange: vi.fn(),
@@ -287,6 +290,36 @@ it("keeps the example when its build fails to run, and reports it", async () => 
   );
   expect(utils.PgView.setToast).not.toHaveBeenCalled();
 });
+
+// SOLANA-PLAYGROUND-H: a signed-out first visit reported the build server's
+// "Sign in with GitHub to build." as an error
+it.each([
+  [
+    "a sign-in",
+    Object.assign(new Error("Sign in with GitHub to build."), {
+      reason: "signed-out",
+    }),
+  ],
+  [
+    "a busy server",
+    Object.assign(new Error("Busy"), { status: 429, retryAfterSeconds: 30 }),
+  ],
+])(
+  "notes, never reports, the build server's refusal for %s",
+  async (_, refusal) => {
+    utils.PgCommand.build.execute.mockRejectedValueOnce(refusal);
+    const { home } = draw();
+    fireEvent.click(home.getByRole("button", { name: "Run it" }));
+    await waitFor(() =>
+      expect(events("home_example_run")).toEqual([{ outcome: "created" }])
+    );
+    await waitFor(() =>
+      expect(
+        logged.entries.map((e) => [e.ns, e.report, e.context?.reason])
+      ).toEqual([["home:first-run", false, "refused"]])
+    );
+  }
+);
 
 it("builds nothing once the user has opened another project", async () => {
   utils.PgExplorer.createWorkspace.mockImplementation(async (name: string) => {
