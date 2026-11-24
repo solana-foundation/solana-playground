@@ -58,8 +58,11 @@ import {
   withObservability,
 } from "../src/features/api/server.mjs";
 import {
+  getAuth,
   isAllowedOrigin,
   missingConfig,
+  NoGithubGrant,
+  readGithubTokenWith,
   readSession,
   SIGNED_OUT_REASON,
 } from "../src/features/auth/server.mjs";
@@ -433,9 +436,35 @@ async function handler(req, res) {
           })
       );
     }
-    if (!gate.dated) await learnAccountAge(query, turn.userId);
+    if (!gate.dated)
+      await learnAccountAge(
+        { query, readToken: readAccountToken },
+        turn.userId
+      );
   }
 }
+
+/** The user's GitHub token, decrypted by Better Auth */
+const readUserGithubToken = readGithubTokenWith(getAuth);
+
+/**
+ * The user's GitHub token for `learnAccountAge`, or `undefined` when they
+ * hold none: no GitHub account, or an empty token. A token that no longer
+ * decrypts, sign-in left unconfigured, and the database failing are ours,
+ * not the user's, so they throw, and `learnAccountAge` reports them.
+ *
+ * @param {string} userId
+ * @returns {Promise<string | undefined>}
+ */
+const readAccountToken = async (userId) => {
+  try {
+    return await readUserGithubToken(userId);
+  } catch (e) {
+    if (e instanceof NoGithubGrant && e.reason !== "unreadable")
+      return undefined;
+    throw e;
+  }
+};
 
 /**
  * Take an admitted turn upstream and answer the caller.
