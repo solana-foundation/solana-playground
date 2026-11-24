@@ -3,7 +3,12 @@ import type { FormEvent } from "react";
 import { useId, useState } from "react";
 
 import type { CustomRpc } from "@/entities/cluster";
-import { isSameRpc, maskRpcUrl, RPC_NAME_MAX } from "@/entities/cluster";
+import {
+  isMasked,
+  isSameRpc,
+  maskRpcUrl,
+  RPC_NAME_MAX,
+} from "@/entities/cluster";
 import { createLogger } from "@/shared/lib/logger";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
@@ -149,17 +154,17 @@ const BaseCustomRpcs = ({
  * beside the URL, under it on a phone, so the URL is never squeezed
  */
 const RpcUrl = ({ url }: { url: string }) => {
-  const { text, masked } = maskRpcUrl(url);
+  const shown = maskRpcUrl(url);
   return (
     <span className="flex min-w-0 items-center gap-1.5 max-sm:flex-col max-sm:items-start">
       {/* The tail, where a key sits, may be cut: the title holds it all */}
       <span
-        title={text}
+        title={shown.text}
         className="max-w-full truncate font-mono text-xs text-muted-foreground"
       >
-        {text}
+        {shown.text}
       </span>
-      {masked && <Badge variant="outline">API key</Badge>}
+      {isMasked(shown) && <Badge variant="outline">API key</Badge>}
     </span>
   );
 };
