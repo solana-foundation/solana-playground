@@ -10,7 +10,7 @@ import path from "node:path";
 import { after, test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { sealFile, sealMatches, sealSecret } from "./cache-seal.mjs";
+import { hasMatchingSeal, sealFile, sealSecret } from "./cache-seal.mjs";
 
 const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
 const installScript = path.join(scriptsDir, "vercel-install.sh");
@@ -139,7 +139,7 @@ function unpackedPkg(tree) {
 }
 
 /** Production's wasm archive key, and the seal key of `archive` under it. */
-function productionNames(tree, archive, env = PRODUCTION) {
+function productionNames(tree, archive, env) {
   const out = run(
     tree,
     `k=$(cache_key "$(wasm_source_key)"); s=$(seal_key "$k" ${JSON.stringify(
@@ -188,22 +188,22 @@ function injectedArchive(file) {
   spawnSync("tar", ["-cf", file, "solana-cli/pkg"], { cwd: dir });
 }
 
-test("sealMatches accepts only the same key, secret and bytes", async () => {
+test("hasMatchingSeal accepts only the same key, secret and bytes", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cache-seal-"));
   scratchRoots.push(dir);
   const file = path.join(dir, "a.tar");
   fs.writeFileSync(file, "archive");
   const seal = await sealFile(SECRET, "key-1", file);
-  assert.equal(await sealMatches(SECRET, "key-1", file, `${seal}\n`), true);
-  assert.equal(await sealMatches(SECRET, "key-2", file, seal), false);
-  assert.equal(await sealMatches(OTHER_SECRET, "key-1", file, seal), false);
-  assert.equal(await sealMatches(SECRET, "key-1", file, "not hex"), false);
+  assert.equal(await hasMatchingSeal(SECRET, "key-1", file, `${seal}\n`), true);
+  assert.equal(await hasMatchingSeal(SECRET, "key-2", file, seal), false);
+  assert.equal(await hasMatchingSeal(OTHER_SECRET, "key-1", file, seal), false);
+  assert.equal(await hasMatchingSeal(SECRET, "key-1", file, "not hex"), false);
   assert.equal(
-    await sealMatches(SECRET, "key-1", file, seal.slice(0, 62)),
+    await hasMatchingSeal(SECRET, "key-1", file, seal.slice(0, 62)),
     false
   );
   fs.writeFileSync(file, "archivE");
-  assert.equal(await sealMatches(SECRET, "key-1", file, seal), false);
+  assert.equal(await hasMatchingSeal(SECRET, "key-1", file, seal), false);
 });
 
 test("sealSecret refuses an unset or short secret", () => {
@@ -264,7 +264,7 @@ test("builds on an empty cache and uploads the archive with its seal", () => {
     "wasm-pkg",
     local.find((n) => n.endsWith(".tar"))
   );
-  const names = productionNames(tree, archive);
+  const names = productionNames(tree, archive, PRODUCTION);
   assert.ok(fs.existsSync(names.archive), "archive uploaded");
   assert.ok(fs.existsSync(names.seal), "seal uploaded");
 });
@@ -288,10 +288,15 @@ test("takes its own Build Cache copy without building (happy path)", () => {
 test("stops when a Remote Cache archive was replaced after sealing (edge case)", () => {
   const tree = seededByProduction();
   // The attacker keeps the genuine seal and writes it under the new archive's seal name too.
-  const { archive } = productionNames(tree, "/dev/null");
-  const genuineSeal = fs.readFileSync(productionNames(tree, archive).seal);
+  const { archive } = productionNames(tree, "/dev/null", PRODUCTION);
+  const genuineSeal = fs.readFileSync(
+    productionNames(tree, archive, PRODUCTION).seal
+  );
   injectedArchive(archive);
-  fs.writeFileSync(productionNames(tree, archive).seal, genuineSeal);
+  fs.writeFileSync(
+    productionNames(tree, archive, PRODUCTION).seal,
+    genuineSeal
+  );
 
   const result = run(tree, restoreWasm, PRODUCTION);
   assert.equal(result.status, 1);
@@ -305,7 +310,7 @@ test("stops when a Remote Cache archive was replaced after sealing (edge case)",
 
 test("rebuilds when a Remote Cache archive was replaced and its seal is missing", () => {
   const tree = seededByProduction();
-  const { archive } = productionNames(tree, "/dev/null");
+  const { archive } = productionNames(tree, "/dev/null", PRODUCTION);
   injectedArchive(archive);
   const result = run(tree, restoreWasm, PRODUCTION);
   assert.equal(result.status, 0, result.stderr);
@@ -326,13 +331,17 @@ test("stops when a Build Cache seal does not match (edge case)", () => {
 
 test("refuses a genuine archive replayed under another source tree's key", () => {
   const tree = seededByProduction();
-  const { archive: oldArchive } = productionNames(tree, "/dev/null");
-  const oldSeal = productionNames(tree, oldArchive).seal;
+  const { archive: oldArchive } = productionNames(
+    tree,
+    "/dev/null",
+    PRODUCTION
+  );
+  const oldSeal = productionNames(tree, oldArchive, PRODUCTION).seal;
   fs.writeFileSync(
     path.join(tree.wasm, "solana-cli", "lib.rs"),
     "// changed source\n"
   );
-  const replayed = productionNames(tree, oldArchive);
+  const replayed = productionNames(tree, oldArchive, PRODUCTION);
   fs.copyFileSync(oldArchive, replayed.archive);
   fs.copyFileSync(oldSeal, replayed.seal);
 
@@ -508,11 +517,27 @@ test("reinstalls a node_modules whose install mark predates the seal", () => {
     path.join(tree.client, "node_modules", ".cache", "install-key"),
     oldMark
   );
+  const webpackCache = path.join(
+    tree.client,
+    "node_modules",
+    ".cache",
+    "default-production"
+  );
+  fs.mkdirSync(webpackCache);
+  fs.writeFileSync(
+    path.join(webpackCache, "0.pack"),
+    "built from the old packages"
+  );
 
   const result = run(tree, "main", PRODUCTION);
   assert.equal(result.status, 0, result.stderr);
   assert.match(
     fs.readFileSync(yarnLog, "utf8"),
     /yarn install --frozen-lockfile/
+  );
+  assert.equal(
+    fs.existsSync(webpackCache),
+    false,
+    "webpack's cache is cleared"
   );
 });

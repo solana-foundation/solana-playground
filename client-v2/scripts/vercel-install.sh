@@ -133,7 +133,7 @@ SEAL_SCRIPT="$(dirname -- "${BASH_SOURCE[0]}")/cache-seal.mjs"
 
 # A production deployment takes back only archives a production build sealed (HOO-2887): Remote Cache
 # is writable by anyone holding its token, and every build of the team holds it. See scripts/cache-seal.mjs.
-production_build() {
+is_production_build() {
   [ "${VERCEL_ENV:-}" = production ]
 }
 
@@ -142,7 +142,7 @@ production_build() {
 # build stopped by a seal that does not match recovers. The names are not secret (the log prints them);
 # the seal is what stops a deliberate write. printf is a builtin, so the secret never reaches an argv.
 cache_key() {
-  if production_build; then
+  if is_production_build; then
     printf 'production-%s-%s' "$CACHE_SEAL_KEY" "$1" | sha256 | cut -d' ' -f1
   else
     printf '%s' "$1"
@@ -160,7 +160,7 @@ seal_key() {
 # $1: artifact key, $2: archive, $3: what it holds, for the log. Outside production every copy passes.
 # In production a copy without a seal is discarded and treated as a miss; any other failed check stops the build.
 seal_holds() {
-  production_build || return 0
+  is_production_build || return 0
   local verdict status=0
   if [ ! -f "$2.seal" ]; then
     echo ">>> $3: $(basename "$2") has no seal, discarding" >&2
@@ -183,7 +183,7 @@ seal_holds() {
 # $1: artifact key, $2: archive. Succeeds when Remote Cache holds the archive and, in production, its seal.
 remote_holds() {
   remote_has "$1" || return 1
-  production_build || return 0
+  is_production_build || return 0
   remote_has "$(seal_key "$1" "$2")"
 }
 
@@ -198,7 +198,7 @@ restore_archive() {
   fi
   rm -f "$2.seal"
   if remote_fetch "$1" "$2"; then
-    if production_build && ! remote_fetch "$(seal_key "$1" "$2")" "$2.seal"; then
+    if is_production_build && ! remote_fetch "$(seal_key "$1" "$2")" "$2.seal"; then
       echo ">>> $3: no seal for the Remote Cache copy of $1 could be fetched (a failed request, a production build that stopped between its two uploads, or a write from outside production). Rebuilding" >&2
     elif seal_holds "$1" "$2" "$3" && readable_archive "$2" "$3"; then
       echo ">>> $3: HIT in Remote Cache ($1)"
@@ -223,14 +223,14 @@ seal_archive() {
 # $1: artifact key, $2: archive, $3: what it holds, for the log. Uploads the archive and, in production, its seal.
 upload_archive() {
   remote_upload "$1" "$2" "$3"
-  if production_build; then
+  if is_production_build; then
     remote_upload "$(seal_key "$1" "$2")" "$2.seal" "$3 seal"
   fi
 }
 
 # $1: artifact key, $2: a freshly built archive, $3: what it holds, for the log.
 store_archive() {
-  if production_build; then
+  if is_production_build; then
     seal_archive "$1" "$2"
   fi
   upload_archive "$1" "$2" "$3"
@@ -424,6 +424,9 @@ install_node_modules() {
     echo ">>> node_modules: Build Cache copy has another install key, clearing all but .cache before yarn install"
     find node_modules -mindepth 1 -maxdepth 1 ! -name .cache -exec rm -rf {} +
   fi
+  # webpack's own cache too, as scripts/setup-wasm.sh does: rebuilt wasm packages keep their name and version, so
+  # the cache would serve modules built from the packages the old install held (a production one may be unsealed).
+  rm -rf node_modules/.cache/default-development node_modules/.cache/default-production
   yarn install --frozen-lockfile
   mkdir -p "$(dirname "$INSTALL_MARK")"
   printf '%s' "$key" >"$INSTALL_MARK"
@@ -436,7 +439,7 @@ main() {
     exit 1
   fi
   # Production refuses to start without its seal secret rather than build from an unverified cache.
-  if production_build && [ "$(node "$SEAL_SCRIPT" check)" != ready ]; then
+  if is_production_build && [ "$(node "$SEAL_SCRIPT" check)" != ready ]; then
     exit 1
   fi
   wasm_key=$(wasm_source_key)

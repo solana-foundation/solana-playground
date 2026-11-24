@@ -39,7 +39,7 @@ export async function sealFile(secret, cacheKey, file) {
 }
 
 /** A seal that is not exactly 64 lowercase hex characters never matches. */
-export async function sealMatches(secret, cacheKey, file, seal) {
+export async function hasMatchingSeal(secret, cacheKey, file, seal) {
   const given = seal.trim();
   if (!SEAL_PATTERN.test(given)) return false;
   const expected = await sealFile(secret, cacheKey, file);
@@ -93,7 +93,7 @@ async function run([command, cacheKey, file, sealPath]) {
     return 0;
   }
   const seal = fs.readFileSync(sealPath, "utf8");
-  if (!(await sealMatches(secret, cacheKey, file, seal))) {
+  if (!(await hasMatchingSeal(secret, cacheKey, file, seal))) {
     process.stdout.write("mismatch\n");
     return 1;
   }
