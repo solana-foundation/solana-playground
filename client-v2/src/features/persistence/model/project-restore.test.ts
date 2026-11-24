@@ -5,7 +5,12 @@ import { PgExplorer } from "../../../utils/explorer/explorer";
 import { PgFs } from "../../../utils/explorer/fs";
 import { PgAccountList } from "./account-list";
 import { clearFailures, getFailures } from "./diagnostics";
-import { reconcile, releaseLocalProjects } from "./project-restore";
+import {
+  readProjectMarks,
+  reconcile,
+  releaseLocalProjects,
+  releaseProjectsUnchangedSince,
+} from "./project-restore";
 import type { ServerProject } from "./project-sync";
 import { PgProjectSync } from "./project-sync";
 import type { Snapshot } from "./snapshot";
@@ -895,6 +900,38 @@ describe("releasing local projects at sign-out", () => {
     expect(remove).not.toHaveBeenCalled();
   });
 
+  /** The editor's copy of one file, standing in for Monaco's model */
+  const editorHolds = (path: string, text: string) =>
+    vi.spyOn(PgExplorer, "editorBuffers", "get").mockReturnValue({
+      read: (at) => (at === path ? text : undefined),
+      write: () => undefined,
+      discard: () => undefined,
+    });
+
+  it("keeps a project with an edit the editor has not saved", async () => {
+    // The editor saves typing only after its autosave delay: until then the
+    // store still matches the mark, and the edit exists nowhere else
+    withLocal({ alpha: "p1" });
+    withFiles("alpha", { "src/lib.rs": "same" });
+    await agreed("p1", { files: { "src/lib.rs": "same" } }, "t1");
+    editorHolds("/alpha/src/lib.rs", "same, and typed since");
+    const remove = stubDelete();
+
+    expect(await releaseLocalProjects()).toEqual([]);
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("removes a project whose open file the editor holds as the store does", async () => {
+    // The other half of the check above: an open file alone keeps nothing
+    withLocal({ alpha: "p1" });
+    withFiles("alpha", { "src/lib.rs": "same" });
+    await agreed("p1", { files: { "src/lib.rs": "same" } }, "t1");
+    editorHolds("/alpha/src/lib.rs", "same");
+    stubDelete();
+
+    expect(await releaseLocalProjects()).toEqual(["alpha"]);
+  });
+
   it("decides per project rather than for the set", async () => {
     // The mistake this mirrors the fix for, in `PgChatSync.forget`: one
     // project that cannot be handed over is no reason to leave the others on
@@ -920,6 +957,108 @@ describe("releasing local projects at sign-out", () => {
     await releaseLocalProjects();
 
     expect(await PgSyncMark.read("p1")).not.toBeNull();
+  });
+});
+
+describe("releasing local projects after an account deletion", () => {
+  beforeEach(async () => {
+    PgSession.reset();
+    PgProjectSync.reset();
+    storedFiles().clear();
+    await signedIn();
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  const stubDelete = () =>
+    vi
+      .spyOn(PgExplorer, "deleteWorkspace")
+      .mockResolvedValue(undefined as never);
+
+  it("removes a project whose mark is what the read found", async () => {
+    withLocal({ alpha: "p1" });
+    withFiles("alpha", { "src/lib.rs": "same" });
+    await agreed("p1", { files: { "src/lib.rs": "same" } }, "t1");
+    const reading = await readProjectMarks();
+    const remove = stubDelete();
+
+    expect(await releaseProjectsUnchangedSince(reading)).toEqual(["alpha"]);
+    expect(remove).toHaveBeenCalledWith("alpha");
+  });
+
+  it("keeps a project whose mark changed after the read", async () => {
+    // Another tab's push landed between the read and the teardown: the
+    // files match the new mark, but the server copy they reached is gone
+    // with the account
+    withLocal({ alpha: "p1" });
+    withFiles("alpha", { "src/lib.rs": "pushed by another tab" });
+    await agreed("p1", { files: { "src/lib.rs": "before" } }, "t1");
+    const reading = await readProjectMarks();
+    await agreed(
+      "p1",
+      { files: { "src/lib.rs": "pushed by another tab" } },
+      "t2"
+    );
+    const remove = stubDelete();
+
+    expect(await releaseProjectsUnchangedSince(reading)).toEqual([]);
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("keeps a project whose mark appeared after the read", async () => {
+    withLocal({ alpha: "p1" });
+    withFiles("alpha", { "src/lib.rs": "first push" });
+    const reading = await readProjectMarks();
+    await agreed("p1", { files: { "src/lib.rs": "first push" } }, "t1");
+    const remove = stubDelete();
+
+    expect(await releaseProjectsUnchangedSince(reading)).toEqual([]);
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("still keeps an unchanged mark's project holding unpushed work", async () => {
+    withLocal({ alpha: "p1" });
+    withFiles("alpha", { "src/lib.rs": "written since the last push" });
+    await agreed(
+      "p1",
+      { files: { "src/lib.rs": "what the server has" } },
+      "t1"
+    );
+    const reading = await readProjectMarks();
+    const remove = stubDelete();
+
+    expect(await releaseProjectsUnchangedSince(reading)).toEqual([]);
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("keeps a project whose mark changes while the release checks its files", async () => {
+    // Another tab's upload reached the account before the deletion, and that
+    // tab writes its mark and files here only as `isReleasable` makes its
+    // last comparison: the server copy they match is gone with the account
+    withLocal({ alpha: "p1" });
+    withFiles("alpha", { "src/lib.rs": "same" });
+    await agreed("p1", { files: { "src/lib.rs": "same" } }, "t1");
+    const reading = await readProjectMarks();
+    const pushed = { files: { "src/lib.rs": "pushed by another tab" } };
+    const pushedMark = JSON.stringify({
+      files: await hashFiles(pushed),
+      name: "alpha",
+      updatedAt: "t2",
+      dirty: false,
+    });
+    vi.spyOn(PgExplorer, "editorBuffers", "get").mockReturnValue({
+      read: () => {
+        withFiles("alpha", pushed.files);
+        storedFiles().set("/.config/sync/u1/p1.json", pushedMark);
+        return undefined;
+      },
+      write: () => undefined,
+      discard: () => undefined,
+    });
+    const remove = stubDelete();
+
+    expect(await releaseProjectsUnchangedSince(reading)).toEqual([]);
+    expect(remove).not.toHaveBeenCalled();
   });
 });
 

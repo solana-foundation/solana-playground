@@ -7,6 +7,11 @@
  * reasoning in full.
  */
 export {
+  deleteExpiredSessions,
+  revokeGithubGrantWith,
+  sessionCookieExpiry,
+} from "./model/account.mjs";
+export {
   ACCOUNT_OPTIONS,
   getAuth,
   isAllowedOrigin,

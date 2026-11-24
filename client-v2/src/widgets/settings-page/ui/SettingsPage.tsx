@@ -23,6 +23,7 @@ import {
 
 import type { GroupId, SectionId, SettingRow } from "../model/sections";
 import {
+  ANALYTICS_ROW,
   GROUPS,
   SECTION_DESCRIPTIONS,
   SECTION_ORDER,
@@ -46,6 +47,9 @@ import { SettingControl } from "./SettingControl";
 import SettingsBoundary from "./SettingsBoundary";
 
 const NETWORK: SectionId = "network";
+
+/** The id the Analytics row's label points at, handed to the switch */
+const ANALYTICS_CONTROL_ID = "setting-analytics";
 
 type Row = SettingRow<typeof PgSettings.all[number]>;
 
@@ -79,6 +83,8 @@ interface SettingsPageProps {
   ownKey?: string;
   /** Ask the hosted model again: the Try again on its row */
   onRetryHosted: () => Promise<unknown>;
+  /** The Analytics switch for the control id the row's label points at. It comes from `widgets/observability`, and widgets do not import each other, so the app hands it in */
+  renderAnalytics: (controlId: string) => ReactNode;
   /** ⌘, is the key's own, handled where it is bound */
   onClose: (via: Exclude<SettingsExit, "key">) => void;
 }
@@ -99,6 +105,7 @@ const LiveSettingsPage = ({
   hostedName,
   ownKey,
   onRetryHosted,
+  renderAnalytics,
   onClose,
 }: SettingsPageProps) => {
   const phone = useViewport() === "phone";
@@ -205,6 +212,16 @@ const LiveSettingsPage = ({
     advanced: (
       <>
         {cardsOf("advanced")}
+        <BaseSettingsCard>
+          <BaseSettingRow
+            name={ANALYTICS_ROW.label}
+            description={ANALYTICS_ROW.help}
+            controlId={ANALYTICS_CONTROL_ID}
+            control={renderAnalytics(ANALYTICS_CONTROL_ID)}
+            small
+            phone={phone}
+          />
+        </BaseSettingsCard>
         <BaseSettingsCard title={GROUPS.key}>
           <AssistantKey
             phone={phone}
