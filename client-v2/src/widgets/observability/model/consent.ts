@@ -14,7 +14,7 @@ import { observabilityTelemetry } from "./telemetry";
 export const chooseConsentFor =
   (via: ConsentVia) =>
   (choice: ConsentChoice): boolean => {
-    const saved = writeConsent(choice);
+    const isSaved = writeConsent(choice);
     observabilityTelemetry.track("obs_analytics_consent_set", { choice, via });
-    return saved;
+    return isSaved;
   };

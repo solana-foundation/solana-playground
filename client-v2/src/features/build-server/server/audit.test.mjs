@@ -22,12 +22,25 @@ describe("startAuditWith", () => {
     assert.equal(query.mock.callCount(), 1);
     const [text, params] = query.mock.calls[0].arguments;
     assert.match(text, /insert into build_audit/);
-    assert.match(text, /select login from "user" where id = \$1/);
+    assert.match(text, /from "user" u\s+where u\.id = \$1\s+for share of u/);
     assert.match(
       text,
       /select "accountId" from account\s+where "userId" = \$1 and "providerId" = 'github'/
     );
     assert.deepEqual(params, ["u1", "p1", "hello", false, 120]);
+  });
+
+  it("throws when the account no longer exists, so the route refuses", async () => {
+    const query = async () => ({ rows: [] });
+    await assert.rejects(
+      startAuditWith(query)({
+        userId: "gone",
+        project: {},
+        unstable: false,
+        bytes: 0,
+      }),
+      /the account no longer exists/
+    );
   });
 
   it("lets a database failure through, so the route can refuse", async () => {

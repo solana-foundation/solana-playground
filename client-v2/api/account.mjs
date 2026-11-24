@@ -79,9 +79,11 @@ export const handleWith = (deps) => async (req, res) => {
   }
 
   try {
+    // The delete first: it waits for a build's audit insert that locked the
+    // user row, so the scrub after it sees that row (`startAuditWith`)
     await deps.transaction(async (q) => {
-      await scrubIdentity(q, userId);
       await q(`delete from "user" where id = $1`, [userId]);
+      await scrubIdentity(q, userId);
     });
   } catch (e) {
     log.error(new Error("account deletion failed", { cause: e }), {

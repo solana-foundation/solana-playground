@@ -55,11 +55,11 @@ const listeners = new Set<Listener>();
  * @returns whether the choice was stored, so it outlives a reload
  */
 export const writeConsent = (choice: ConsentChoice): boolean => {
-  let saved: boolean;
+  let isSaved: boolean;
   try {
     window.localStorage.setItem(STORAGE_KEY, choice);
     unsaved = undefined;
-    saved = true;
+    isSaved = true;
   } catch (error) {
     log.warn(
       "the analytics choice could not be stored; it holds until reload",
@@ -68,10 +68,10 @@ export const writeConsent = (choice: ConsentChoice): boolean => {
       }
     );
     unsaved = choice;
-    saved = false;
+    isSaved = false;
   }
   listeners.forEach((listener) => listener(choice));
-  return saved;
+  return isSaved;
 };
 
 /**

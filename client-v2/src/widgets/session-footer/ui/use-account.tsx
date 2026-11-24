@@ -8,6 +8,7 @@ import { openFundDialog } from "@/features/fund-wallet";
 import { useBalance, useRenderOnChange, useWallet } from "@/hooks";
 import { useOnline } from "@/shared/lib/hooks/use-online";
 import { createLogger } from "@/shared/lib/logger";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import type { SettingsRequest } from "@/shared/lib/settings-request";
 import { PgCommon, PgExplorer, PgView, PgWallet } from "@/utils";
 import { ExportWorkspace } from "@/views/sidebar/explorer/Component/Modals/ExportWorkspace";
@@ -247,7 +248,7 @@ export const useAccount = ({
       (deleteState.status === "asking" || deleteState.status === "failed") &&
       !deleting.current
     ) {
-      cancelDeleteAccount();
+      handleDeleteAccountCancel();
       return;
     }
     if (deleteState.status === "done") {
@@ -293,14 +294,14 @@ export const useAccount = ({
   };
 
   /** The deletion question closed unanswered: its Cancel, or the menu closing over it */
-  const cancelDeleteAccount = () => {
+  const handleDeleteAccountCancel = () => {
     sessionTelemetry.track("session_delete_account_ended", {
       outcome: "cancelled",
     });
     setDeleteState({ status: "idle" });
   };
 
-  const deleteAccount = () => {
+  const handleDeleteAccount = () => {
     // The question's busy item stops a second press; this stops a second
     // question (the footer and the rail swap) from starting another
     if (deleting.current) return;
@@ -344,9 +345,9 @@ export const useAccount = ({
   };
 
   // The export dialog the explorer and the project list open, for the open project
-  const exportProject = () => {
-    PgView.setModal(ExportWorkspace).catch((error: unknown) =>
-      log.error(error, { report: true, context: { item: "export" } })
+  const handleExportProject = () => {
+    PgView.setModal(ExportWorkspace).catch(
+      reportButtonFailure("export this project")
     );
   };
 
@@ -370,9 +371,9 @@ export const useAccount = ({
       onSignOutConfirm={signOut}
       onSignOutCancel={cancelSignOut}
       deleteAccount={shownDelete}
-      onDeleteAccountConfirm={deleteAccount}
-      onDeleteAccountCancel={cancelDeleteAccount}
-      onExportProject={exportProject}
+      onDeleteAccountConfirm={handleDeleteAccount}
+      onDeleteAccountCancel={handleDeleteAccountCancel}
+      onExportProject={handleExportProject}
       page={page}
     />
   );

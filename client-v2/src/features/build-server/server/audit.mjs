@@ -28,6 +28,12 @@ const GITHUB_ID = `select "accountId" from account
  * Open the row for a build. Throws when it cannot be written, and the route
  * refuses the build then: an unrecorded build is the thing this prevents.
  *
+ * The insert reads the user row `for share`, so it orders against account
+ * deletion, which deletes that row and then scrubs the user's rows in one
+ * transaction ({@link scrubIdentity}): an insert that locked first commits
+ * before the delete, and the scrub then sees its row; one that comes after
+ * finds no user, writes nothing and throws.
+ *
  * @param {Query} query
  * @returns {(build: {
  *   userId: string;
@@ -43,11 +49,14 @@ export const startAuditWith =
       `insert into build_audit
        (user_id, login, github_id, project_id, project_name, unstable,
         request_bytes)
-     values ($1, (select login from "user" where id = $1), (${GITHUB_ID}),
-             $2, $3, $4, $5)
+     select u.id, u.login, (${GITHUB_ID}), $2, $3, $4, $5
+       from "user" u
+      where u.id = $1
+        for share of u
      returning id`,
       [userId, project.id, project.name, unstable, bytes]
     );
+    if (!rows.length) throw new Error("the account no longer exists");
     return Number(rows[0].id);
   };
 
@@ -128,7 +137,9 @@ export const deleteExpiredAudit = async (query) => {
 /**
  * Remove the GitHub identity from a user's rows, keeping the rest. The table
  * has no foreign key on purpose, so deleting the account does not reach it;
- * account deletion runs this in the same transaction as the `user` delete.
+ * account deletion runs this after the `user` delete, in the same
+ * transaction, so a row a concurrent build inserted is scrubbed too
+ * ({@link startAuditWith}).
  *
  * @param {Query} query the transaction's, so the update rolls back with it
  * @param {string} userId

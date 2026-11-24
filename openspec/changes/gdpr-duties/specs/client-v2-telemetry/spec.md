@@ -12,17 +12,20 @@ events tracked after Allow and before `gtag.js` loads are sent once it does.
 the choice is `allowed`, and nothing otherwise.
 
 #### Scenario: An event before gtag.js loads
+Pinned by the in-source block of `client-v2/src/shared/lib/telemetry/providers/ga4.ts` and `client-v2/src/shared/lib/telemetry/google-analytics.test.tsx`, under `yarn test-unit`.
 
 - **WHEN** an event is tracked after `initTelemetry`, after the visitor
   allowed analytics and before `gtag.js` has loaded, with a measurement id set
 - **THEN** the event is in the queue `gtag.js` reads when it loads
 
 #### Scenario: No measurement id
+Pinned by the in-source block of `client-v2/src/shared/lib/telemetry/providers/ga4.ts` and `client-v2/src/shared/lib/telemetry/google-analytics.test.tsx`, under `yarn test-unit`.
 
 - **WHEN** a build without `REACT_APP_GA_MEASUREMENT_ID` tracks an event
 - **THEN** no request goes to Google and nothing throws
 
 #### Scenario: A measurement id is set
+Pinned by the in-source block of `client-v2/src/shared/lib/telemetry/providers/ga4.ts` and `client-v2/src/shared/lib/telemetry/google-analytics.test.tsx`, under `yarn test-unit`.
 
 - **WHEN** a build with `REACT_APP_GA_MEASUREMENT_ID`, in a browser that
   allowed analytics, tracks `dply_started`
@@ -37,6 +40,7 @@ Pinned by the in-source block of `client-v2/src/shared/lib/telemetry/providers/g
   undefined, and nothing throws
 
 #### Scenario: Rendering on the server or in a test without initialisation
+Pinned by the in-source block of `client-v2/src/shared/lib/telemetry/providers/ga4.ts` and `client-v2/src/shared/lib/telemetry/google-analytics.test.tsx`, under `yarn test-unit`.
 
 - **WHEN** `track` runs where `window` is undefined
 - **THEN** nothing throws and nothing is sent

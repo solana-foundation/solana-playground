@@ -66,9 +66,13 @@ const queuedEvents = (page: Page) =>
       .map(([, name]) => String(name));
   });
 
-/** Settings opens and closes with a tracked event each (`settings_opened`, `settings_closed`) */
+/**
+ * Settings opens and closes with a tracked event each (`settings_opened`,
+ * `settings_closed`). Through its trigger, not the shortcut: on Linux CI the
+ * shortcut pressed right after a banner button closes did not open Settings
+ */
 const openSettings = async (page: Page) => {
-  await page.keyboard.press("ControlOrMeta+,");
+  await page.locator("[data-settings-trigger]").first().click();
   await expect(settings(page)).toBeVisible();
 };
 const closeSettings = async (page: Page) => {

@@ -64,13 +64,14 @@ const startAnotherProject = async (page: Page, name: string) => {
 type Files = Record<string, string>;
 
 /**
- * A signed-in account whose `DELETE /api/account` answers `answer`; once it
- * answers 200 the session reads as signed out. Every request the browser
- * makes of the account is recorded, the deletion's included.
+ * An account whose `DELETE /api/account` answers `answer`, signed out until
+ * `signIn`; once the deletion answers 200 the session reads as signed out
+ * again. Every request the browser makes of the account is recorded, the
+ * deletion's included.
  */
 const stubAccountWith =
   (answer: () => { status: number; body: unknown }) => async (page: Page) => {
-    let signedIn = true;
+    let signedIn = false;
     const rows = new Map<string, { name: string; files: Files }>();
     // The threads the account holds, by id; any other reads as never seen
     const threads = new Map<string, unknown[]>();
@@ -153,15 +154,27 @@ const stubAccountWith =
       });
     });
 
-    return { rows, threads, requests };
+    const signIn = () => {
+      signedIn = true;
+    };
+    return { rows, threads, requests, signIn };
   };
 
-/** Both projects in the browser, the account holding only `SYNCED` */
+/**
+ * Both projects in the browser, the account holding only `SYNCED`. Both are
+ * created signed out, then the reload signs in and sync uploads them: a
+ * project started while a signed-in sync pass runs can fail to set up its
+ * files on a slow runner (`Couldn't setup files: ENOENT`), a race outside
+ * this spec
+ */
 const twoProjects = async (
   page: Page,
   stub: Awaited<ReturnType<ReturnType<typeof stubAccountWith>>>
 ) => {
   await seedWorkspace(page, SYNCED);
+  await startAnotherProject(page, KEPT);
+  stub.signIn();
+  await page.reload();
   await expect(account(page)).toHaveAccessibleName("Account: t", LONG);
   await expect
     .poll(
@@ -169,7 +182,6 @@ const twoProjects = async (
       LONG
     )
     .toBe(true);
-  await startAnotherProject(page, KEPT);
   await expect
     .poll(() => stub.requests.includes(`PUT ${KEPT}`), LONG)
     .toBe(true);

@@ -5,6 +5,7 @@ import {
   isAllowedOrigin,
   revokeGithubGrantWith,
 } from "../src/features/auth/server.mjs";
+import { startAuditWith } from "../src/features/build-server/server.mjs";
 import { query, transaction } from "../src/features/persistence/server.mjs";
 import { handleWith } from "./account.mjs";
 
@@ -296,11 +297,12 @@ describe("DELETE /api/account", () => {
     });
 
     it("changes nothing and reports when the transaction fails", async () => {
+      // On the scrub, the last statement: the `user` delete before it rolls back
       const failing = (fn) =>
         transaction((q) =>
           fn(async (text, params) => {
-            if (/delete from "user"/.test(text)) {
-              throw new Error("the delete failed");
+            if (/update build_audit/.test(text)) {
+              throw new Error("the scrub failed");
             }
             return q(text, params);
           })
@@ -319,6 +321,65 @@ describe("DELETE /api/account", () => {
         [USER]
       );
       assert.deepEqual(rows, [{ login: "alice", github_id: "4242" }]);
+    });
+
+    it("refuses a build's audit row that waited on the deletion", async () => {
+      const audit = startAuditWith(query);
+      let release;
+      const held = new Promise((resolve) => {
+        release = resolve;
+      });
+      let started;
+      const deleting = new Promise((resolve) => {
+        started = resolve;
+      });
+      const deletion = transaction(async (q) => {
+        await q(`delete from "user" where id = $1`, [USER]);
+        started();
+        await held;
+        await q(
+          `update build_audit set login = null, github_id = null where user_id = $1`,
+          [USER]
+        );
+      });
+      await deleting;
+
+      // Blocks on the deleted row's lock until the deletion commits
+      const insert = audit({
+        userId: USER,
+        project: { id: "p2" },
+        unstable: false,
+        bytes: 1,
+      });
+      release();
+      await deletion;
+
+      await assert.rejects(insert, /the account no longer exists/);
+      const { rows } = await query(
+        `select login, github_id from build_audit where user_id = $1`,
+        [USER]
+      );
+      // eslint-disable-next-line unicorn/no-null -- Postgres rows read a cleared column as null
+      assert.deepEqual(rows, [{ login: null, github_id: null }]);
+    });
+
+    it("scrubs a build's audit row written just before the deletion", async () => {
+      await startAuditWith(query)({
+        userId: USER,
+        project: { id: "p2" },
+        unstable: false,
+        bytes: 1,
+      });
+
+      const res = await call(depsWith({}));
+
+      assert.equal(res.statusCode, 200);
+      const { rows } = await query(
+        `select login, github_id from build_audit where user_id = $1`,
+        [USER]
+      );
+      assert.equal(rows.length, 2);
+      assert.ok(rows.every((r) => r.login === null && r.github_id === null));
     });
 
     it("answers githubRevoked: true when GitHub answers 204", async () => {

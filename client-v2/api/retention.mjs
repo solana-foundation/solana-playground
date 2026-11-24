@@ -77,20 +77,20 @@ export const handleWith = (deps) => async (req, res) => {
 
   /** @type {Record<string, number>} */
   const counts = {};
-  let failed = false;
+  let hasFailed = false;
   // One `try` per step, so a failure does not block the rest
   for (const [name, step] of Object.entries(deps.steps)) {
     try {
       counts[name] = await step();
     } catch (e) {
-      failed = true;
+      hasFailed = true;
       log.error(new Error(`retention step ${name} failed`, { cause: e }), {
         report: true,
       });
     }
   }
-  log.info("retention ran", { context: { ...counts, failed } });
-  return sendJson(res, failed ? 500 : 200, counts);
+  log.info("retention ran", { context: { ...counts, failed: hasFailed } });
+  return sendJson(res, hasFailed ? 500 : 200, counts);
 };
 
 export default withObservability("retention", (req, res) => {
