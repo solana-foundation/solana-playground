@@ -349,6 +349,23 @@ await pg.program.methods.hello(name).rpc();
       ).toHaveLength(1);
       expect(client).toContain("@anchor-lang/core");
       expect(client).not.toContain("@coral-xyz/anchor");
+      // The program is set up after the binding it reads
+      expect(
+        client.search(/import \* as anchor\b|anchor = require/)
+      ).toBeLessThan(client.indexOf("anchor.setProvider"));
+    });
+
+    it("moves a client off the @project-serum/anchor client too", async () => {
+      const files = await exported(LIB, [
+        "client/client.ts",
+        'import * as anchor from "@project-serum/anchor";\nconsole.log(anchor.web3);\n',
+      ]);
+
+      expect(files.get("client/client.ts")).toContain(
+        'import * as anchor from "@anchor-lang/core";'
+      );
+      expect(files.get("client/client.ts")).not.toContain("@project-serum");
+      expect(files.get("package.json")).not.toContain("@project-serum");
     });
   });
 });

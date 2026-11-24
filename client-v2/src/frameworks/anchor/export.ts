@@ -3,11 +3,11 @@ import {
   addAfter,
   addAfterImports,
   addImports,
-  bindsName,
   fetchCrateVersion,
   fetchServerCargoLock,
   getJSDependencies,
   getRustDependencies,
+  hasOwnBinding,
   readExportedProject,
   wrapTopLevelAwait,
 } from "../common";
@@ -294,16 +294,24 @@ const convertJS = (
   programName: string,
   opts?: { isTest?: boolean }
 ) => {
+  // A top-level require of an Anchor client becomes an import, so the program set up below, which goes after the
+  // imports, follows it
+  content = content.replace(
+    /^(?:const|let|var)\s+anchor\s*=\s*require\((["'])(?:@coral-xyz|@project-serum)\/anchor\1\);?[^\S\n]*$/m,
+    `import * as anchor from "${ANCHOR_CLIENT}";`
+  );
+
   // Handle imports
   content = addImports(content);
   // Every converted file uses `anchor` (the program set up below). A file that only mentions the word, as
   // `describe("hello_anchor")` does, still needs the import
-  if (!bindsName(content, "anchor")) {
+  if (!hasOwnBinding(content, "anchor")) {
     content = `import * as anchor from "${ANCHOR_CLIENT}";\n` + content;
   }
-  // The 0.29 client, imported by `addImports` for the `anchor` global or by the file itself
+  // The 0.x clients, imported by `addImports` for the `anchor` global or by the file itself: neither reads an IDL
+  // Anchor 1.x writes, and two clients in one project would not share their types
   content = content.replace(
-    /(["'])@coral-xyz\/anchor\1/g,
+    /(["'])(?:@coral-xyz|@project-serum)\/anchor\1/g,
     (_, quote: string) => quote + ANCHOR_CLIENT + quote
   );
   // The 1.x client types `accounts` without the accounts it resolves itself (the system program, PDAs), which the
