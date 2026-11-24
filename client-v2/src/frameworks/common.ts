@@ -384,10 +384,14 @@ export const fetchJSDependencyMap = async (files: TupleFiles) => {
  * Get `package.json` dependencies from the given files.
  *
  * @param files all files
+ * @param extra dependencies the export adds or pins over the ones the files use, `{}` for none
  * @returns the dependency list
  */
-export const getJSDependencies = async (files: TupleFiles) => {
-  const dependencies = await fetchJSDependencyMap(files);
+export const getJSDependencies = async (
+  files: TupleFiles,
+  extra: Dependencies
+) => {
+  const dependencies = { ...(await fetchJSDependencyMap(files)), ...extra };
   const devDependencies: Dependencies = {
     "@types/bn.js": "^5.1.1",
     "@types/chai": "^4.3.5",
@@ -403,6 +407,16 @@ export const getJSDependencies = async (files: TupleFiles) => {
 
   return PgCommon.prettyJSON({ dependencies, devDependencies }).slice(2, -2);
 };
+
+/**
+ * Get the version of a crate the build server compiles with.
+ *
+ * @param crateName the crate, kebab case
+ * @returns its version, absent when the server does not ship it
+ */
+export const fetchCrateVersion = async (
+  crateName: string
+): Promise<string | undefined> => (await getVersions("crates"))[crateName];
 
 /**
  * Get a map of names to versions.

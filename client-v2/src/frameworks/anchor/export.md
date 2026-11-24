@@ -27,6 +27,8 @@ anchor build
 anchor test
 ```
 
+`Anchor.toml` pins the Anchor version the Playground builds with (`[toolchain] anchor_version`). Anchor 1.x runs the tests against [Surfpool](https://surfpool.run); to use `solana-test-validator` instead, run `anchor test --validator legacy`.
+
 A project with no tests gets `tests/<name>.ts`, which only checks that the program is deployed and is meant to be replaced.
 
 - Run client

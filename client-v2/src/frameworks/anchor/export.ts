@@ -3,13 +3,21 @@ import {
   addAfter,
   addAfterImports,
   addImports,
+  fetchCrateVersion,
   fetchServerCargoLock,
+  getImportedNames,
   getJSDependencies,
   getRustDependencies,
   readExportedProject,
   wrapTopLevelAwait,
 } from "../common";
 import { getIdlBuildFeature } from "./idl-build-feature";
+
+/**
+ * The TypeScript client of Anchor 1.x, the version the build server compiles with. The Playground runs the 0.29
+ * client, `@coral-xyz/anchor`, which Anchor 1.0 renamed to this package, so the export names this one (HOO-2964).
+ */
+const ANCHOR_CLIENT = "@anchor-lang/core";
 
 /**
  * {@link Framework.importFromPlayground}
@@ -19,6 +27,8 @@ export const convertFromPlayground = async (
   name: string | undefined
 ) => {
   const project = await readExportedProject(name);
+  // The `anchor-lang` the build server compiles with: the CLI, the crate and the TypeScript client share a version
+  const anchorVersion = await fetchCrateVersion("anchor-lang");
   // Program manifest's lib name must match the `#[program]` module name and
   // Anchor.toml programs definition
   const libContent = files.find(([path]) => path.endsWith("lib.rs"))?.[1];
@@ -67,7 +77,7 @@ export const convertFromPlayground = async (
     frameworkFiles.push([
       PgCommon.joinPaths(PgExplorer.PATHS.TESTS_DIRNAME, `${packageName}.ts`),
       convertJS(
-        `import * as anchor from "@coral-xyz/anchor";
+        `import * as anchor from "${ANCHOR_CLIENT}";
 import { expect } from "chai";
 
 describe("${programName}", () => {
@@ -101,7 +111,7 @@ describe("${programName}", () => {
 // single deploy script that's invoked from the CLI, injecting a provider
 // configured from the workspace's Anchor.toml.
 
-const anchor = require("@coral-xyz/anchor");
+const anchor = require("${ANCHOR_CLIENT}");
 
 module.exports = async function (provider) {
   // Configure client to use the provider.
@@ -174,8 +184,16 @@ test-ledger
     // Anchor.toml
     [
       "Anchor.toml",
-      `[features]
-seeds = false
+      `${
+        anchorVersion
+          ? `[toolchain]
+anchor_version = "${anchorVersion}"
+package_manager = "yarn"
+
+`
+          : ""
+      }[features]
+resolution = true
 skip-lint = false
 
 ${
@@ -225,7 +243,9 @@ codegen-units = 1
     "lint:fix": "prettier */*.js \\"*/**/*{.js,.ts}\\" -w",
     "lint": "prettier */*.js \\"*/**/*{.js,.ts}\\" --check"
   },
-${await getJSDependencies(frameworkFiles)}
+${await getJSDependencies(frameworkFiles, {
+  [ANCHOR_CLIENT]: anchorVersion ?? "*",
+})}
 }
 `,
     ],
@@ -275,9 +295,22 @@ const convertJS = (
 ) => {
   // Handle imports
   content = addImports(content);
-  if (!content.includes("anchor")) {
-    content = `import * as anchor from "@coral-xyz/anchor";\n` + content;
+  // Every converted file uses `anchor` (the program set up below). A file that only mentions the word, as
+  // `describe("hello_anchor")` does, still needs the import
+  if (
+    !getImportedNames(content).has("anchor") &&
+    !/\b(?:const|let|var)\s+anchor\b/.test(content)
+  ) {
+    content = `import * as anchor from "${ANCHOR_CLIENT}";\n` + content;
   }
+  // The 0.29 client, imported by `addImports` for the `anchor` global or by the file itself
+  content = content.replace(
+    /(["'])@coral-xyz\/anchor\1/g,
+    (_, quote: string) => quote + ANCHOR_CLIENT + quote
+  );
+  // The 1.x client types `accounts` without the accounts it resolves itself (the system program, PDAs), which the
+  // 0.29 client took. `accountsPartial` takes them all, as Anchor 1.x's own test template calls it
+  content = content.replace(/\.accounts\(/g, ".accountsPartial(");
 
   // Top-level `await` doesn't compile with the exported `tsconfig.json`
   // (CommonJS) and Playground runs client code inside an async function anyway
