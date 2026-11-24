@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { isDroppedRequest } from "@/shared/lib/ai";
+import { isNetworkFailure } from "@/shared/lib/ai";
 import { createLogger } from "@/shared/lib/logger";
 
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
@@ -96,9 +96,11 @@ const ask = async (): Promise<Asked> => {
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
   } catch (error) {
-    if (isDroppedRequest(error)) {
-      // The user's connection, not the deployment: counted, and the next
-      // caller asks again, but nothing for error tracking (SOLANA-PLAYGROUND-F)
+    if (isNetworkFailure(error)) {
+      // Most likely the user's connection: counted, and the next
+      // caller asks again, but nothing for error tracking (SOLANA-PLAYGROUND-F).
+      // Our own timeout is still reported, as `TimeoutError` or, where fetch
+      // drops the signal's reason, `AbortError`: nothing else aborts this
       log.warn(`could not ask for the AI status: ${String(error)}`);
       assistantTelemetry.track("assistant_default_probe_failed", {
         reason: "network",

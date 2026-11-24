@@ -8,16 +8,19 @@
  *
  * So failures are recorded here and reported through the logger at `error`,
  * which reaches the console and error tracking in production too: this fires
- * when data the user created failed to be stored, retrieved or synced. A
- * request the user's side dropped (`isDroppedRequest`) is recorded and warned
- * of, never reported: sync retries it once the connection is back, and each
- * one reached Sentry as noise (SOLANA-PLAYGROUND-E).
+ * when data the user created failed to be stored, retrieved or synced. The
+ * one exception is a request whose connection dropped (`isNetworkFailure`):
+ * it is recorded and warned of, never reported, since the next push, pull or
+ * reconcile asks again, and each one reached Sentry as noise
+ * (SOLANA-PLAYGROUND-E). An `AbortError` is still reported: here it is as
+ * likely an aborted IndexedDB write, or a timeout of ours on an engine that
+ * drops the signal's reason, as a request the browser let go.
  *
  * While diagnosing, the whole list is one command away in the browser console:
  *
  *   __pgSyncDiagnostics.failures()
  */
-import { isDroppedRequest } from "@/shared/lib/ai";
+import { isNetworkFailure } from "@/shared/lib/ai";
 import { isMissing } from "@/shared/lib/is-missing";
 import { createLogger } from "@/shared/lib/logger";
 
@@ -38,8 +41,8 @@ export const report = (what: string, error: unknown) => {
   failures.push({ what, error, at: new Date().toISOString() });
   if (failures.length > MAX) failures.shift();
   const context = { what: `${what} failed` };
-  if (isDroppedRequest(error)) {
-    log.warn(String(error), { context });
+  if (isNetworkFailure(error)) {
+    log.warn(`${what} failed: the connection dropped`, { context });
     return;
   }
   log.error(error, { report: true, context });
@@ -113,8 +116,6 @@ if (import.meta.vitest) {
       // Safari's and Chrome's dropped connection (Sentry SOLANA-PLAYGROUND-E)
       new TypeError("Load failed"),
       new TypeError("Failed to fetch"),
-      // The browser dropping the request, as on leaving the page
-      new DOMException("aborted", "AbortError"),
     ])("records, but does not report, a request that got %s", (error) => {
       report("pull thread", error);
 
@@ -129,8 +130,15 @@ if (import.meta.vitest) {
       expect(logged.entries.some((e) => e.report)).toBe(false);
     });
 
-    it("still reports a TypeError that is a bug, not the network", () => {
-      report("pull thread", new TypeError("x.fetch is not a function"));
+    it.each([
+      // A bug that is also a TypeError
+      new TypeError("x.fetch is not a function"),
+      // A request of ours that ran out of its time limit
+      new DOMException("signal timed out", "TimeoutError"),
+      // An aborted IndexedDB write, or a timeout where fetch drops the reason
+      new DOMException("aborted", "AbortError"),
+    ])("still reports %s", (error) => {
+      report("write thread", error);
 
       expect(logged.entries).toEqual([
         expect.objectContaining({ level: "error", report: true }),

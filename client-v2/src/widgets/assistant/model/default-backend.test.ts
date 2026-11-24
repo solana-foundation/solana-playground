@@ -141,7 +141,6 @@ describe("probeDefaultBackend", () => {
     // Chrome's and Safari's dropped connection (Sentry SOLANA-PLAYGROUND-F)
     new TypeError("Failed to fetch"),
     new TypeError("Load failed"),
-    new DOMException("aborted", "AbortError"),
   ])(
     "is unreachable, warned of and counted, not reported, when the request gets %s",
     async (error) => {
@@ -155,6 +154,35 @@ describe("probeDefaultBackend", () => {
       ]);
     }
   );
+
+  it.each([
+    // The probe's own timeout, and the same where fetch drops its reason
+    new DOMException("signal timed out", "TimeoutError"),
+    new DOMException("aborted", "AbortError"),
+    // A bug that is also a TypeError
+    new TypeError("x.fetch is not a function"),
+  ])("is unreachable and reported when the request gets %s", async (error) => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(error);
+    expect(await probeDefaultBackend()).toEqual({ state: "unreachable" });
+    expectFailure("network");
+  });
+
+  it("asks again after a dropped connection", async () => {
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new TypeError("Load failed"));
+    spy.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => served("m"),
+    } as Response);
+    await probeDefaultBackend();
+    expect(await probeDefaultBackend()).toEqual({
+      state: "present",
+      model: "m",
+    });
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
 
   it("is unreachable and reported when the route answers a 5xx", async () => {
     answer({}, 503);
