@@ -40,8 +40,6 @@ Or run it manually (Actions → Server: deploy → Run workflow) to deploy the l
 
 ## Required GitHub secrets
 
-Secrets of the `playground-server` environment, which admits `master` only ([Server release](../docs/server-release.md#only-master-reaches-the-deploy-identity)).
-
 | Secret            | Purpose                                          |
 | ----------------- | ------------------------------------------------ |
 | `GCP_KEY`         | Service-account JSON for `google-github-actions/auth`. |
