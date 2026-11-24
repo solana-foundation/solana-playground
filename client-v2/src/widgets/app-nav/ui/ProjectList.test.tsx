@@ -436,6 +436,27 @@ describe("ProjectList", () => {
     );
   });
 
+  it("duplicates an imported project into a name the explorer accepts", async () => {
+    // Sentry SOLANA-PLAYGROUND-D: the importers skip name validation, so an
+    // imported name carries `/` and `@`, and a copy named after it was
+    // refused with "Invalid name"
+    const imported = "gist-owner/abc123@def";
+    app.state.names = ["alpha", "beta", imported];
+    files.readWorkspaceFiles.mockResolvedValue([
+      [`/${imported}/src/lib.rs`, "fn main() {}"],
+    ]);
+    draw();
+
+    fireEvent.keyDown(menuOf(imported), { key: "d" });
+
+    await waitFor(() =>
+      expect(app.PgExplorer.createWorkspace).toHaveBeenCalledWith(
+        "gist-owner-abc123-def copy",
+        { files: [["/gist-owner-abc123-def copy/src/lib.rs", "fn main() {}"]] }
+      )
+    );
+  });
+
   it("shows a started lesson's page on its row, and none on a project's", () => {
     progress.set("Hello Anchor", { state: "started", page: 3, pages: 5 });
     progress.set("alpha", { state: "completed" });
