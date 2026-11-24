@@ -49,7 +49,7 @@ const walletWindow = vi.hoisted(() => ({
 const balance = vi.hoisted(() => ({ current: 2.4 as number | undefined }));
 const setToast = vi.hoisted(() => vi.fn());
 const explorer = vi.hoisted(() => ({
-  allWorkspaceNames: [] as string[] | null,
+  storedWorkspaceNames: [] as string[] | null,
 }));
 
 vi.mock("../model/use-cluster-status", () => ({
@@ -117,7 +117,7 @@ afterEach(() => {
   walletWindow.show = false;
   balance.current = 2.4;
   setToast.mockReset();
-  explorer.allWorkspaceNames = [];
+  explorer.storedWorkspaceNames = [];
   PgSession.reset();
 });
 
@@ -220,7 +220,7 @@ it("counts a menu closed over the question as a cancel", async () => {
 
 it("signs out on the confirmation and says how many projects stayed", async () => {
   await signInAsTester();
-  explorer.allWorkspaceNames = ["counter", "voting"];
+  explorer.storedWorkspaceNames = ["counter", "voting"];
   const signOut = vi
     .spyOn(PgSession, "signOut")
     .mockImplementation(async () => {
@@ -245,10 +245,10 @@ it("signs out on the confirmation and says how many projects stayed", async () =
 
 it("counts what is left after the sign-out released the account's projects", async () => {
   await signInAsTester();
-  explorer.allWorkspaceNames = ["counter", "voting", "local"];
+  explorer.storedWorkspaceNames = ["counter", "voting", "local"];
   vi.spyOn(PgSession, "signOut").mockImplementation(async () => {
     // The release runs inside the sign-out, before it settles
-    explorer.allWorkspaceNames = ["local"];
+    explorer.storedWorkspaceNames = ["local"];
     PgSession.reset();
   });
   draw("footer");
@@ -269,7 +269,7 @@ it("counts what is left after the sign-out released the account's projects", asy
 
 it("says nothing more after a sign-out that left nothing, and counts zero", async () => {
   await signInAsTester();
-  explorer.allWorkspaceNames = [];
+  explorer.storedWorkspaceNames = [];
   vi.spyOn(PgSession, "signOut").mockImplementation(async () => {
     PgSession.reset();
   });
@@ -289,7 +289,7 @@ it("says nothing more after a sign-out that left nothing, and counts zero", asyn
 
 it("says the leftovers once: the next opening of the menu has no note", async () => {
   await signInAsTester();
-  explorer.allWorkspaceNames = ["local"];
+  explorer.storedWorkspaceNames = ["local"];
   vi.spyOn(PgSession, "signOut").mockImplementation(async () => {
     PgSession.reset();
   });

@@ -210,15 +210,19 @@ export class PgChatSync {
   }
 
   /**
-   * `GET /api/conversations?threadId=`, without a readiness check or a
-   * report: each caller decides what a failure means. `offered` is how many
-   * items the server sent before decoding.
+   * `GET /api/conversations?threadId=`, given `LOCKED_REQUEST_MS` to answer,
+   * without a readiness check or a report: each caller decides what a failure
+   * means. `offered` is how many items the server sent before decoding.
    */
   private static async _pull(threadId: string): Promise<Pulled> {
     try {
       const response = await PgSession.fetchAuthed(
         `/api/conversations?threadId=${encodeURIComponent(threadId)}`,
-        { credentials: "include", cache: "no-store" }
+        {
+          credentials: "include",
+          cache: "no-store",
+          signal: timeoutSignal(LOCKED_REQUEST_MS), // An account deletion waits on every thread's read (`syncedThreads`)
+        }
       );
       if (response.status === 404) return { kind: "missing" };
       if (!response.ok) return { kind: "refused", status: response.status };
@@ -743,7 +747,7 @@ export class PgChatSync {
         return undefined;
       case "failed":
         // A dropped connection is the user's network; anything else (a body
-        // that does not parse, a fault of ours) is reported
+        // that does not parse, a read out of time, a fault of ours) is reported
         if (isNetworkFailure(pulled.error)) {
           log.info("chat kept: not known to be on the server", {
             context: { threadId, why: "read failed", error: pulled.error },
@@ -935,14 +939,16 @@ if (import.meta.vitest) {
     });
 
     /** `/api/sync` says yes; everything else is the caller's to describe */
-    const respondingWith = (rest: (url: string) => unknown) =>
-      fetchMock.mockImplementation((url: string) =>
+    const respondingWith = (
+      rest: (url: string, init?: RequestInit) => unknown
+    ) =>
+      fetchMock.mockImplementation((url: string, init?: RequestInit) =>
         url === "/api/sync"
           ? Promise.resolve({
               ok: true,
               json: async () => ({ enabled: true, db: "ok" }),
             })
-          : rest(url)
+          : rest(url, init)
       );
 
     /** The body of the one POST that was made */
@@ -2141,6 +2147,41 @@ if (import.meta.vitest) {
         expect(getFailures().slice(failures)).toEqual([
           expect.objectContaining({
             what: `read held thread ${threadId}`,
+          }),
+        ]);
+      });
+
+      it("keeps a thread whose read is still out at its time limit, and reports it", async () => {
+        await signedIn();
+        await PgChatStorage.write(threadId, [item(1)]);
+        // The limit in the test's hands: `AbortSignal.timeout` keeps real time
+        const limit = new AbortController();
+        vi.spyOn(AbortSignal, "timeout").mockReturnValue(limit.signal);
+        const timedOut = new Error("signal timed out");
+        timedOut.name = "TimeoutError";
+        // As `fetch` does, the read ends when its signal aborts. The limit
+        // passes while the read is out, and only then does the server answer
+        respondingWith(
+          (_, init) =>
+            new Promise((resolve, reject) => {
+              init?.signal?.addEventListener("abort", () => reject(timedOut));
+              limit.abort();
+              resolve({
+                ok: true,
+                status: 200,
+                json: async () => ({ items: [item(1)] }),
+              });
+            })
+        );
+        const failures = getFailures().length;
+
+        const handed = await PgChatSync.syncedThreads();
+
+        expect(handed).toEqual({ handedOver: [], complete: false });
+        expect(getFailures().slice(failures)).toEqual([
+          expect.objectContaining({
+            what: `read held thread ${threadId}`,
+            error: timedOut,
           }),
         ]);
       });

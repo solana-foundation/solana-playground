@@ -96,16 +96,27 @@ const isClean = async (projectId: string, localName: string) =>
  *   account signing in is asked again, since its mark still names a row that
  *   is gone, and another account never uploads it
  *   (`PgSyncMark.belongsToAnotherAccount`).
+ * - An edit the editor has not saved. The store holds typing only once the
+ *   editor's autosave has run, so a buffer that differs from the stored file
+ *   is work the account never had. Read through `PgExplorer.editorBuffers`.
  */
 const isReleasable = async (projectId: string, localName: string) => {
   if (PgProjectSync.conflictFor(projectId)) return false;
   const mark = await PgSyncMark.read(projectId);
   const { files } = await snapshotOf(localName);
-  if (!(await isCleanAgainst(mark, localName, files))) return false;
+  if (!mark || !(await isCleanAgainst(mark, localName, files))) return false;
   const hashes = await hashFiles({ files });
-  return SYNCED_WORKSPACE_FILES.every(
-    (path) => hashes[path] === mark!.files[path]
-  );
+  if (
+    !SYNCED_WORKSPACE_FILES.every((path) => hashes[path] === mark.files[path])
+  ) {
+    return false;
+  }
+  // Last, with no await after it: typing during the reads above still counts
+  const buffers = PgExplorer.editorBuffers;
+  return Object.entries(files).every(([path, stored]) => {
+    const buffer = buffers?.read(`/${localName}/${path}`);
+    return buffer === undefined || buffer === stored;
+  });
 };
 
 /**

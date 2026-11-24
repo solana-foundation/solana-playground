@@ -272,8 +272,9 @@ export const useAccount = ({
       .then(() => {
         // Everything still in the browser once the release ran
         // (`releaseLocalProjects`): projects the account does not hold, or
-        // holds without this browser's latest edits
-        const kept = PgExplorer.allWorkspaceNames?.length ?? 0;
+        // holds without this browser's latest edits. The stored names, which
+        // a temporary view lists too
+        const kept = PgExplorer.storedWorkspaceNames?.length ?? 0;
         sessionTelemetry.track("session_sign_out_ended", {
           outcome: "ok",
           items_kept: kept,

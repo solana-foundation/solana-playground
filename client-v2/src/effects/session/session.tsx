@@ -373,8 +373,9 @@ export const session = (): Disposable => {
         releaseProjectsUnchangedSince(marks)
       );
       // Everything the release left, as the sign-out's leftovers line counts
-      // it: a release that failed removed nothing, and all of it stayed
-      const kept = PgExplorer.allWorkspaceNames?.length ?? 0;
+      // it: a release that failed removed nothing, and all of it stayed. The
+      // stored names, which a temporary view lists too
+      const kept = PgExplorer.storedWorkspaceNames?.length ?? 0;
       await step("close thread", () => PgAssistant.closeThread());
       await step("forget account", () => PgProjectSync.forgetAccount());
       return kept;

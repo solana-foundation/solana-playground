@@ -931,7 +931,7 @@ describe("deleting the account", () => {
 
   it("counts the projects the release left in this browser", async () => {
     serverDeletes(accepted);
-    const names = vi.spyOn(PgExplorer, "allWorkspaceNames", "get");
+    const names = vi.spyOn(PgExplorer, "storedWorkspaceNames", "get");
     vi.mocked(restore.releaseProjectsUnchangedSince).mockImplementation(
       async () => {
         // "Newest" matched the server's copy and left; "Hello Anchor" stays
@@ -945,6 +945,25 @@ describe("deleting the account", () => {
     expect(await PgSession.deleteAccount()).toEqual({
       githubRevoked: true,
       kept: 1,
+    });
+    effect.dispose();
+  });
+
+  it("counts the stored projects when the account is deleted from a temporary view", async () => {
+    serverDeletes(accepted);
+    // A repository, gist or docs link: no workspace is open, and the stored
+    // ones stay listed beside it
+    vi.spyOn(PgExplorer, "allWorkspaceNames", "get").mockReturnValue(undefined);
+    vi.spyOn(PgExplorer, "storedWorkspaceNames", "get").mockReturnValue([
+      "Hello Anchor",
+      "Newest",
+    ]);
+
+    const effect = await mount();
+
+    expect(await PgSession.deleteAccount()).toEqual({
+      githubRevoked: true,
+      kept: 2,
     });
     effect.dispose();
   });

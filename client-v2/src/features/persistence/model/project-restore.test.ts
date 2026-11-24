@@ -900,6 +900,38 @@ describe("releasing local projects at sign-out", () => {
     expect(remove).not.toHaveBeenCalled();
   });
 
+  /** The editor's copy of one file, standing in for Monaco's model */
+  const editorHolds = (path: string, text: string) =>
+    vi.spyOn(PgExplorer, "editorBuffers", "get").mockReturnValue({
+      read: (at) => (at === path ? text : undefined),
+      write: () => undefined,
+      discard: () => undefined,
+    });
+
+  it("keeps a project with an edit the editor has not saved", async () => {
+    // The editor saves typing only after its autosave delay: until then the
+    // store still matches the mark, and the edit exists nowhere else
+    withLocal({ alpha: "p1" });
+    withFiles("alpha", { "src/lib.rs": "same" });
+    await agreed("p1", { files: { "src/lib.rs": "same" } }, "t1");
+    editorHolds("/alpha/src/lib.rs", "same, and typed since");
+    const remove = stubDelete();
+
+    expect(await releaseLocalProjects()).toEqual([]);
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("removes a project whose open file the editor holds as the store does", async () => {
+    // The other half of the check above: an open file alone keeps nothing
+    withLocal({ alpha: "p1" });
+    withFiles("alpha", { "src/lib.rs": "same" });
+    await agreed("p1", { files: { "src/lib.rs": "same" } }, "t1");
+    editorHolds("/alpha/src/lib.rs", "same");
+    stubDelete();
+
+    expect(await releaseLocalProjects()).toEqual(["alpha"]);
+  });
+
   it("decides per project rather than for the set", async () => {
     // The mistake this mirrors the fix for, in `PgChatSync.forget`: one
     // project that cannot be handed over is no reason to leave the others on
