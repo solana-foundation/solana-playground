@@ -22,6 +22,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { parseEnv } from "util";
 
+import { SAMPLE_RATE } from "../src/shared/lib/sample-rate.mjs";
 import {
   isSecretQueryTerm,
   isTokenLike,
@@ -184,6 +185,11 @@ const VALUE_SHAPES = [
   [
     (name) => name.endsWith("_SEND_TX_PER_SECOND"),
     checkWith(/^\d+(\.\d+)?$/, "a number"),
+  ],
+  // `10` meant as 10 % fails here rather than tracing every page load
+  [
+    (name) => name === "REACT_APP_SENTRY_TRACES_SAMPLE_RATE",
+    checkWith(SAMPLE_RATE, "a decimal from 0 to 1"),
   ],
   [
     (name) => name === "REACT_APP_GA_MEASUREMENT_ID",

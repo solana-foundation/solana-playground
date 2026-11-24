@@ -39,11 +39,12 @@ export const SEND_TX_PER_SECOND = {
 };
 
 /**
- * Error reporting, analytics and the console log level; each unset turns its
- * part off. A getter, read when called, because tests stub these per case.
+ * Error reporting, tracing, analytics and the console log level. Read when
+ * called, because tests stub these per case; each consumer owns its default.
  */
 export const observabilityEnv = () => ({
   SENTRY_DSN: process.env.REACT_APP_SENTRY_DSN,
+  SENTRY_TRACES_SAMPLE_RATE: process.env.REACT_APP_SENTRY_TRACES_SAMPLE_RATE,
   // Vercel copies its system variables with the CRA prefix at build time
   VERCEL_GIT_COMMIT_SHA: process.env.REACT_APP_VERCEL_GIT_COMMIT_SHA,
   VERCEL_ENV: process.env.REACT_APP_VERCEL_ENV,
