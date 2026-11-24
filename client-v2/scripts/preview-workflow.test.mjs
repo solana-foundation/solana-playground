@@ -51,25 +51,25 @@ const INSTALL_OR_BUILD =
 const holdsVercelToken = (name) =>
   /secrets[.[]['"]?VERCEL_TOKEN\b(?!['"]?\]?\s*!=)/.test(code(name));
 
-test("the workflow gives no credential to every job at once", () => {
+test("gives no credential to every job at once", () => {
   const top = text.slice(0, text.indexOf("\njobs:\n"));
   assert.doesNotMatch(top, CREDENTIAL);
   assert.match(top, /^permissions: \{\}$/m);
 });
 
 for (const name of ["keys", "build"]) {
-  test(`job ${name}, which runs the PR's dependencies, is given no credential`, () => {
+  test(`gives no credential to job ${name}, which runs the PR's dependencies`, () => {
     assert.doesNotMatch(code(name), CREDENTIAL);
     assert.match(code(name), /persist-credentials: false/);
   });
 }
 
-test("job build checks its environment for credentials first", () => {
+test("makes job build check its environment for credentials first", () => {
   const steps = code("build").split(/\n\s+- (?:name|uses):/);
   assert.match(steps[1], /No credential in the environment/);
 });
 
-test("only prepare and deploy hold the Vercel token", () => {
+test("gives the Vercel token only to prepare and deploy", () => {
   assert.deepEqual([...jobs.keys()].filter(holdsVercelToken).sort(), [
     "deploy",
     "prepare",
@@ -77,12 +77,12 @@ test("only prepare and deploy hold the Vercel token", () => {
 });
 
 for (const name of ["database", "prepare", "deploy", "report"]) {
-  test(`job ${name}, which holds a credential, never installs or builds the PR`, () => {
+  test(`keeps job ${name}, which holds a credential, from installing or building the PR`, () => {
     assert.doesNotMatch(code(name), INSTALL_OR_BUILD);
   });
 }
 
-test("every job that installs or builds holds no credential", () => {
+test("gives no credential to any job that installs or builds", () => {
   for (const [name] of jobs) {
     if (INSTALL_OR_BUILD.test(code(name)))
       assert.doesNotMatch(code(name), CREDENTIAL, name);
@@ -90,7 +90,7 @@ test("every job that installs or builds holds no credential", () => {
 });
 
 for (const name of ["prepare", "deploy"]) {
-  test(`job ${name} checks out no root file, so no .npmrc reaches npx`, () => {
+  test(`checks out no root file in job ${name}, so no .npmrc reaches npx`, () => {
     const block = code(name);
     assert.match(block, /sparse-checkout-cone-mode: false/);
     // Only the workflow's own scripts and the CLI's version, never client-v2
@@ -104,7 +104,7 @@ for (const name of ["prepare", "deploy"]) {
       );
   });
 
-  test(`job ${name} runs npx only after checking the CLI is vercel@x.y.z`, () => {
+  test(`runs npx in job ${name} only after checking the CLI is vercel@x.y.z`, () => {
     const block = code(name);
     const check = block.indexOf("^vercel@[0-9]+");
     assert.ok(check >= 0, "no check of the CLI's name");
@@ -112,7 +112,7 @@ for (const name of ["prepare", "deploy"]) {
   });
 }
 
-test("job deploy checks the build output before it deploys", () => {
+test("checks the build output in job deploy before it deploys", () => {
   const block = code("deploy");
   const check = block.indexOf("preview-check-output.mjs");
   assert.ok(check >= 0);
@@ -121,7 +121,7 @@ test("job deploy checks the build output before it deploys", () => {
   assert.ok(check < block.indexOf(" deploy --prebuilt"));
 });
 
-test("the run as a whole holds the concurrency group, unrelated runs one of their own", () => {
+test("holds the concurrency group for the run as a whole, and gives unrelated runs one of their own", () => {
   const top = text.slice(0, text.indexOf("\njobs:\n"));
   assert.match(
     top,
@@ -131,7 +131,7 @@ test("the run as a whole holds the concurrency group, unrelated runs one of thei
     assert.doesNotMatch(code(name), /^ {4}concurrency:/m, name);
 });
 
-test("job prepare uploads only what preview-build-env.mjs wrote, never the pulled file", () => {
+test("uploads only what preview-build-env.mjs wrote in job prepare, never the pulled file", () => {
   const block = code("prepare");
   assert.match(
     block,
@@ -141,7 +141,7 @@ test("job prepare uploads only what preview-build-env.mjs wrote, never the pulle
   assert.match(block, /name: preview-inputs\n\s+path: inputs\n/);
 });
 
-test("job deploy refuses climbing paths and hard links before unpacking", () => {
+test("refuses climbing paths and hard links in job deploy before unpacking", () => {
   const block = code("deploy");
   const unpack = block.indexOf("tar -xzf");
   for (const check of ["climbing=", "grep -q '^h'"]) {

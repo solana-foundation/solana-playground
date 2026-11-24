@@ -197,7 +197,7 @@ test("refuses a folder with no build output", () => {
   assert.deepEqual(outputProblems(folder), ["no .vercel folder"]);
 });
 
-test("the CLI exits 1 and prints an error line per problem", () => {
+test("exits 1 from the CLI and prints an error line per problem", () => {
   const folder = buildOutput();
   symlinkSync("/etc/passwd", path.join(folder, ".vercel/output/static/x"));
   const run = spawnSync(process.execPath, [SCRIPT, folder], {

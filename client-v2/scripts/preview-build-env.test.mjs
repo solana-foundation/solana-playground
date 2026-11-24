@@ -118,7 +118,7 @@ test("takes a URL with a password for a secret, whatever its name", () => {
   );
 });
 
-test("the CLI refuses a pulled file whose public value is a secret", () => {
+test("refuses, from the CLI, a pulled file whose public value is a secret", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "preview-build-env-"));
   const input = path.join(dir, "in");
   writeFileSync(
@@ -136,7 +136,7 @@ test("the CLI refuses a pulled file whose public value is a secret", () => {
   assert.match(run.stderr, /REACT_APP_X holds API_KEY/);
 });
 
-test("no secret value survives", () => {
+test("lets no secret value survive", () => {
   const out = buildEnv(PULLED);
   for (const value of [
     "sk-made-up-key",
@@ -148,14 +148,14 @@ test("no secret value survives", () => {
   }
 });
 
-test("a name that only starts like a public one is not public", () => {
+test("does not take a name that only starts like a public one for public", () => {
   assert.equal(
     buildEnv('VERCEL_TOKEN="t"\nVERCEL_ENVIRONMENT="x"\nREACT_APPX="y"\n'),
     `VERCEL_TOKEN="${PLACEHOLDER}"\nVERCEL_ENVIRONMENT="${PLACEHOLDER}"\nREACT_APPX="${PLACEHOLDER}"\n`
   );
 });
 
-test("the CLI writes the filtered file", () => {
+test("writes the filtered file from the CLI", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "preview-build-env-"));
   const input = path.join(dir, "in");
   const output = path.join(dir, "out");
