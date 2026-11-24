@@ -38,6 +38,9 @@ as soon as the Root Directory points at `client-v2`.
      `api/conversations.mjs` answer its writes with `403`. A production build with `PG_AI_API_KEY` fails
      without it (`scripts/check-agent-env.mjs`).
    - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — see step 3.
+   - `CACHE_SEAL_KEY`: `openssl rand -hex 32`, Production only, never on
+     Preview or Development. A production build fails without it
+     ([Sealed production cache](#sealed-production-cache)).
    - `SENTRY_AUTH_TOKEN`: a production build fails without it
      (`scripts/upload-sourcemaps.mjs`). A local `vercel build` pulls a
      Sensitive variable as an empty value, which fails the same way, so a
@@ -216,6 +219,19 @@ The supported crates (every other file in `public/crates`) are not cached. `yarn
 `scripts/vercel-install.sh` stores the wasm packages as one tar named by a hash of every file under `wasm/` except build output. Any change under `wasm/` produces a new hash and rebuilds every wasm package. The tar is looked up locally first, then in Remote Cache. On a miss the script builds, writes both, and only then runs `yarn install` and the client build, so a build that later exceeds the time limit still leaves the tar for the next one. A build that finds the tar locally uploads it when Remote Cache lacks it. An upload failure prints a warning and the build continues.
 
 Remote Cache is reached through its [artifacts API](https://vercel.com/docs/rest-api/artifacts/upload-a-cache-artifact). The script expects the credentials in `VERCEL_ARTIFACTS_TOKEN` and `VERCEL_ARTIFACTS_OWNER`, and the build log says which of the two were set. Without the token only the local tar is used.
+
+### Sealed production cache
+
+Remote Cache is shared by every build of the team, and anything holding `VERCEL_ARTIFACTS_TOKEN` can write any entry: a preview build of a pull request, a CI job, a leaked token. Unpacking such an entry puts its code into the bundle. So a production build (`VERCEL_ENV=production`) takes back only archives a production build stored:
+
+- It stores its archives under artifact keys derived from `CACHE_SEAL_KEY` and the cache key, so it never reads an entry a preview build wrote, and a preview never overwrites one of its own.
+- Beside each archive it stores a seal: HMAC-SHA256 over the cache key and the archive's bytes under `CACHE_SEAL_KEY` (`scripts/cache-seal.mjs`), as `<archive>.seal` in Build Cache and as a second Remote Cache artifact.
+- Before unpacking any copy, from Build Cache or Remote Cache, it checks the seal. A copy without a seal is discarded and rebuilt. A copy whose seal does not match stops the build with `does not match its seal`: someone other than a production build wrote it.
+- Without `CACHE_SEAL_KEY`, or with one under 32 characters, a production build stops before it reads any cache.
+
+This covers the wasm packages and the default crates. Preview and local builds are unchanged and keep the unsealed keys.
+
+`CACHE_SEAL_KEY` is set for Production only, so no preview or CI job ever holds it. To recover from a seal that does not match, rotate it: every production key changes with it, so the next production build ignores the old entries and rebuilds (about an hour for the wasm packages, which may need a second deployment, as on any wasm miss). Rotating it is also the step after any suspected leak.
 
 Rust state (toolchains, cargo registry, and target dir) lives in `client-v2/.cache/rust`, outside `node_modules`. It is larger than the build cache size limit, so on Vercel it is empty at the start of every build. Locally it persists.
 

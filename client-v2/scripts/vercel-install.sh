@@ -119,6 +119,79 @@ remote_upload() {
     || echo ">>> $3: Remote Cache upload failed; a build without the Build Cache copy rebuilds" >&2
 }
 
+SEAL_SCRIPT="$(dirname -- "${BASH_SOURCE[0]}")/cache-seal.mjs"
+
+# A production deployment takes back only archives a production build sealed (HOO-2887): Remote Cache
+# is writable by anyone holding its token, and every build of the team holds it. See scripts/cache-seal.mjs.
+production_build() {
+  [ "${VERCEL_ENV:-}" = production ]
+}
+
+# $1: cache key. Production stores under names derived from CACHE_SEAL_KEY, so no other build writes
+# them by accident, and rotating the secret moves production to fresh names: that is how a build stopped
+# by a seal that does not match recovers. printf is a builtin, so the secret never reaches an argv.
+cache_key() {
+  if production_build; then
+    printf 'production-%s-%s' "$CACHE_SEAL_KEY" "$1" | sha256 | cut -d' ' -f1
+  else
+    printf '%s' "$1"
+  fi
+}
+
+# $1: artifact key of an archive. Prints the artifact key of its seal.
+seal_key() {
+  printf 'seal-%s' "$1" | sha256 | cut -d' ' -f1
+}
+
+# $1: artifact key, $2: archive, $3: what it holds, for the log. Outside production every copy passes.
+# In production a copy without a seal is discarded and rebuilt, and one whose seal does not match stops the build.
+seal_holds() {
+  production_build || return 0
+  local status=0
+  if [ ! -f "$2.seal" ]; then
+    echo ">>> $3: $(basename "$2") has no seal, discarding" >&2
+    rm -f "$2"
+    return 1
+  fi
+  node "$SEAL_SCRIPT" verify "$1" "$2" "$2.seal" || status=$?
+  [ "$status" -eq 0 ] && return 0
+  if [ "$status" -eq 1 ]; then
+    echo ">>> $3: $(basename "$2") does not match its seal; production never builds from it. Someone other than a production build wrote this cache entry. Rotate CACHE_SEAL_KEY to rebuild under new names (docs/deploy-client-vercel.md, \"Sealed production cache\")." >&2
+  fi
+  exit 1
+}
+
+# $1: artifact key, $2: archive, $3: what it holds, for the log. Succeeds when $2 holds a copy this build may use,
+# from Build Cache first, then Remote Cache.
+restore_archive() {
+  if [ -f "$2" ] && seal_holds "$1" "$2" "$3" && readable_archive "$2" "$3"; then
+    echo ">>> $3: HIT in Build Cache ($1)"
+    # A build restored from Build Cache seeds Remote Cache when it lacks the archive.
+    remote_has "$1" || store_archive "$1" "$2" "$3"
+    return 0
+  fi
+  rm -f "$2.seal"
+  if remote_fetch "$1" "$2" \
+    && { ! production_build || remote_fetch "$(seal_key "$1")" "$2.seal"; } \
+    && seal_holds "$1" "$2" "$3" && readable_archive "$2" "$3"; then
+    echo ">>> $3: HIT in Remote Cache ($1)"
+    return 0
+  fi
+  rm -f "$2"
+  return 1
+}
+
+# $1: artifact key, $2: archive, $3: what it holds, for the log. A production build seals the archive first.
+store_archive() {
+  if production_build; then
+    node "$SEAL_SCRIPT" sign "$1" "$2" >"$2.seal"
+  fi
+  remote_upload "$1" "$2" "$3"
+  if production_build; then
+    remote_upload "$(seal_key "$1")" "$2.seal" "$3 seal"
+  fi
+}
+
 # $1: package. Prints the lockfile wasm-pack reads for it: the one at the package's workspace root.
 wasm_lockfile() {
   local manifest
@@ -242,21 +315,18 @@ pack_wasm_packages() {
 
 # $1: wasm key. Leaves the packages under ../wasm, from the cheapest source that has them.
 restore_wasm_packages() {
-  local key="$1" archive="$WASM_CACHE/$1.tar"
+  local key archive
+  # Its own line: set -e ignores a failure inside a command substitution used as an argument.
+  key=$(cache_key "$1")
+  archive="$WASM_CACHE/$key.tar"
 
-  if [ -f "$archive" ] && readable_archive "$archive" "wasm packages"; then
-    echo ">>> wasm packages: HIT in Build Cache ($key)"
-    # A build restored from Build Cache seeds Remote Cache when it lacks the tar.
-    remote_has "$key" || remote_upload "$key" "$archive" "wasm packages"
-  elif remote_fetch "$key" "$archive" && readable_archive "$archive" "wasm packages"; then
-    echo ">>> wasm packages: HIT in Remote Cache ($key)"
-  else
+  if ! restore_archive "$key" "$archive" "wasm packages"; then
     echo ">>> wasm packages: MISS in Build Cache and Remote Cache ($key), building"
     build_wasm_packages
     pack_wasm_packages "$archive"
     # Uploaded before yarn install and the client build, so a build that later
     # exceeds Vercel's time limit still leaves the packages behind for the next one.
-    remote_upload "$key" "$archive" "wasm packages"
+    store_archive "$key" "$archive" "wasm packages"
   fi
 
   tar -xf "$archive" -C ../wasm
@@ -277,14 +347,10 @@ restore_default_crates() {
   # Its own line: set -e ignores a failure inside a command substitution used as an argument.
   inputs=$(node scripts/generate-default-crates.mjs --key)
   key=$(printf 'default-crates-%s' "$inputs" | sha256 | cut -d' ' -f1)
+  key=$(cache_key "$key")
   archive="$DEFAULT_CRATES_CACHE/$key.tar.gz"
 
-  if [ -f "$archive" ] && readable_archive "$archive" "default crates"; then
-    echo ">>> default crates: HIT in Build Cache ($key)"
-    remote_has "$key" || remote_upload "$key" "$archive" "default crates"
-  elif remote_fetch "$key" "$archive" && readable_archive "$archive" "default crates"; then
-    echo ">>> default crates: HIT in Remote Cache ($key)"
-  else
+  if ! restore_archive "$key" "$archive" "default crates"; then
     echo ">>> default crates: MISS in Build Cache and Remote Cache ($key), generating"
     ensure_rustup
     node scripts/generate-default-crates.mjs
@@ -292,7 +358,7 @@ restore_default_crates() {
     mkdir -p "$DEFAULT_CRATES_CACHE"
     (cd "$CRATES_DIR" && tar -czf "$archive" "${DEFAULT_CRATE_FILES[@]}")
     du -sh "$archive"
-    remote_upload "$key" "$archive" "default crates"
+    store_archive "$key" "$archive" "default crates"
   fi
 
   mkdir -p "$CRATES_DIR"
@@ -324,6 +390,10 @@ main() {
   if wasm_stubs_requested; then
     echo ">>> USE_WASM_STUBS=true: a deployment never ships wasm stubs; unset it" >&2
     exit 1
+  fi
+  # Production refuses to start without its seal secret rather than build from an unverified cache.
+  if production_build; then
+    node "$SEAL_SCRIPT" check || exit 1
   fi
   wasm_key=$(wasm_source_key)
   report_remote_credentials
