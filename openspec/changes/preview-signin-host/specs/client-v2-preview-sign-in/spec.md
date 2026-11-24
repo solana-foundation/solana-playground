@@ -17,8 +17,9 @@ Its scenarios are checked by Node tests, not in the browser, so they carry the
 A deployment SHALL act as the OAuth proxy's host only when
 `AUTH_OAUTH_PROXY_HOST` is exactly `true`, `AUTH_OAUTH_PROXY_SECRET` is set
 and `VERCEL_ENV` is not `preview`. The host SHALL NOT serve the proxy's
-completion endpoints. A deployment that is neither the host nor a preview
-proxying to another origin SHALL install no proxy.
+completion endpoints. A deployment outside a preview without the host flag
+SHALL install no proxy. A preview whose proxy URL names one of its own
+hostnames SHALL keep the proxy without its completion endpoints.
 
 #### Scenario: The staging app is the host (manual)
 

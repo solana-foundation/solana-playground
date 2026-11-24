@@ -643,7 +643,8 @@ before this existed.
 | `AUTH_SECRET` | Better Auth signing secret. Generate one per environment; rotating it signs everyone out |
 | `AUTH_BASE_URL` | The deployment's own origin, e.g. `https://example.vercel.app`. Better Auth builds the OAuth callback from it, so a wrong value breaks sign-in with no error at the browser |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | The OAuth app. Its callback URL must match `AUTH_BASE_URL`; previews carry the staging sign-in host's pair, never production's |
-| `AUTH_OAUTH_PROXY_URL` | Previews only: the origin of the host, the deployment whose callback is on the GitHub app |
+| `AUTH_OAUTH_PROXY_URL` | Previews only: the origin of the staging sign-in host, whose callback is on its GitHub app |
+| `AUTH_OAUTH_PROXY_HOST` | Exactly `true` on the staging sign-in host only; unset on production and on previews ([Sign-in on previews](#sign-in-on-previews)) |
 | `AUTH_OAUTH_PROXY_SECRET` | The OAuth proxy's encryption key. The same value on the host and every preview, never `AUTH_SECRET`'s. Unset, the proxy is off |
 
 ### Sentry on the API functions
@@ -790,9 +791,11 @@ Set once:
   and the staging app's `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`.
 - **Production:** no `AUTH_OAUTH_PROXY_*` variable at all.
 
-Every secret here is generated with `openssl rand -base64 32` for its one
-place and used nowhere else: the proxy secret never equals any `AUTH_SECRET`,
-since one key would then decrypt what was sealed for the other's purpose.
+Every secret here belongs to one place and is used nowhere else: each
+`AUTH_SECRET` and the proxy secret are generated with
+`openssl rand -base64 32`, and the staging OAuth app has a client secret of
+its own. The proxy secret never equals any `AUTH_SECRET`, since one key would
+then decrypt what was sealed for the other's purpose.
 
 `scripts/check-auth-env.mjs`, run by every Vercel build, fails a build that
 breaks these rules: production holding an `AUTH_OAUTH_PROXY_*` variable
@@ -820,12 +823,14 @@ cd client-v2
 npx vercel@62.7.0 env pull /tmp/preview.env --environment=preview   # linked to the preview project
 doppler secrets download --no-file --format env \
   --project <DOPPLER_PROJECT> --config <DOPPLER_CONFIG> > /tmp/production.env
-node scripts/env-overlap.mjs --allow REACT_APP_SERVER_URL,PG_BUILD_SERVER_URL \
+node scripts/env-overlap.mjs --allow PG_BUILD_SERVER_URL \
   /tmp/preview.env /tmp/production.env
 rm /tmp/preview.env /tmp/production.env
 ```
 
-It exits `0` with `0 shared value(s)` when the preview is clean. `vercel env
+It exits `0` with `0 shared value(s)` when the preview is clean, `1` naming
+each shared value's two variables, and `2` when a file cannot be read or
+holds no entry. `vercel env
 pull` delivers a Sensitive variable as an empty value, which cannot be
 compared; the last line counts those, and a Sensitive preview variable is
 checked by its source instead.

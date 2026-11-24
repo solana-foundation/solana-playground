@@ -236,6 +236,32 @@ describe("oauthProxyPlugins", () => {
     assert.deepEqual(oauthProxyPlugins(), []);
   });
 
+  // The flag decides the role, not the URL: a host handed a proxy URL by
+  // mistake still never completes a payload (the build check refuses it too)
+  test("drops the completion endpoints on a host whose URL names another origin", async () => {
+    asHost();
+    process.env.AUTH_OAUTH_PROXY_URL = OTHER;
+    const { oauthProxyPlugins } = await load();
+    const [plugin] = oauthProxyPlugins();
+    assert.deepEqual(plugin.endpoints, {});
+  });
+
+  test("reports nothing missing on a complete host", async () => {
+    asHost();
+    const { missingConfig } = await load();
+    assert.deepEqual(
+      missingConfig().filter((name) => name.startsWith("AUTH_OAUTH_PROXY")),
+      []
+    );
+  });
+
+  test("reports a preview holding the secret without the URL", async () => {
+    asPreview();
+    delete process.env.AUTH_OAUTH_PROXY_URL;
+    const { missingConfig } = await load();
+    assert.ok(missingConfig().includes("AUTH_OAUTH_PROXY_URL"));
+  });
+
   test("reports the host flag without its secret", async () => {
     asHost();
     delete process.env.AUTH_OAUTH_PROXY_SECRET;

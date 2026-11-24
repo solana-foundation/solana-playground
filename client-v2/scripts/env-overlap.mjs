@@ -10,8 +10,8 @@
 // names (REACT_APP_*, which ship in the bundle, and Vercel's own VERCEL_*),
 // boolean flags and empty values are skipped; `--allow` skips more names, for
 // public settings both sides share on purpose (a build server URL). Exits 1
-// when anything overlaps. How it is run: docs/deploy-client-vercel.md, "Sign-in
-// on previews".
+// when anything overlaps, 2 when a file cannot be read or holds no entry.
+// How it is run: docs/deploy-client-vercel.md, "Sign-in on previews".
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -43,18 +43,19 @@ export const parseEnv = (text) => {
 };
 
 const FLAG = /^(true|false|0|1|yes|no|on|off)$/i;
+// Vercel's own VERCEL_* are deployment facts, except a token or a secret
 const isPublic = (name) =>
-  name.startsWith("REACT_APP_") || name.startsWith("VERCEL_");
+  name.startsWith("REACT_APP_") ||
+  (name.startsWith("VERCEL_") && !/TOKEN|SECRET|KEY/.test(name));
 
 /**
  * The pairs of names, one per side, that hold the same compared value.
+ * Curried on the allowed names, so `overlap` below is the common case.
  *
- * @param {Record<string, string>} a
- * @param {Record<string, string>} b
- * @param {Set<string>} [allow] names never compared
- * @returns {[string, string][]}
+ * @param {Set<string>} allow names never compared
+ * @returns {(a: Record<string, string>, b: Record<string, string>) => [string, string][]}
  */
-export const overlap = (a, b, allow = new Set()) => {
+export const overlapAllowing = (allow) => (a, b) => {
   const compared = (env) =>
     Object.entries(env).filter(
       ([name, value]) =>
@@ -67,6 +68,24 @@ export const overlap = (a, b, allow = new Set()) => {
     }
   }
   return pairs;
+};
+
+/** {@link overlapAllowing} with no extra name skipped */
+export const overlap = overlapAllowing(new Set());
+
+/** The file's entries, or why it cannot be compared */
+const readEnvFile = (path) => {
+  let text;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch (e) {
+    return { error: `${path}: cannot read (${e.code ?? e.message})` };
+  }
+  const env = parseEnv(text);
+  // A file that parses to nothing compares as clean; say so rather than pass
+  return Object.keys(env).length
+    ? { env }
+    : { error: `${path}: no NAME=value line, nothing to compare` };
 };
 
 const main = (argv) => {
@@ -85,18 +104,25 @@ const main = (argv) => {
     );
     return 2;
   }
-  const [a, b] = paths.map((p) => parseEnv(readFileSync(p, "utf8")));
+  const read = paths.map(readEnvFile);
+  const errors = read.filter((r) => r.error);
+  if (errors.length) {
+    for (const { error } of errors) console.error(`env-overlap: ${error}`);
+    return 2;
+  }
+  const [a, b] = read.map((r) => r.env);
   // An empty value is a Sensitive one `vercel env pull` could not read: say
   // how many went uncompared, so a clean run is not mistaken for a full one
   const empty = [a, b].map(
     (env) => Object.values(env).filter((v) => v === "").length
   );
-  const pairs = overlap(a, b, allow);
+  const pairs = overlapAllowing(allow)(a, b);
   for (const [nameA, nameB] of pairs) {
     console.log(`shared: ${nameA} (${paths[0]}) = ${nameB} (${paths[1]})`);
   }
   console.log(
-    `${pairs.length} shared value(s); not compared: ${empty[0]} empty in ` +
+    `${pairs.length} shared value(s) across ${Object.keys(a).length} and ` +
+      `${Object.keys(b).length} names; not compared: ${empty[0]} empty in ` +
       `${paths[0]}, ${empty[1]} empty in ${paths[1]}`
   );
   return pairs.length ? 1 : 0;

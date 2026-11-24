@@ -6,7 +6,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { overlap, parseEnv } from "./env-overlap.mjs";
+import { overlap, overlapAllowing, parseEnv } from "./env-overlap.mjs";
 
 const script = fileURLToPath(new URL("./env-overlap.mjs", import.meta.url));
 
@@ -63,14 +63,32 @@ test("ignores public names, flags and empty values", () => {
   );
 });
 
-test("ignores the names given with --allow", () => {
+test("ignores the allowed names", () => {
   assert.deepEqual(
-    overlap(
+    overlapAllowing(new Set(["PG_BUILD_SERVER_URL"]))(
       { PG_BUILD_SERVER_URL: "https://build.example" },
-      { PG_BUILD_SERVER_URL: "https://build.example" },
-      new Set(["PG_BUILD_SERVER_URL"])
+      { PG_BUILD_SERVER_URL: "https://build.example" }
     ),
     []
+  );
+});
+
+// `vercel env pull` quotes every value and may end lines with \r
+test("parses the format vercel env pull writes", () => {
+  assert.deepEqual(parseEnv('A=""\r\nB="v"\r\n'), { A: "", B: "v" });
+});
+
+test("compares a quoted value with the same value unquoted", () => {
+  assert.deepEqual(
+    overlap(parseEnv('K="same-value-1"\n'), parseEnv("K=same-value-1\n")),
+    [["K", "K"]]
+  );
+});
+
+test("compares a Vercel name that holds a token", () => {
+  assert.deepEqual(
+    overlap({ VERCEL_TOKEN: "tok-123456" }, { VERCEL_TOKEN: "tok-123456" }),
+    [["VERCEL_TOKEN", "VERCEL_TOKEN"]]
   );
 });
 
@@ -101,6 +119,33 @@ test("exits 0 when nothing overlaps, counting empty values", () => {
   );
   assert.equal(res.status, 0);
   assert.match(res.stdout, /1 empty/);
+});
+
+// Exit 1 means "found an overlap"; a file that could not be compared is 2
+for (const [label, a] of [
+  ["empty", ""],
+  ["holds no entry", "# only a comment\n"],
+]) {
+  test(`exits 2 when a file is ${label}`, () => {
+    const res = spawnSync(
+      process.execPath,
+      [script, ...files(a, "A=x-value\n")],
+      {
+        encoding: "utf8",
+      }
+    );
+    assert.equal(res.status, 2);
+    assert.match(res.stderr, /nothing to compare/);
+  });
+}
+
+test("exits 2 naming a file it cannot read", () => {
+  const [, b] = files("", "A=x-value\n");
+  const res = spawnSync(process.execPath, [script, "/nonexistent/p.env", b], {
+    encoding: "utf8",
+  });
+  assert.equal(res.status, 2);
+  assert.match(res.stderr, /\/nonexistent\/p\.env: cannot read \(ENOENT\)/);
 });
 
 test("--allow takes a comma-separated list", () => {

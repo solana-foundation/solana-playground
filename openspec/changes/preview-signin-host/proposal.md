@@ -44,8 +44,10 @@ None.
 - Code: `client-v2/src/features/auth/model/auth.mjs`,
   `client-v2/src/shared/config/server-env.mjs`, two new scripts under
   `client-v2/scripts/` with `node --test` cases, `scripts/vercel-build.sh`.
-- Deployments: the current host (the Hoodies project's production,
-  `solana-playground-teal.vercel.app`) stops serving as host until it sets
-  `AUTH_OAUTH_PROXY_HOST=true`, or until previews point at the staging app.
+- Deployments: the build check fails a deployment set up by the old
+  runbook, so the order matters. Before this merges, every production that
+  builds it must hold no `AUTH_OAUTH_PROXY_*` variable, and the current host
+  (the Hoodies project's production, `solana-playground-teal.vercel.app`) must
+  add `AUTH_OAUTH_PROXY_HOST=true`, or its next build fails.
 - User-visible: none. A preview's user still has no `login`.
 - Out of scope: a low-limit model key for previews (same report, item 13).

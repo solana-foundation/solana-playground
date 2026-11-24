@@ -144,7 +144,7 @@ All Unmasked in Doppler: none is a secret, and `migrate-production-db` reads the
 | `AUTH_BASE_URL` | `https://<VERCEL_APP_DOMAIN>`, then `https://<CUSTOM_DOMAIN>` from step 9. No trailing slash. Production accepts sign-in and writes from this origin only | Unmasked | Step 6, step 9 |
 | `GITHUB_CLIENT_ID` | The production OAuth app's Client ID (step 5) | Unmasked | Step 6 |
 | `GITHUB_CLIENT_SECRET` | The production OAuth app's client secret (step 5) | Masked | Step 6 |
-| `AUTH_OAUTH_PROXY_SECRET`, `AUTH_OAUTH_PROXY_URL`, `AUTH_OAUTH_PROXY_HOST` | Never on Production: previews sign in through the staging sign-in host ([Sign-in on previews](deploy-client-vercel.md#sign-in-on-previews)), and a production build holding any of them fails (`scripts/check-auth-env.mjs`) | | |
+| `AUTH_OAUTH_PROXY_SECRET`, `AUTH_OAUTH_PROXY_URL`, `AUTH_OAUTH_PROXY_HOST` | Never on Production: previews sign in through the staging sign-in host ([Sign-in on previews](deploy-client-vercel.md#sign-in-on-previews)). A production build holding `AUTH_OAUTH_PROXY_URL`, or the secret without `AUTH_OAUTH_PROXY_HOST=true`, fails (`scripts/check-auth-env.mjs`); the host flag belongs only on the staging project, so `env ls production` must show none of the three | | |
 
 ### Assistant default backend (Nous Research)
 

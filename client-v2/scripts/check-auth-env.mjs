@@ -12,7 +12,7 @@
 /** Set and non-empty: a local `vercel pull` delivers a Sensitive variable as "" */
 const value = (name) => process.env[name] || undefined;
 
-const preview = process.env.VERCEL_ENV === "preview";
+const isPreview = process.env.VERCEL_ENV === "preview";
 const hostFlag = value("AUTH_OAUTH_PROXY_HOST");
 const proxyURL = value("AUTH_OAUTH_PROXY_URL");
 const proxySecret = value("AUTH_OAUTH_PROXY_SECRET");
@@ -25,16 +25,25 @@ if (hostFlag !== undefined && hostFlag !== "true") {
       "to true on the staging sign-in host only."
   );
 }
-const host = hostFlag === "true";
+const isHost = hostFlag === "true";
 
-if (preview) {
-  if (host) {
+if (isPreview) {
+  if (isHost) {
     problems.push(
       "AUTH_OAUTH_PROXY_HOST is set on a preview. Only the staging sign-in " +
         "host sets it; a preview points AUTH_OAUTH_PROXY_URL at that host."
     );
   }
-} else if (host) {
+  // Without the URL a preview sends GitHub its own callback, which the
+  // host's OAuth app rejects, and sign-in fails with nothing said here
+  if (proxySecret && !proxyURL) {
+    problems.push(
+      "AUTH_OAUTH_PROXY_SECRET is set on a preview without " +
+        "AUTH_OAUTH_PROXY_URL; set the URL to the staging sign-in host's " +
+        "origin, or unset both."
+    );
+  }
+} else if (isHost) {
   if (!proxySecret) {
     problems.push(
       "AUTH_OAUTH_PROXY_HOST=true without AUTH_OAUTH_PROXY_SECRET: the host " +

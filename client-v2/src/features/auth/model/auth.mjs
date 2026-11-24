@@ -235,8 +235,13 @@ export const missingConfig = () => {
     !env.AUTH_OAUTH_PROXY_SECRET
       ? "AUTH_OAUTH_PROXY_SECRET"
       : null,
-    // Unparseable, it would throw from `getAuth` on every request
-    proxyURL && !URL.canParse(proxyURL) ? "AUTH_OAUTH_PROXY_URL" : null,
+    // Unparseable, it would throw from `getAuth` on every request. Absent on
+    // a preview holding the secret, the preview sends GitHub its own
+    // callback, which the host's OAuth app rejects
+    (proxyURL && !URL.canParse(proxyURL)) ||
+    (!proxyURL && env.AUTH_OAUTH_PROXY_SECRET && env.VERCEL_ENV === "preview")
+      ? "AUTH_OAUTH_PROXY_URL"
+      : null,
   ].filter(Boolean);
 };
 
