@@ -24,7 +24,11 @@ while another paid.
 - **A deploy holds the paying account.** From the start of a deploy to its end (success, failure, stop, pause
   or cancel), the Playground wallet refuses to switch, pick an extension, add, create, import or remove an
   account. The Wallet window disables those actions meanwhile, and a refusal reads as a plain message, not a
-  reported failure. Terminal and stage deploys alike.
+  reported failure. Terminal and stage deploys alike. An extension whose approval arrives during the deploy
+  stays connected but does not become current.
+- **Events.** No event is added, renamed or removed. Accounts opens the Wallet window with no event of its
+  own, and a held-accounts refusal is neither tracked nor reported (`overlay_modal_submit_failed` does not
+  fire for it).
 
 The design wording is open: Slava's seven questions in the SF#205 body (where the account list lives, whether
 two wallet surfaces stay, the label "Accounts", its half-width placement, hiding it for an extension, the payer

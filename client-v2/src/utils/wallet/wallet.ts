@@ -1033,8 +1033,8 @@ class _PgWallet {
    * `switch`, `selectStandard`, `add`, `addNew`, `import` and `remove` throw
    * `AccountsHeldError`. Other writes of the wallet's state (a load, a
    * disconnect, the repair of an index that names no account) are not held.
-   * Making an extension current from a connect (`setStandardCurrentWith`)
-   * writes the state directly; `PgDeployRun.isActive` refuses that path.
+   * A connect (`setStandardCurrentWith`) refuses to make an extension current
+   * once it is held, even for an approval asked before the deploy began.
    * Releasing twice releases once.
    */
   static holdSwitch() {

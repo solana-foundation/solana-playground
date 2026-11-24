@@ -1,4 +1,5 @@
 import { PgCommon, PgTerminal, PgView, PgWallet } from "../../utils";
+import { AccountsHeldError } from "../../utils/wallet/accounts-held";
 import type { WalletState } from "../../utils/wallet/types";
 import { createArgs, createCmd } from "../create";
 import { PgDeployRun } from "../deploy/run";
@@ -160,12 +161,17 @@ const standardNamed = (name: string) => {
  * @param isStillWanted asked once the wallet answers: a request that was
  * superseded meanwhile leaves the wallet connected but not current
  * @throws the wallet's own error when it declines; nothing changes then
+ * @throws {AccountsHeldError} when the wallet answers while a deploy holds
+ * the accounts: it stays connected, and the deploy's payer stays current
  */
 export const setStandardCurrentWith =
   (isStillWanted: () => boolean) => async (name: string) => {
     const wallet = standardNamed(name);
     if (!wallet.connected) await wallet.connect();
     if (!isStillWanted()) return;
+    // An approval can land after a deploy began, which signs with the
+    // account it started with
+    if (PgWallet.isSwitchHeld) throw new AccountsHeldError();
     PgWallet.update({ state: "sol", standardName: wallet.name });
   };
 
