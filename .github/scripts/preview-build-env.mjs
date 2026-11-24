@@ -5,13 +5,17 @@
 // can read the repository can download.
 //
 // - A public name keeps its value: REACT_APP_* is compiled into the bundle, so
-//   it is public by construction, the VERCEL_* names below describe the
-//   deployment, not a credential, and NODE_OPTIONS and NODE_ENV configure
-//   the build's tools, which a placeholder would break.
+//   it is public by construction; the VERCEL_* names below describe the
+//   deployment, not a credential; DB_PROVIDER names a kind of database;
+//   NODE_OPTIONS and NODE_ENV configure the build's tools; and the build reads
+//   SENTRY_PREVIEW_ENABLED and SOURCEMAPS_PREVIEW_ENABLED (scripts/sentry-gate.mjs,
+//   scripts/sourcemap-gate.mjs) as flags and PUBLIC_ENV_RESTRICTED_KEYS
+//   (scripts/public-env.mjs) as a list of names, which a placeholder would
+//   change.
 // - Every other name keeps its name with a placeholder value, or "" when it
 //   was empty. The build only checks that the server's variables are set
-//   (client-v2/scripts/check-agent-env.mjs) and compiles none of them in; the
-//   deployed functions read the real values from the Vercel project at runtime.
+//   (client-v2/scripts/check-agent-env.mjs), and the deployed functions read
+//   the real values from the Vercel project at runtime.
 // - A name whose value the build parses is dropped, since a placeholder would
 //   fail the parse: SOURCES (check-agent-env.mjs). VERCEL_OIDC_TOKEN is a
 //   credential and is dropped too.
@@ -34,6 +38,9 @@ const PUBLIC_NAMES = new Set([
   "DB_PROVIDER",
   "NODE_OPTIONS",
   "NODE_ENV",
+  "SENTRY_PREVIEW_ENABLED",
+  "SOURCEMAPS_PREVIEW_ENABLED",
+  "PUBLIC_ENV_RESTRICTED_KEYS",
 ]);
 const DROPPED_NAMES = new Set(["SOURCES", "VERCEL_OIDC_TOKEN"]);
 

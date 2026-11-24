@@ -19,7 +19,7 @@ const jobsOf = (workflow) => {
   const jobs = new Map();
   let name;
   for (const line of body.split("\n")) {
-    const start = /^ {2}([a-z][a-z-]*):$/.exec(line);
+    const start = /^ {2}([A-Za-z_][\w-]*):$/.exec(line);
     if (start) [, name] = start;
     if (name) jobs.set(name, `${jobs.get(name) ?? ""}${line}\n`);
   }
@@ -41,42 +41,70 @@ const code = (name) =>
     .join("\n");
 
 const CREDENTIAL =
-  /secrets\.|github\.token|id-token:\s*write|pull-requests:\s*write/;
+  /secrets[.[]|toJSON\(\s*secrets|github\.token|id-token:\s*write|pull-requests:\s*write|write-all/i;
+
+// What only the PR's dependencies and build need: none of it may meet a credential
+const INSTALL_OR_BUILD =
+  /\byarn\b|\bnpm (ci|i|install)\b|vercel-install|vercel-build|"\$cli" build|submodules: true|setup-node/i;
+
+// A value, not `secrets.VERCEL_TOKEN != ''`, which gives a job only whether it is set
+const holdsVercelToken = (name) =>
+  /secrets[.[]['"]?VERCEL_TOKEN\b(?!['"]?\]?\s*!=)/.test(code(name));
+
+test("the workflow gives no credential to every job at once", () => {
+  const top = text.slice(0, text.indexOf("\njobs:\n"));
+  assert.doesNotMatch(top, CREDENTIAL);
+  assert.match(top, /^permissions: \{\}$/m);
+});
 
 for (const name of ["keys", "build"]) {
-  test(`job ${name}, which runs the PR's code, is given no credential`, () => {
+  test(`job ${name}, which runs the PR's dependencies, is given no credential`, () => {
     assert.doesNotMatch(code(name), CREDENTIAL);
     assert.match(code(name), /persist-credentials: false/);
   });
 }
 
 test("job build checks its environment for credentials first", () => {
-  const steps = code("build").split("- ");
+  const steps = code("build").split(/\n\s+- (?:name|uses):/);
   assert.match(steps[1], /No credential in the environment/);
 });
 
-for (const name of ["prepare", "deploy"]) {
-  test(`job ${name}, which holds the Vercel token, never installs or builds the PR`, () => {
-    const block = code(name);
-    assert.match(block, /secrets\.VERCEL_TOKEN/);
-    assert.doesNotMatch(
-      block,
-      /\byarn\b|npm (ci|install)|vercel-install|vercel-build|"\$cli" build|submodules: true|setup-node/
-    );
-    // Non-cone: no root file of the PR, such as an .npmrc, reaches npx
-    assert.match(block, /sparse-checkout-cone-mode: false/);
+test("only prepare and deploy hold the Vercel token", () => {
+  assert.deepEqual([...jobs.keys()].filter(holdsVercelToken).sort(), [
+    "deploy",
+    "prepare",
+  ]);
+});
+
+for (const name of ["database", "prepare", "deploy", "report"]) {
+  test(`job ${name}, which holds a credential, never installs or builds the PR`, () => {
+    assert.doesNotMatch(code(name), INSTALL_OR_BUILD);
   });
 }
 
-test("job database holds no Vercel token and no GitHub write access", () => {
-  assert.doesNotMatch(
-    code("database"),
-    /secrets\.VERCEL_TOKEN\b(?! != '')|github\.token|pull-requests:\s*write/
-  );
+test("every job that installs or builds holds no credential", () => {
+  for (const [name] of jobs) {
+    if (INSTALL_OR_BUILD.test(code(name)))
+      assert.doesNotMatch(code(name), CREDENTIAL, name);
+  }
 });
 
-test("the Vercel CLI the token jobs run is checked to be vercel@x.y.z", () => {
-  for (const name of ["prepare", "deploy"]) {
-    assert.match(code(name), /\^vercel@\[0-9\]\+/, name);
-  }
+for (const name of ["prepare", "deploy"]) {
+  test(`job ${name} checks out no root file, so no .npmrc reaches npx`, () => {
+    assert.match(code(name), /sparse-checkout-cone-mode: false/);
+  });
+
+  test(`job ${name} runs npx only after checking the CLI is vercel@x.y.z`, () => {
+    const block = code(name);
+    const check = block.indexOf("^vercel@[0-9]+");
+    assert.ok(check >= 0, "no check of the CLI's name");
+    assert.ok(check < block.indexOf("npx "), "npx runs before the check");
+  });
+}
+
+test("job deploy checks the build output before it deploys", () => {
+  const block = code("deploy");
+  const check = block.indexOf("preview-check-output.mjs");
+  assert.ok(check >= 0);
+  assert.ok(check < block.indexOf(" deploy --prebuilt"));
 });

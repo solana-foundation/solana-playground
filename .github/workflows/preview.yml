@@ -34,11 +34,12 @@ name: Preview
 #
 # PREVIEW_REPOSITORY holds a repository name, not a boolean, so set at
 # organisation level it still enables one repository, not all of them. The
-# `deploy` and `teardown` jobs run only where PREVIEW_REPOSITORY names this
-# repository and either PREVIEW_DB_PROVIDER is `cloud-sql` or the
-# NEON_PROJECT_ID variable is set. `deploy` needs the VERCEL_TOKEN secret and
-# the VERCEL_ORG_ID and VERCEL_PROJECT_ID variables. On Cloud SQL every job
-# needs the PREVIEW_CLOUD_SQL_INSTANCE, PREVIEW_CLOUD_SQL_USER,
+# preview chain (`database` first; the other jobs follow it) and `teardown`
+# run only where PREVIEW_REPOSITORY names this repository and either
+# PREVIEW_DB_PROVIDER is `cloud-sql` or the NEON_PROJECT_ID variable is set.
+# `prepare` and `deploy` need the VERCEL_TOKEN secret and the VERCEL_ORG_ID
+# and VERCEL_PROJECT_ID variables. On Cloud SQL the jobs that reach the
+# database need the PREVIEW_CLOUD_SQL_INSTANCE, PREVIEW_CLOUD_SQL_USER,
 # GCP_CI_WORKLOAD_IDENTITY_PROVIDER, and GCP_CI_SERVICE_ACCOUNT variables
 # (client-v2/docs/preview-databases.md, "Configuration"); on Neon, the
 # NEON_API_KEY secret (client-v2/docs/neon.md, "Configuration").
@@ -79,18 +80,23 @@ env:
   CLOUD_SQL_LOGIN_USER: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
 
 jobs:
-  # A labelled PR's preview, in five jobs so that no job both runs the PR's
-  # code and holds a credential (HOO-2888). The PR's code here means what
-  # `vercel build` runs, client-v2's scripts and every dependency `yarn
-  # install` fetches; the jobs with a credential run only the workflow's own
-  # scripts under .github/scripts, dbmate and the Vercel CLI, and read
-  # client-v2/Makefile.vercel only for the CLI's version.
+  # A labelled PR's preview, in a chain of jobs that keeps every credential
+  # away from the code nobody reviews line by line: `yarn install`'s
+  # dependencies and what `vercel build` runs over them (HOO-2888). Those run
+  # only in `keys` and `build`, which hold no credential. The jobs that do hold
+  # one run the workflow's own scripts under .github/scripts, the database
+  # scripts under client-v2/scripts/db, dbmate and the Vercel CLI, and read
+  # client-v2/Makefile.vercel only for the CLI's version. Those scripts come
+  # from the PR's head like this file does, so they are as trusted as the
+  # workflow: a branch that can edit them can edit the workflow too. The
+  # split guards against a harmful dependency, not against the branch's author.
   #
-  #   database  provisions and migrates the PR's database   (Google or Neon)
+  #   database  provisions and migrates the PR's database   (Google OIDC or NEON_API_KEY)
   #   keys      keys the wasm and crate caches              (no credential)
   #   prepare   pulls the Preview settings, fetches caches  (VERCEL_TOKEN)
-  #   build     `vercel build`, the PR's code               (no credential)
-  #   deploy    uploads build's output, comments on the PR  (VERCEL_TOKEN, GitHub)
+  #   build     `vercel build`, the dependencies' code      (no credential)
+  #   deploy    uploads build's output, comments on the PR  (VERCEL_TOKEN, NEON_API_KEY, GitHub)
+  #   report    comments on the PR when a job failed        (GitHub)
   #
   # One chain, not parallel jobs, so that every job can share the concurrency
   # group with teardown: a push cancels the run it supersedes and a close
@@ -100,9 +106,9 @@ jobs:
   database:
     name: preview database
     # A fork's PR gets no secrets, and Dependabot gets only Dependabot
-    # secrets. A Dependabot PR never deploys, even labelled by a human: the
-    # run would build its code with the deploy secrets. Unrelated label
-    # changes do not redeploy.
+    # secrets, so neither could provision, pull or deploy: a Dependabot PR
+    # never deploys, even labelled by a human. Unrelated label changes do not
+    # redeploy.
     # Runs only where PREVIEW_REPOSITORY names this repository and a provider
     # is configured (see the header).
     if: >-
@@ -128,9 +134,9 @@ jobs:
     env:
       PR: ${{ github.event.pull_request.number }}
     steps:
-      # The scripts and the migrations, no submodule: dbmate sends the
-      # migrations to the database server, and nothing here runs client-v2's
-      # code. The runner's own Node runs preview-name.mjs.
+      # The scripts and the migrations, no submodule and no install: dbmate
+      # sends the migrations to the database server, and no dependency of
+      # client-v2 runs here. The runner's own Node runs preview-name.mjs.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
@@ -323,6 +329,7 @@ jobs:
 
       # vercel-install.sh's Remote Cache lookups, read-only. A miss is not a
       # failure: the build makes what is missing and, with no token, keeps it.
+      # A refused token is, since every preview would then rebuild for an hour.
       - name: Fetch the cache archives
         run: |
           for key in "$WASM_KEY" "$CRATES_KEY"; do
@@ -330,11 +337,14 @@ jobs:
           done
           fetch() { # $1: key, $2: destination
             mkdir -p "$(dirname "$2")"
+            # A transfer cut short exits non-zero with whatever status arrived.
             status=$(curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" -o "$2" -w '%{http_code}' \
-              "https://api.vercel.com/v8/artifacts/$1?teamId=$VERCEL_ORG_ID" || true)
+              "https://api.vercel.com/v8/artifacts/$1?teamId=$VERCEL_ORG_ID") || status="curl exit $? ($status)"
             case "$status" in
               2??) echo "$1: HIT" ;;
-              *) rm -f "$2"; echo "::notice::Remote Cache has no $1 (HTTP $status); the build makes it" ;;
+              404) rm -f "$2"; echo "::notice::Remote Cache has no $1; the build makes it" ;;
+              401 | 403) rm -f "$2"; echo "::error::Remote Cache refused VERCEL_TOKEN (HTTP $status) for $1"; return 1 ;;
+              *) rm -f "$2"; echo "::warning::Remote Cache failed for $1 ($status); the build makes it, about an hour for the wasm packages" ;;
             esac
           }
           fetch "$WASM_KEY" "inputs/wasm-pkg/$WASM_KEY.tar"
@@ -409,7 +419,10 @@ jobs:
           done
 
       # `vercel build` reads the settings and the environment `prepare`
-      # pulled, and needs no token for it.
+      # pulled, and needs no token for it. --standalone copies every file a
+      # function needs into its folder: without it a function names source
+      # and node_modules files by their place in this checkout, which the
+      # deploy job does not have.
       - name: Build
         run: |
           cli=$(sed -n 's/^VERCEL_CLI := //p' client-v2/Makefile.vercel)
@@ -418,7 +431,7 @@ jobs:
           set -a
           . ./.vercel/.env.preview.local
           set +a
-          npx --yes "$cli" build
+          npx --yes "$cli" build --standalone
           tar -czf "$RUNNER_TEMP/preview-output.tgz" .vercel/output .vercel/project.json
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -446,7 +459,6 @@ jobs:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
-      GH_TOKEN: ${{ github.token }}
       PR: ${{ github.event.pull_request.number }}
       SHA: ${{ github.event.pull_request.head.sha }}
       CLOUD_SQL_DATABASE: ${{ needs.database.outputs.cloud-sql-database }}
@@ -466,31 +478,19 @@ jobs:
           name: preview-output
           path: ${{ runner.temp }}
 
-      # Only .vercel/output and .vercel/project.json, and no path that climbs
-      # out of the folder. The Root Directory the settings pin must exist for
-      # the CLI, and stays empty.
-      - name: Unpack the build output
+      # Unpacked into a folder of its own and checked before anything reads it:
+      # no member path that climbs out or starts at the root, here, then
+      # .github/scripts/preview-check-output.mjs on what was unpacked. The Root
+      # Directory the settings pin must exist for the CLI, and stays empty.
+      - name: Unpack and check the build output
         run: |
           archive="$RUNNER_TEMP/preview-output.tgz"
-          unexpected=$(tar -tzf "$archive" | grep -vE '^\.vercel/(output(/.*)?|project\.json)?$' || true)
-          [ -z "$unexpected" ] || { echo "::error::the build archive holds more than .vercel/output: $(head -5 <<<"$unexpected")"; exit 1; }
-          mkdir -p "$RUNNER_TEMP/out/client-v2"
+          climbing=$(tar -tzf "$archive" | grep -E '^/|(^|/)\.\.(/|$)' || true)
+          [ -z "$climbing" ] || { echo "::error::the build archive holds paths out of its folder: $(head -5 <<<"$climbing")"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/out"
           tar -xzf "$archive" -C "$RUNNER_TEMP/out" --no-same-owner --no-same-permissions
-          # The CLI packs what a link points at, so a link out of the output
-          # would upload a runner file, this job's environment included, into
-          # the public deployment.
-          output=$(realpath "$RUNNER_TEMP/out/.vercel/output")
-          while IFS= read -r -d '' link; do
-            case "$(realpath -m "$link")" in
-              "$output"/*) ;;
-              *) echo "::error::the build output links out of itself: ${link#"$RUNNER_TEMP/out/"}"; exit 1 ;;
-            esac
-          done < <(find "$RUNNER_TEMP/out" -type l -print0)
-          # Every file under api/ becomes a public function unless
-          # client-v2/.vercelignore drops it, and a test there writes to the
-          # database it is given (HOO-2175).
-          tests=$(find "$RUNNER_TEMP/out/.vercel/output/functions" -name '*.test.func')
-          [ -z "$tests" ] || { echo "::error::test files deployed as functions: $tests"; exit 1; }
+          node .github/scripts/preview-check-output.mjs "$RUNNER_TEMP/out"
+          mkdir "$RUNNER_TEMP/out/client-v2"
 
       # The Git integration deploys an integration branch's push on its own,
       # on the shared database, and skips a ticket branch's
@@ -526,6 +526,7 @@ jobs:
 
       - name: Comment on the PR
         env:
+          GH_TOKEN: ${{ github.token }}
           URL: ${{ steps.deploy.outputs.url }}
         run: |
           if [ "$PREVIEW_DB_PROVIDER" = cloud-sql ]; then

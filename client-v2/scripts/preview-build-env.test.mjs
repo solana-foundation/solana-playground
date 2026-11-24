@@ -30,6 +30,9 @@ VERCEL_OIDC_TOKEN="eyJmade.up.token"
 VERCEL_URL=""
 DB_PROVIDER="cloud-sql"
 NODE_OPTIONS="--max-old-space-size=4096"
+SENTRY_PREVIEW_ENABLED="true"
+SOURCEMAPS_PREVIEW_ENABLED="true"
+PUBLIC_ENV_RESTRICTED_KEYS="REACT_APP_INTERNAL"
 PG_AI_API_KEY="sk-made-up-key"
 BETTER_AUTH_SECRET="made-up-secret"
 SENTRY_AUTH_TOKEN="sntrys_made_up"
@@ -48,6 +51,9 @@ test("keeps public names verbatim", () => {
     'VERCEL_GIT_COMMIT_SHA=""',
     'DB_PROVIDER="cloud-sql"',
     'NODE_OPTIONS="--max-old-space-size=4096"',
+    'SENTRY_PREVIEW_ENABLED="true"',
+    'SOURCEMAPS_PREVIEW_ENABLED="true"',
+    'PUBLIC_ENV_RESTRICTED_KEYS="REACT_APP_INTERNAL"',
   ]) {
     assert.ok(out.split("\n").includes(line), `missing ${line}`);
   }
