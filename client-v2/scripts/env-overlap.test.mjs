@@ -6,7 +6,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { overlap, overlapAllowing, parseEnv } from "./env-overlap.mjs";
+import { overlap, overlapWith, parseEnv } from "./env-overlap.mjs";
 
 const script = fileURLToPath(new URL("./env-overlap.mjs", import.meta.url));
 
@@ -65,7 +65,7 @@ test("ignores public names, flags and empty values", () => {
 
 test("ignores the allowed names", () => {
   assert.deepEqual(
-    overlapAllowing(new Set(["PG_BUILD_SERVER_URL"]))(
+    overlapWith(new Set(["PG_BUILD_SERVER_URL"]))(
       { PG_BUILD_SERVER_URL: "https://build.example" },
       { PG_BUILD_SERVER_URL: "https://build.example" }
     ),

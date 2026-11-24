@@ -2,6 +2,8 @@
 
 ## Purpose
 
+**Area:** Preview sign-in through the staging sign-in host (client-v2 API)
+
 Which deployment signs a preview build in, so that a preview holds no secret
 of production's sign-in.
 

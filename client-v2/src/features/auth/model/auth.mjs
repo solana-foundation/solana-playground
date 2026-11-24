@@ -119,8 +119,8 @@ export const oauthProxyPlugins = () => {
     VERCEL_ENV,
   } = authEnv();
   if (!AUTH_OAUTH_PROXY_SECRET) return [];
-  const onPreview = VERCEL_ENV === "preview";
-  if (!onPreview && AUTH_OAUTH_PROXY_HOST !== "true") return [];
+  const isPreviewDeployment = VERCEL_ENV === "preview";
+  if (!isPreviewDeployment && AUTH_OAUTH_PROXY_HOST !== "true") return [];
 
   const base = resolveBaseURL();
   const fixed = typeof base === "string" ? base : undefined;
@@ -143,7 +143,9 @@ export const oauthProxyPlugins = () => {
     );
   };
   const isPreview =
-    onPreview && AUTH_OAUTH_PROXY_URL !== undefined && proxiesElsewhere();
+    isPreviewDeployment &&
+    AUTH_OAUTH_PROXY_URL !== undefined &&
+    proxiesElsewhere();
   return [isPreview ? plugin : { ...plugin, endpoints: {} }];
 };
 

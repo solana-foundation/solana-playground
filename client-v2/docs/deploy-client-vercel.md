@@ -787,7 +787,12 @@ Set once:
   `AUTH_OAUTH_PROXY_HOST=true`, `SYNC_ENABLED=true` and a database of its own
   (any provider; a Neon database or one on `solpg-preview`, never
   production's). The staging OAuth app's callback is
-  `<staging origin>/api/auth/callback/github`.
+  `<staging origin>/api/auth/callback/github`. The host is a Production
+  build, so every production build check applies to it too: it also needs
+  `REACT_APP_SERVER_URL` (public, production's value is fine),
+  `PG_AI_API_KEY` (`scripts/check-agent-env.mjs`; a key of its own with a low
+  limit, never production's) and `SENTRY_AUTH_TOKEN`
+  (`scripts/upload-sourcemaps.mjs`; a token of its own).
 - **The Preview environment of the project previews build on:**
   `AUTH_OAUTH_PROXY_URL=<staging origin>`, the same `AUTH_OAUTH_PROXY_SECRET`,
   and the staging app's `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`.

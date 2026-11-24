@@ -56,7 +56,7 @@ const isPublic = (name) =>
  * @param {Set<string>} allow names never compared
  * @returns {(a: Record<string, string>, b: Record<string, string>) => [string, string][]}
  */
-export const overlapAllowing = (allow) => (a, b) => {
+export const overlapWith = (allow) => (a, b) => {
   const compared = (env) =>
     Object.entries(env).filter(
       ([name, value]) =>
@@ -71,8 +71,8 @@ export const overlapAllowing = (allow) => (a, b) => {
   return pairs;
 };
 
-/** {@link overlapAllowing} with no extra name skipped */
-export const overlap = overlapAllowing(new Set());
+/** {@link overlapWith} with no extra name skipped */
+export const overlap = overlapWith(new Set());
 
 /** The file's entries, or why it cannot be compared */
 const readEnvFile = (path) => {
@@ -117,7 +117,7 @@ const main = (argv) => {
   const empty = [a, b].map((env) =>
     Object.keys(env).filter((name) => env[name] === "")
   );
-  const pairs = overlapAllowing(allow)(a, b);
+  const pairs = overlapWith(allow)(a, b);
   for (const [nameA, nameB] of pairs) {
     console.log(`shared: ${nameA} (${paths[0]}) = ${nameB} (${paths[1]})`);
   }

@@ -27,6 +27,7 @@ whoever gets a branch built as a preview holds secrets of production's sign-in
   runbook runs it on the Preview environment against production's.
 - `deploy-client-vercel.md` "Sign-in on previews", `production-runbook.md`,
   `neon.md` and `.env.example` describe the staging host.
+- Telemetry: no event is added, renamed or removed.
 
 ## Capabilities
 
