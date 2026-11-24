@@ -534,7 +534,9 @@ reason.
   green and the line names the PR's current head with 0 critical open.
   Green means every check the `ci.yml`, `client-v2.yml` and `security.yml`
   workflows report on that head passed, except `ci.yml`'s `checks / Build`,
-  which is always skipped because `ci.yml` passes `build: false`; any other
+  which is always skipped because `ci.yml` passes `build: false`, and the
+  `checks` jobs of `server/` or `wasm/`, skipped when the `changes` job of
+  `ci.yml` finds that area unchanged; any other
   skipped check, and any pending, cancelled or missing one, is not green. A
   red or skipped Vercel preview does not hold the merge. The fleet's Dispatcher (the
   agent session that merges ready PRs) merges these PRs, never their author.

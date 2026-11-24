@@ -143,7 +143,8 @@ The skipping, fail, and flake bullets apply to checks of the `Upstream: checks` 
 - `pending`: in loop mode, end the pass and let the wakeup in step 7 return. Outside loop mode, run
   `gh pr checks <n> --repo <repo> --watch` with `run_in_background`. When it exits, run the `--json` command
   again and continue from its result. With no check to watch, end the pass as pending.
-- `skipping`: the report names every skipped check other than `checks / Build`, `Vercel`, and push-only jobs.
+- `skipping`: the report names every skipped check other than `checks / Build`, the `checks` jobs of `server/` or
+  `wasm/` that the `changes` job of `ci.yml` skips for an unchanged area, `Vercel`, and push-only jobs.
 - `fail` or `cancel`: read the log (`gh run view <run-id> --repo <repo> --log-failed`; the run id is in `link`). A
   check outside GitHub Actions (Vercel, CodeQL, Greptile) has no run: read its `description` or open its `link`
   instead. A cancelled run has no failed-step log: read `gh run view <run-id> --repo <repo> --json jobs` for the

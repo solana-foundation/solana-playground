@@ -2,7 +2,9 @@ name: "Upstream: reusable checks"
 
 # Reusable workflow shared by ci.yml (PR and master-push validation) and
 # cicd.yml (master deploy gate). Holds the format, clippy, and build steps
-# once, so ci.yml and cicd.yml run the same checks.
+# once, so ci.yml and cicd.yml run the same checks, except on a pull request,
+# where ci.yml skips the `server/` jobs or the `wasm/` jobs when its `changes`
+# job finds that area unchanged.
 on:
   workflow_call:
     inputs:
@@ -14,6 +16,14 @@ on:
       # removed. The WASM still compiles for a preview, in vercel-install.sh,
       # when the wasm packages miss both the Build Cache and the Remote Cache.
       build:
+        type: boolean
+        default: true
+      # `false` skips the `server/` jobs; the default runs them, because `Image server` and `Format server` can fail with no change in the repository.
+      server:
+        type: boolean
+        default: true
+      # `false` skips the `wasm/` jobs.
+      wasm:
         type: boolean
         default: true
 
@@ -52,6 +62,7 @@ jobs:
     name: Format server
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    if: inputs.server
 
     defaults:
       run:
@@ -74,6 +85,7 @@ jobs:
     name: Format WASM
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    if: inputs.wasm
 
     defaults:
       run:
@@ -92,6 +104,7 @@ jobs:
     name: Clippy Server
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    if: inputs.server
     needs: format_server
 
     defaults:
@@ -113,6 +126,7 @@ jobs:
     name: Test server
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    if: inputs.server
     needs: format_server
 
     defaults:
@@ -135,14 +149,16 @@ jobs:
     name: Image server
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    if: inputs.server
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
 
+      # No step runs an image, so `type=cacheonly` leaves out the export: the later builds read BuildKit's build cache, not the image store.
       - name: Build image
-        run: docker build --tag solpg-server server
+        run: docker build --output type=cacheonly server
 
       # The per-template images the server builds under its `unstable`
       # feature: the stage that installs rustup, Solana, the platform tools and
@@ -151,7 +167,7 @@ jobs:
         run: |
           for version in 1.17.25 3.1.10; do
             docker build --file server/images/Dockerfile.program --target solana \
-              --build-arg "SOLANA_VERSION=$version" server
+              --output type=cacheonly --build-arg "SOLANA_VERSION=$version" server
           done
 
       - name: Refuse a download whose checksum differs
@@ -176,6 +192,7 @@ jobs:
     name: Clippy WASM
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    if: inputs.wasm
     needs: format_wasm
 
     defaults:
