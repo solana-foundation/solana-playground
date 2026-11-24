@@ -112,6 +112,22 @@ const refusalOf = (env) => {
  */
 const LINK_MAX_AGE_MS = 45 * 60 * 1000;
 
+/**
+ * The age past which a connector's certificate can no longer be trusted to
+ * work, so a `connect` waits for the new connector however long it takes:
+ * five minutes before the hour, the margin the connector's own refresh keeps.
+ * Younger than this, the old certificate still works, and a `connect` waits
+ * for the new one only `RENEWAL_WAIT_MS`.
+ */
+const LINK_STALE_AGE_MS = 55 * 60 * 1000;
+
+/**
+ * How long a `connect` waits for a renewal while the old connector still
+ * works. Past it, the `connect` goes through the old connector and the
+ * renewal carries on, to serve the `connect` after it.
+ */
+const RENEWAL_WAIT_MS = 2000;
+
 const log = createServerLogger("persistence:cloud-sql");
 
 /**
@@ -173,7 +189,9 @@ export const connector = {
  * so no connection the pool holds loses its connector under it. When a new
  * connector cannot be had, the old one stays: its certificate may still be
  * valid, and if it is not, the connection fails as it would have anyway. The
- * next `connect` tries again.
+ * next `connect` tries again. A slow renewal holds a `connect` for at most
+ * `RENEWAL_WAIT_MS` until the connector reaches `LINK_STALE_AGE_MS`, since
+ * `pg`'s `connectionTimeoutMillis` does not count the wait.
  *
  * @param {ReturnType<typeof import("../../../../shared/config/server-env.mjs").databaseEnv>} env
  */
@@ -196,9 +214,20 @@ const linksFor = async (env) => {
 
   /** @returns {Promise<void>} */
   const renew = () => {
-    if (Date.now() - current.openedAt < LINK_MAX_AGE_MS) {
-      return Promise.resolve();
-    }
+    const age = Date.now() - current.openedAt;
+    if (age < LINK_MAX_AGE_MS) return Promise.resolve();
+    const started = startRenewal();
+    if (age >= LINK_STALE_AGE_MS) return started;
+    /** @type {NodeJS.Timeout | undefined} */
+    let timer;
+    const waited = new Promise((resolve) => {
+      timer = setTimeout(resolve, RENEWAL_WAIT_MS);
+    });
+    return Promise.race([started, waited]).finally(() => clearTimeout(timer));
+  };
+
+  /** @returns {Promise<void>} */
+  const startRenewal = () => {
     // One renewal for every `connect` that finds the connector old
     renewal ??= connector
       .open(env)

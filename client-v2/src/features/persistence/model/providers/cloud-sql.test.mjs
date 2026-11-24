@@ -66,9 +66,9 @@ const fakeLink = (id) => {
 
 /**
  * Replaces `connector.open` with one that hands out fake links in order;
- * a value of `Error` rejects instead.
+ * a value of `Error` rejects instead, and a promise is awaited.
  *
- * @param {(ReturnType<typeof fakeLink> | Error)[]} links
+ * @param {(ReturnType<typeof fakeLink> | Error | Promise<ReturnType<typeof fakeLink>>)[]} links
  */
 const openReturning = (links) => {
   const queue = links.slice();
@@ -76,9 +76,22 @@ const openReturning = (links) => {
     const next = queue.shift();
     if (!next) throw new Error("no more links");
     if (next instanceof Error) throw next;
-    return next;
+    return await next;
   });
 };
+
+/** A link the case hands out when it chooses, for a renewal still running */
+const slowLink = (link) => {
+  /** @type {() => void} */
+  let release = () => {};
+  const promise = new Promise((resolve) => {
+    release = () => resolve(link);
+  });
+  return { promise, release };
+};
+
+/** Resolves after `ms` of real time: `mock.timers` mocks `Date` only */
+const after = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Draws a connection, which fails on the fake socket; the draw is the point */
 const draw = async (pool) => {
@@ -211,5 +224,44 @@ describe("persistence/model/providers/cloud-sql", () => {
     assert.equal(open.mock.callCount(), 3);
     assert.equal(second.sockets.length, 1);
     assert.equal(first.closed, 1);
+  });
+
+  it("goes through the old connector while a slow renewal runs and the old one still works", async () => {
+    const first = fakeLink(1);
+    const second = fakeLink(2);
+    const slow = slowLink(second);
+    const open = openReturning([first, slow.promise]);
+    const pool = await createPool(ENV);
+    mock.timers.tick(50 * MINUTE);
+
+    // Held no longer than the renewal wait, then through the old connector
+    await draw(pool);
+    assert.equal(first.sockets.length, 1);
+    assert.equal(second.sockets.length, 0);
+
+    // The renewal carries on and serves the next connection, without a
+    // second request to Google
+    slow.release();
+    await draw(pool);
+    assert.equal(open.mock.callCount(), 2);
+    assert.equal(second.sockets.length, 1);
+  });
+
+  it("waits for a slow renewal once the old connector is stale", async () => {
+    const first = fakeLink(1);
+    const second = fakeLink(2);
+    const slow = slowLink(second);
+    openReturning([first, slow.promise]);
+    const pool = await createPool(ENV);
+    mock.timers.tick(74 * MINUTE);
+
+    const drawn = draw(pool);
+    // Past the renewal wait, nothing went through the expired certificate
+    await after(2500);
+    assert.equal(first.sockets.length, 0);
+    slow.release();
+    await drawn;
+    assert.equal(first.sockets.length, 0);
+    assert.equal(second.sockets.length, 1);
   });
 });
