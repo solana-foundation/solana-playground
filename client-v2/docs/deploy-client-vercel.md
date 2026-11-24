@@ -244,6 +244,12 @@ So `scripts/vercel-install.sh` installs each version itself, into `.cache/rust/w
 
 The version comes from the lockfile, the file wasm-pack reads, after `cargo metadata --locked` has accepted it, so a bump without `cargo update` stops the build before wasm-pack asks for a version the script did not install. To bump: change the two manifests, then `cargo update -p wasm-bindgen` in `wasm/` and in `wasm/rust-analyzer/`.
 
+## Crawlers
+
+`scripts/update-static.mjs`, which every build runs, writes `robots.txt` per deployment (`scripts/robots.mjs`). The production site gets `Allow: /` and `Disallow: /api/`, and the log line says `allowed crawlers in robots.txt except /api/`. A preview (`VERCEL_ENV=preview`) disallows the whole site without any setting. A project that is not the public site but builds as production, such as a staging project or hoodies' `solana-playground` project, sets `DISALLOW_ROBOTS=true` (a build-time variable, not `REACT_APP_*`; only the exact value `true` counts) and gets the same disallow-all file; the log line then ends with `disallowed every crawler in robots.txt`. The variable is read at build time, so setting it takes a redeploy. Never set it on the Solana Foundation project that serves `playground.solana.com`: that domain would drop out of crawling.
+
+`vercel.json` also sends `X-Robots-Tag: noindex, nofollow` on every host but `playground.solana.com`, whatever the variable says, since `vercel.json` cannot read the environment. It covers a staging deployment before its project sets the variable, and every page a crawler fetches without reading `robots.txt`. Where `robots.txt` disallows the whole site, a crawler that obeys it never fetches a page and so never reads the header: `Disallow` stops crawling, not listing, and a URL linked from elsewhere can still appear in search results without a snippet.
+
 ## Public variables
 
 Every `REACT_APP_*` variable a build sees is public: every visitor can read it in the bundle. CRA defines `process.env` as one object holding all of them, and third-party code that reads `process.env.<anything>` makes webpack inline that object, values and all, whether or not our code reads the variable. Set no other `REACT_APP_*` in any environment. The client reads only these, all in `src/shared/config/client-env.ts`:

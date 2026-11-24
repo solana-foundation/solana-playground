@@ -25,7 +25,7 @@ import { platformRules } from "./scripts/serve-build.mjs";
 const { headersFor } = platformRules(
   JSON.parse(readFileSync(new URL("./vercel.json", import.meta.url), "utf8"))
 );
-const headers = headersFor("/");
+const headers = headersFor("/", "localhost");
 
 /** A CSP header's directives, in header order, as `[name, sources]` */
 const directiveList = (value) =>
@@ -104,7 +104,7 @@ describe("vercel.json headers of the pages the app frames", () => {
   for (const page of ["/runtime.html", "/wallet-keys.html"]) {
     it(`lets the app frame ${page}`, () => {
       const own = Object.fromEntries(
-        directiveList(headersFor(page)["Content-Security-Policy"])
+        directiveList(headersFor(page, "localhost")["Content-Security-Policy"])
       );
       assert.ok(own["frame-ancestors"], "frame-ancestors is enforced");
       assert.ok(own["frame-ancestors"].includes("'self'"));
