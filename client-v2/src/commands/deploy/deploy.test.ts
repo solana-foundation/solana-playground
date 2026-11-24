@@ -177,6 +177,7 @@ vi.mock("../../utils", () => ({
     accounts: [],
     create: () => pgWallet,
     balance: 100,
+    holdSwitch: () => () => undefined,
   },
   PgWeb3: {
     BpfLoaderUpgradeableProgram: { getBufferAccountSize: () => 10 },

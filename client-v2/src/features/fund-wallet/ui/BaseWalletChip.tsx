@@ -377,9 +377,10 @@ const AccountsButton = ({ onManage }: { onManage: () => void }) => (
 
 /**
  * Connecting an extension, under the Playground wallet: Connect a wallet
- * (with Accounts beside it when `onManage` is set), then the installed wallets, a wait for the one picked, or its decline. There is no
- * Cancel while waiting: an extension's request cannot be withdrawn, and a late
- * answer still lands, so closing the popover is the way out.
+ * (with Accounts beside it when `onManage` is set), then the installed
+ * wallets, a wait for the one picked, or its decline. There is no Cancel
+ * while waiting: an extension's request cannot be withdrawn, and a late answer
+ * still lands, so closing the popover is the way out.
  */
 const ConnectBlock = ({
   wallets,

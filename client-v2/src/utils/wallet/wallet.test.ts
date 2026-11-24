@@ -132,6 +132,37 @@ describe("utils/wallet/wallet", () => {
     });
   });
 
+  describe("while a deploy holds the current account", () => {
+    it("refuses every change of account, and allows them once released", async () => {
+      const update = vi.spyOn(PgWallet, "update").mockImplementation(() => {});
+      const click = vi.spyOn(HTMLInputElement.prototype, "click");
+      const release = PgWallet.holdSwitch();
+      try {
+        expect(PgWallet.isSwitchHeld).toBe(true);
+        expect(() => PgWallet.switch(0)).toThrow("A deploy is running");
+        expect(() => PgWallet.add()).toThrow("A deploy is running");
+        await expect(PgWallet.addNew()).rejects.toThrow("A deploy is running");
+        await expect(PgWallet.import()).rejects.toThrow("A deploy is running");
+        await expect(PgWallet.remove()).rejects.toThrow("A deploy is running");
+        expect(update).not.toHaveBeenCalled();
+        expect(click).not.toHaveBeenCalled();
+      } finally {
+        release();
+      }
+      expect(PgWallet.isSwitchHeld).toBe(false);
+    });
+
+    it("counts holds, and a second release of one hold frees nothing", () => {
+      const first = PgWallet.holdSwitch();
+      const second = PgWallet.holdSwitch();
+      first();
+      first();
+      expect(PgWallet.isSwitchHeld).toBe(true);
+      second();
+      expect(PgWallet.isSwitchHeld).toBe(false);
+    });
+  });
+
   describe("the signer provider", () => {
     const keypair = PgWeb3.Keypair.generate();
     const kp = Array.from(keypair.secretKey);

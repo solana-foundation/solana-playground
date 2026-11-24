@@ -54,17 +54,26 @@ export interface DeployDetails {
   programSize: number | undefined;
 }
 
-/** The wallet that pays for the deploy; `balance` is SOL, absent until read */
-export interface DeployPayer {
+/**
+ * The wallet that pays for the deploy; `balance` is SOL, absent until read.
+ * The Playground wallet may name its account; a connected wallet such as
+ * Phantom, its own name. Neither carries the other's field.
+ */
+export type DeployPayer = {
   address: string;
   balance: number | undefined;
-  /** The Playground wallet, not a connected one such as Phantom */
-  playground: boolean;
-  /** A connected wallet's own name, as "Phantom"; absent for the Playground wallet */
-  name?: string;
-  /** The Playground account that pays, named once there are two or more */
-  account?: string;
-}
+} & (
+  | {
+      playground: true;
+      /** The Playground account that pays, named once there are two or more */
+      account?: string;
+    }
+  | {
+      playground: false;
+      /** The wallet's own name, as "Phantom"; absent when it gave none */
+      name?: string;
+    }
+);
 
 export interface BaseDeployProps {
   /** The cluster's name, `null` until the endpoint has been read */
@@ -178,11 +187,9 @@ const payerLine = (p: BaseDeployProps) => {
     payer.balance === undefined
       ? ""
       : ` · ${Number(payer.balance.toFixed(4))} SOL`;
-  if (!payer.playground && payer.name) {
-    return `From ${payer.name} · ${shortKey(payer.address)}${balance}`;
-  }
   if (!payer.playground) {
-    return `From your wallet · ${shortKey(payer.address)}${balance}`;
+    const which = payer.name ?? "your wallet";
+    return `From ${which} · ${shortKey(payer.address)}${balance}`;
   }
   const account = payer.account ? ` · ${payer.account}` : "";
   return `From your Playground wallet${account} · ${shortKey(

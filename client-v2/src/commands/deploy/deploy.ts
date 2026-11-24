@@ -109,6 +109,9 @@ export const deploy = createCmd({
     );
 
     PgDeployRun.begin();
+    // The deploy signs with the account it started with: hold it, so the
+    // chip and the payer line cannot name another one meanwhile
+    const releaseAccount = PgWallet.holdSwitch();
     try {
       const startTime = performance.now();
       const result = await processDeploy(lockStop, signal);
@@ -120,6 +123,7 @@ export const deploy = createCmd({
       );
       return result;
     } finally {
+      releaseAccount();
       PgView.setMainSecondaryProgress(0);
       PgDeployRun.reset();
       PgGlobal.update({ deployState: "ready" });

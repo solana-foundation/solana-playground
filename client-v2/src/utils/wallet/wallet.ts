@@ -641,6 +641,22 @@ const reportKeyFailure =
   };
 
 /**
+ * How many deploys hold the current account. A deploy signs with the account
+ * it started with, so a switch meanwhile would leave the chip and the Deploy
+ * payer line naming an account that is not paying
+ */
+let switchHolds = 0;
+
+/** Refuse to change the current account while a deploy holds it */
+const refuseWhileSwitchHeld = () => {
+  if (switchHolds > 0) {
+    throw new Error(
+      "A deploy is running: the account switches once it ends, since the deploy keeps signing with the one it started with."
+    );
+  }
+};
+
+/**
  * Refuse a new account while the wallet is unavailable or loading: it is
  * never saved then, so the account would live only in memory and be lost on
  * reload, and a loading wallet may already hold accounts
@@ -683,6 +699,7 @@ class _PgWallet {
     publicKey?: string;
     keypair?: PgWeb3.Keypair;
   }) {
+    refuseWhileSwitchHeld();
     refuseWhileUnavailable();
     const hasKeysInPage = signerProvider.hasKeysInPage;
     if (!hasKeysInPage && params?.keypair) {
@@ -744,6 +761,7 @@ class _PgWallet {
    */
   // eslint-disable-next-line layers/curry-order -- the name is optional as in `add`, a call of the wallet API
   static async addNew(name?: string) {
+    refuseWhileSwitchHeld();
     refuseWhileUnavailable();
     const publicKey = await signerProvider.makeKey();
     const forget = () =>
@@ -891,6 +909,7 @@ class _PgWallet {
    * @param index account index
    */
   static async remove(index: number = PgWallet.currentIndex) {
+    refuseWhileSwitchHeld();
     const [removed] = PgWallet.accounts.splice(index, 1);
     const currentIndex = PgWallet.accounts.length - 1;
 
@@ -943,6 +962,7 @@ class _PgWallet {
    * the file picker opens
    */
   static async import(name?: string) {
+    refuseWhileSwitchHeld();
     refuseWhileUnavailable();
     if (!signerProvider.hasKeysInPage) {
       throw new Error("Import the key file from the key panel.");
@@ -998,11 +1018,32 @@ class _PgWallet {
   }
 
   /**
+   * Hold the current account for a deploy: until the returned release runs,
+   * `switch`, `add`, `addNew`, `import` and `remove` refuse. Releasing twice
+   * releases once.
+   */
+  static holdSwitch() {
+    switchHolds++;
+    let isReleased = false;
+    return () => {
+      if (isReleased) return;
+      isReleased = true;
+      switchHolds--;
+    };
+  }
+
+  /** Whether a deploy holds the current account */
+  static get isSwitchHeld() {
+    return switchHolds > 0;
+  }
+
+  /**
    * Switch to the given account index.
    *
    * @param index account index to switch to
    */
   static switch(index: number) {
+    refuseWhileSwitchHeld();
     if (!PgWallet.accounts[index]) {
       throw new Error(`Account index '${index}' not found`);
     }

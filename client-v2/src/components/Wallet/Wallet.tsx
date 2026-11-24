@@ -170,6 +170,8 @@ export const WalletName = () => {
           {PgWallet.accounts.map((acc, i) => (
             <DropdownMenuItem
               key={"pg-" + i}
+              // A running deploy holds its account (`PgWallet.holdSwitch`)
+              disabled={PgWallet.isSwitchHeld}
               onSelect={() => PgWallet.switch(i)}
             >
               <MenuItemText>
@@ -181,6 +183,7 @@ export const WalletName = () => {
           {PgWallet.getConnectedStandardWallets().map((standardWallet) => (
             <DropdownMenuItem
               key={"standard-" + standardWallet.name}
+              disabled={PgWallet.isSwitchHeld}
               onSelect={() => {
                 PgWallet.update({
                   state: "sol",
