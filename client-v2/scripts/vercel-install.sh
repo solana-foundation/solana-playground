@@ -199,7 +199,7 @@ restore_archive() {
   rm -f "$2.seal"
   if remote_fetch "$1" "$2"; then
     if production_build && ! remote_fetch "$(seal_key "$1" "$2")" "$2.seal"; then
-      echo ">>> $3: Remote Cache holds $1 without a seal for its content: a production build that stopped between its two uploads, or a write from outside production. Rebuilding" >&2
+      echo ">>> $3: no seal for the Remote Cache copy of $1 could be fetched (a failed request, a production build that stopped between its two uploads, or a write from outside production). Rebuilding" >&2
     elif seal_holds "$1" "$2" "$3" && readable_archive "$2" "$3"; then
       echo ">>> $3: HIT in Remote Cache ($1)"
       return 0
@@ -430,7 +430,7 @@ install_node_modules() {
 }
 
 main() {
-  local wasm_key
+  local wasm_key install_key
   if wasm_stubs_requested; then
     echo ">>> USE_WASM_STUBS=true: a deployment never ships wasm stubs; unset it" >&2
     exit 1
@@ -443,7 +443,10 @@ main() {
   report_remote_credentials
   restore_wasm_packages "$wasm_key"
   restore_default_crates
-  install_node_modules "$wasm_key"
+  # Production keys the install by the sealed name, so a node_modules installed from an unsealed archive
+  # before the seal existed is installed again, from the packages just checked.
+  install_key=$(cache_key "$wasm_key")
+  install_node_modules "$install_key"
 }
 
 # Sourced, it sets the Rust environment and defines the functions without running main: reusable-client-v2.yml keys and builds with wasm_source_key and build_wasm_packages.

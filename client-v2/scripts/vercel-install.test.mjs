@@ -351,7 +351,7 @@ test("rebuilds under new names after CACHE_SEAL_KEY is rotated", () => {
   assert.match(result.stdout, /wasm packages: MISS/);
 });
 
-test("never reads what a preview build stored", () => {
+test("ignores what a preview build stored", () => {
   const tree = scratchTree();
   assert.equal(run(tree, restoreWasm, PREVIEW).status, 0);
   const previewKey = fs.readdirSync(tree.remote)[0];
@@ -483,4 +483,36 @@ test("rebuilds over a production Build Cache copy without its seal", () => {
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stderr, /has no seal, discarding/);
   assert.equal(unpackedPkg(tree), "built-here");
+});
+
+test("reinstalls a node_modules whose install mark predates the seal", () => {
+  const tree = scratchTree();
+  fs.writeFileSync(path.join(tree.client, "yarn.lock"), "");
+  fs.writeFileSync(path.join(tree.client, "package.json"), "{}");
+  const yarnLog = path.join(tree.root, "yarn.log");
+  fs.writeFileSync(
+    path.join(tree.bin, "yarn"),
+    `#!/bin/sh\necho "yarn $*" >>${JSON.stringify(yarnLog)}\n`,
+    { mode: 0o755 }
+  );
+  // The mark an earlier production build wrote: keyed on the unsealed wasm key.
+  const oldMark = run(
+    tree,
+    `printf '%s' "$(cat yarn.lock package.json | sha256 | cut -d' ' -f1)-$(wasm_source_key)-$(node --version)"`,
+    PREVIEW
+  ).stdout;
+  fs.mkdirSync(path.join(tree.client, "node_modules", ".cache"), {
+    recursive: true,
+  });
+  fs.writeFileSync(
+    path.join(tree.client, "node_modules", ".cache", "install-key"),
+    oldMark
+  );
+
+  const result = run(tree, "main", PRODUCTION);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    fs.readFileSync(yarnLog, "utf8"),
+    /yarn install --frozen-lockfile/
+  );
 });
