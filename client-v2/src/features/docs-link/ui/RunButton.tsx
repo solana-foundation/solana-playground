@@ -2,6 +2,7 @@ import type { FC } from "react";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
+import { restingOf } from "../model/resting";
 import type { RunState } from "../model/run";
 import { PgClientRun } from "../model/run";
 import BaseRunButton from "./BaseRunButton";
@@ -13,9 +14,11 @@ const ENDED: ReadonlySet<RunState["kind"]> = new Set<RunState["kind"]>([
   "missing-package",
 ]);
 
-/** Whether the project has run: the funding card keeps the run before it */
-const hasRun = (state: RunState) =>
-  ENDED.has(state.kind === "funding" ? state.previous.kind : state.kind);
+/**
+ * Whether the project has run, read under any overlay, which keeps the run
+ * before it
+ */
+const hasRun = (state: RunState) => ENDED.has(restingOf(state).kind);
 
 /** The stage row's Run, connected to the run store */
 const RunButton: FC = () => {
