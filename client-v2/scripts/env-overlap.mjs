@@ -10,7 +10,8 @@
 // names (REACT_APP_*, which ship in the bundle, and Vercel's own VERCEL_*),
 // boolean flags and empty values are skipped; `--allow` skips more names, for
 // public settings both sides share on purpose (a build server URL). Exits 1
-// when anything overlaps, 2 when a file cannot be read or holds no entry.
+// when anything overlaps, 2 when a file cannot be read or holds no entry, 3
+// when nothing overlaps but some values were empty and went uncompared.
 // How it is run: docs/deploy-client-vercel.md, "Sign-in on previews".
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -111,10 +112,10 @@ const main = (argv) => {
     return 2;
   }
   const [a, b] = read.map((r) => r.env);
-  // An empty value is a Sensitive one `vercel env pull` could not read: say
-  // how many went uncompared, so a clean run is not mistaken for a full one
-  const empty = [a, b].map(
-    (env) => Object.values(env).filter((v) => v === "").length
+  // An empty value is a Sensitive one `vercel env pull` could not read: name
+  // each one, so a clean run is not mistaken for a full one
+  const empty = [a, b].map((env) =>
+    Object.keys(env).filter((name) => env[name] === "")
   );
   const pairs = overlapAllowing(allow)(a, b);
   for (const [nameA, nameB] of pairs) {
@@ -122,10 +123,15 @@ const main = (argv) => {
   }
   console.log(
     `${pairs.length} shared value(s) across ${Object.keys(a).length} and ` +
-      `${Object.keys(b).length} names; not compared: ${empty[0]} empty in ` +
-      `${paths[0]}, ${empty[1]} empty in ${paths[1]}`
+      `${Object.keys(b).length} names`
   );
-  return pairs.length ? 1 : 0;
+  empty.forEach((names, i) => {
+    if (names.length) {
+      console.log(`not compared, empty in ${paths[i]}: ${names.join(", ")}`);
+    }
+  });
+  if (pairs.length) return 1;
+  return empty.some((names) => names.length) ? 3 : 0;
 };
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

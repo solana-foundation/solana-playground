@@ -262,6 +262,34 @@ describe("oauthProxyPlugins", () => {
     assert.ok(missingConfig().includes("AUTH_OAUTH_PROXY_URL"));
   });
 
+  test("reports nothing missing on a preview with no proxy variable", async () => {
+    asPreview();
+    delete process.env.AUTH_OAUTH_PROXY_URL;
+    delete process.env.AUTH_OAUTH_PROXY_SECRET;
+    const { missingConfig } = await load();
+    assert.deepEqual(
+      missingConfig().filter((name) => name.startsWith("AUTH_OAUTH_PROXY")),
+      []
+    );
+  });
+
+  // The flag never makes a preview the host: it still completes, and its
+  // build fails on the flag (scripts/check-auth-env.mjs)
+  test("keeps the completion endpoint on a preview with the host flag", async () => {
+    asPreview();
+    process.env.AUTH_OAUTH_PROXY_HOST = "true";
+    const { oauthProxyPlugins } = await load();
+    const [plugin] = oauthProxyPlugins();
+    assert.ok(plugin.endpoints.oAuthProxyCompletion);
+  });
+
+  test('reports a host flag that is not exactly "true"', async () => {
+    asHost();
+    process.env.AUTH_OAUTH_PROXY_HOST = "yes";
+    const { missingConfig } = await load();
+    assert.ok(missingConfig().includes("AUTH_OAUTH_PROXY_HOST"));
+  });
+
   test("reports the host flag without its secret", async () => {
     asHost();
     delete process.env.AUTH_OAUTH_PROXY_SECRET;

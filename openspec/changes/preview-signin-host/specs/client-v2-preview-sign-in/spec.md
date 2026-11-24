@@ -34,11 +34,14 @@ hostnames SHALL keep the proxy without its completion endpoints.
 ### Requirement: Builds refuse a sign-in environment that mixes roles
 
 A Vercel build SHALL fail when its environment would let production take part
-in preview sign-in or would reuse one secret for two purposes: a production
-build with any `AUTH_OAUTH_PROXY_*` variable but no host flag, a production
-build with `AUTH_OAUTH_PROXY_URL`, a preview build with the host flag, or a
-build whose `AUTH_SECRET` equals its `AUTH_OAUTH_PROXY_SECRET`. The failure
-SHALL name the variables and never print a value.
+in preview sign-in, would leave a role half set up, or would reuse one secret
+for two purposes: a production build with any `AUTH_OAUTH_PROXY_*` variable
+but no host flag, a production build with `AUTH_OAUTH_PROXY_URL`, a host flag
+that is not exactly `true`, the host flag without the proxy secret or without
+`AUTH_BASE_URL`, a preview build with the host flag, a preview build with the
+proxy secret but no `AUTH_OAUTH_PROXY_URL`, or a build whose `AUTH_SECRET`
+equals its `AUTH_OAUTH_PROXY_SECRET`. The failure SHALL name the variables and
+never print a value.
 
 #### Scenario: Production with a proxy variable (manual)
 

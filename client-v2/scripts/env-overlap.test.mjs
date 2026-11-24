@@ -111,14 +111,14 @@ test("exits 1 naming the overlap, never the value", () => {
   assert.doesNotMatch(res.stdout + res.stderr, /s3cr3t/);
 });
 
-test("exits 0 when nothing overlaps, counting empty values", () => {
+test("exits 0 when nothing overlaps", () => {
   const res = spawnSync(
     process.execPath,
-    [script, ...files("A=one-value\nB=\n", "A=other-value\n")],
+    [script, ...files("A=one-value\n", "A=other-value\n")],
     { encoding: "utf8" }
   );
   assert.equal(res.status, 0);
-  assert.match(res.stdout, /1 empty/);
+  assert.match(res.stdout, /0 shared value\(s\)/);
 });
 
 // Exit 1 means "found an overlap"; a file that could not be compared is 2
@@ -149,15 +149,29 @@ test("exits 2 naming a file it cannot read", () => {
 });
 
 test("--allow takes a comma-separated list", () => {
-  const res = spawnSync(
+  const [a, b] = files(
+    "URL_A=https://x.example\nURL_B=https://y.example\n",
+    "URL_A=https://x.example\nURL_B=https://y.example\n"
+  );
+  const allowed = spawnSync(
     process.execPath,
-    [
-      script,
-      "--allow",
-      "URL_A,URL_B",
-      ...files("URL_A=https://x.example\n", "URL_A=https://x.example\n"),
-    ],
+    [script, "--allow", "URL_A,URL_B", a, b],
     { encoding: "utf8" }
   );
-  assert.equal(res.status, 0);
+  assert.equal(allowed.status, 0);
+  // The control: without the list, the same files overlap
+  const control = spawnSync(process.execPath, [script, a, b], {
+    encoding: "utf8",
+  });
+  assert.equal(control.status, 1);
+});
+
+test("exits 3 naming the empty values it could not compare", () => {
+  const res = spawnSync(
+    process.execPath,
+    [script, ...files("A=one-value\nSECRET_X=\n", "A=other-value\n")],
+    { encoding: "utf8" }
+  );
+  assert.equal(res.status, 3);
+  assert.match(res.stdout, /not compared, empty in .*a\.env: SECRET_X/);
 });

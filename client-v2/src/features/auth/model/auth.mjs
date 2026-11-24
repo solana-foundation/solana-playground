@@ -230,18 +230,23 @@ export const missingConfig = () => {
     ...SIGN_IN_ENV.filter((name) => !present[name]),
     // A proxy URL alone leaves the proxy off, and the preview then sends GitHub
     // its own callback, which GitHub rejects with nothing said here
+    // A host flag that is not exactly "true" makes no host: say so
+    env.AUTH_OAUTH_PROXY_HOST !== undefined &&
+    env.AUTH_OAUTH_PROXY_HOST !== "true"
+      ? "AUTH_OAUTH_PROXY_HOST"
+      : undefined,
     // So does the host flag alone: the staging app then hosts nothing
     (proxyURL || env.AUTH_OAUTH_PROXY_HOST === "true") &&
     !env.AUTH_OAUTH_PROXY_SECRET
       ? "AUTH_OAUTH_PROXY_SECRET"
-      : null,
+      : undefined,
     // Unparseable, it would throw from `getAuth` on every request. Absent on
     // a preview holding the secret, the preview sends GitHub its own
     // callback, which the host's OAuth app rejects
     (proxyURL && !URL.canParse(proxyURL)) ||
     (!proxyURL && env.AUTH_OAUTH_PROXY_SECRET && env.VERCEL_ENV === "preview")
       ? "AUTH_OAUTH_PROXY_URL"
-      : null,
+      : undefined,
   ].filter(Boolean);
 };
 

@@ -45,10 +45,22 @@ test("passes the staging host: flag and secret, no URL", () => {
   const res = run({
     VERCEL_ENV: "production",
     AUTH_SECRET: "staging-secret",
+    AUTH_BASE_URL: STAGING,
     AUTH_OAUTH_PROXY_HOST: "true",
     AUTH_OAUTH_PROXY_SECRET: PROXY_SECRET,
   });
   assert.equal(res.status, 0);
+});
+
+test("fails the host without AUTH_BASE_URL", () => {
+  const res = run({
+    VERCEL_ENV: "production",
+    AUTH_SECRET: "staging-secret",
+    AUTH_OAUTH_PROXY_HOST: "true",
+    AUTH_OAUTH_PROXY_SECRET: PROXY_SECRET,
+  });
+  assert.equal(res.status, 1);
+  assert.match(res.stderr, /AUTH_BASE_URL/);
 });
 
 test("fails the host holding a proxy URL", () => {

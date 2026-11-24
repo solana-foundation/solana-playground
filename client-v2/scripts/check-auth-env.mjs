@@ -50,6 +50,14 @@ if (isPreview) {
         "cannot seal what it hands a preview."
     );
   }
+  // The host's callback and the origin the profile is sealed for come from it
+  if (!value("AUTH_BASE_URL")) {
+    problems.push(
+      "AUTH_OAUTH_PROXY_HOST=true without AUTH_BASE_URL: set it to the " +
+        "staging sign-in host's own origin, the one previews name in " +
+        "AUTH_OAUTH_PROXY_URL."
+    );
+  }
   if (proxyURL) {
     problems.push(
       "AUTH_OAUTH_PROXY_URL is set on the sign-in host. Only a preview names " +
@@ -66,8 +74,7 @@ if (isPreview) {
       `${held.join(" and ")} set on a deployment that is not the staging ` +
         "sign-in host. Production holds no AUTH_OAUTH_PROXY_* variable: " +
         "previews sign in through the staging app, never through production. " +
-        "Delete them here, or set AUTH_OAUTH_PROXY_HOST=true if this project " +
-        "is the staging app."
+        "Delete them here."
     );
   }
 }

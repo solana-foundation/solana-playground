@@ -26,7 +26,9 @@ as soon as the Root Directory points at `client-v2`.
      `GCP_*` variables replace it ([Cloud SQL for client-v2](cloud-sql.md),
      steps 6 and 7).
    - No `AUTH_OAUTH_PROXY_*` variable: previews sign in through the staging
-     sign-in host, never production, and the build fails on one
+     sign-in host, never production. The build fails on
+     `AUTH_OAUTH_PROXY_URL`, or on the secret without the host flag, which
+     belongs only on the staging project
      ([Sign-in on previews](#sign-in-on-previews)).
    - `SYNC_ENABLED=true`.
    - `AUTH_SECRET` — generated for production, never reused from a preview.
@@ -829,8 +831,9 @@ rm /tmp/preview.env /tmp/production.env
 ```
 
 It exits `0` with `0 shared value(s)` when the preview is clean, `1` naming
-each shared value's two variables, and `2` when a file cannot be read or
-holds no entry. `vercel env
+each shared value's two variables, `2` when a file cannot be read or holds no
+entry, and `3` when nothing is shared but some values were empty and so not
+compared. `vercel env
 pull` delivers a Sensitive variable as an empty value, which cannot be
 compared; the last line counts those, and a Sensitive preview variable is
 checked by its source instead.
@@ -843,8 +846,9 @@ it away from real accounts:
   ([Preview databases](preview-databases.md)). A Git-triggered preview
   runs on the Preview-scoped database, never production's.
 - **The staging host's database is not production's either.** Its users are
-  the people who signed in to the staging app; a session forged with the
-  proxy secret reaches previews and staging, never production.
+  the people who signed in to the staging app. A session forged with the
+  proxy secret reaches previews only: the host drops the completion
+  endpoints, and production installs no proxy.
 
 A user signed in on a preview has no `login`: the proxy forwards only Better
 Auth's own user fields, so `mapProfileToUser` does not reach it. The header
