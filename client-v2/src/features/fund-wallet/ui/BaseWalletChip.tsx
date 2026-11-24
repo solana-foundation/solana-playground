@@ -93,7 +93,9 @@ export interface BaseWalletChipProps {
   /** A deploy from the connected wallet runs: it cannot be disconnected yet */
   isDisconnectHeld?: boolean;
   /** Opens the Playground wallet's own window, where its accounts are added
-   * and switched; an extension's accounts live in the extension */
+   * and switched; an extension's accounts live in the extension. Its button
+   * sits beside Connect a wallet, so it shows only while Connect does
+   * (`onConnect` and `onConnectOpen` set, nothing being connected) */
   onManage?: () => void;
   /** The Playground account that pays, named once there are two or more */
   account?: string;
@@ -374,8 +376,8 @@ const AccountsButton = ({ onManage }: { onManage: () => void }) => (
 );
 
 /**
- * Connecting an extension, under the Playground wallet: one button, then the
- * installed wallets, a wait for the one picked, or its decline. There is no
+ * Connecting an extension, under the Playground wallet: Connect a wallet
+ * (with Accounts beside it when `onManage` is set), then the installed wallets, a wait for the one picked, or its decline. There is no
  * Cancel while waiting: an extension's request cannot be withdrawn, and a late
  * answer still lands, so closing the popover is the way out.
  */

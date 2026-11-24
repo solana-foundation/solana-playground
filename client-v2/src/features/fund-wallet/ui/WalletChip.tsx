@@ -287,8 +287,8 @@ const WalletChip = ({ isSignedOut, isSignInFailure }: WalletChipProps) => {
         }
         onConnect={isDeploying ? undefined : (name) => void handleConnect(name)}
         isDisconnectHeld={isDeploying}
-        // A deploy keeps the signer it started with: a switch mid-deploy
-        // would name another account than the one paying
+        // Not offered here mid-deploy: the deploy keeps the signer it started
+        // with. The account menu can still open the floating wallet then
         onManage={isDeploying ? undefined : () => (PgWallet.show = true)}
         account={payingAccountName(wallet, PgWallet.accounts.length)}
         onDisconnect={() => {
