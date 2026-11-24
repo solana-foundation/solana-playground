@@ -247,7 +247,8 @@ database `postgres`, one built-in user `postgres`.
   when Cloud SQL reports exhaustion.
 - [The first connection of a cold instance pays the token exchange and the
   certificate fetch] → the connector caches both per instance; the pool is
-  memoised at module scope so a warm instance pays once. Task 3.1 records the
+  memoised at module scope so a warm instance pays again only when the
+  connector is renewed (below). Task 3.1 records the
   cold and warm latency of the first production deployment's
   `GET /api/sync` so the cost is a number before the release; task 2.7
   records it again for previews.
@@ -257,8 +258,9 @@ database `postgres`, one built-in user `postgres`.
   certificate" (Sentry SOLANA-PLAYGROUND-G)] → the pool takes a fresh
   connector before a new connection once the current one is 45 minutes old.
   So a warm instance also pays the exchange about once every 45 minutes it
-  serves. A renewal that fails or takes over 10 seconds is logged, the current
-  connector keeps serving, and the next try comes a minute later.
+  serves. A renewal that fails or takes over 10 seconds is reported, the
+  request goes ahead on the current connector (which fails, as before, once
+  its hour is up), and the next try comes a minute later.
 - [`preview-shared-db.yml` fails, and `solpg_preview` falls behind
   `master`] → the run fails red on `master`; a PR's copy still applies what it
   lacks, and a manual dispatch reruns it.

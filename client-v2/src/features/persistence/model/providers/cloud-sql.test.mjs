@@ -79,6 +79,11 @@ describe("cloud-sql pool", () => {
     await assert.rejects(() => pool.connect(), /no database here/);
     assert.equal(options.mock.callCount(), 2);
     assert.deepEqual(streams, [2, 1]);
+
+    // The fresh connector serves its own 45 minutes
+    mock.timers.tick(44 * MINUTE);
+    await assert.rejects(() => pool.connect(), /no database here/);
+    assert.equal(options.mock.callCount(), 2);
   });
 
   it("renews once for connections that ask at the same time", async () => {
@@ -125,7 +130,10 @@ describe("cloud-sql pool", () => {
     }, options.mock.callCount());
     await assert.rejects(() => pool.connect(), /no database here/);
     assert.deepEqual(streams, [1]);
-    assert.match(String(errors.mock.calls[0].arguments[0]), /renewing/);
+    assert.match(
+      JSON.stringify(errors.mock.calls[0].arguments),
+      /sts unavailable/
+    );
 
     // Within the minute: no second attempt
     await assert.rejects(() => pool.connect(), /no database here/);

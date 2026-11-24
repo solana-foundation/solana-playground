@@ -19,7 +19,10 @@ import {
   BRANCH_PREFIX,
   PR_PREFIX,
 } from "../../../../../scripts/db/preview-name.mjs";
+import { createServerLogger } from "../../../../shared/lib/logger/server.mjs";
 import { POOL_LIMITS } from "./url.mjs";
+
+const log = createServerLogger("db:cloud-sql");
 
 /** The production instance and database. Only Production may open either. */
 const PRODUCTION_INSTANCE = "solpg";
@@ -147,8 +150,9 @@ export const connector = {
  * one. Its client certificate lasts an hour, and the connector renews it on a
  * timer, which does not run while Vercel has the function frozen: an instance
  * woken after an hour connected with an expired certificate and the server
- * answered "bad certificate" (Sentry SOLANA-PLAYGROUND-G). The quarter hour
- * left is the room for a renewal that fails and is retried.
+ * answered "bad certificate" (Sentry SOLANA-PLAYGROUND-G). A warm instance
+ * renews within the quarter hour left; one frozen past the hour renews on the
+ * first request after it wakes.
  */
 export const RENEW_AFTER_MS = 45 * 60_000;
 
@@ -163,12 +167,9 @@ export const RENEW_RETRY_MS = 60_000;
  * `RENEW_AFTER_MS`. The pool itself never changes, since Better Auth keeps
  * the one it was given for the life of the instance; what changes is the
  * connector behind its `stream`. Connections already open are untouched: the
- * certificate is checked only when TLS is set up.
- *
- * The check runs in `connect()`. A client `pg-pool` creates for a queued
- * request, once a busy one frees up, skips it; with `max` at 3 that needs
- * three requests at once in the minute an instance wakes, and the connector
- * then refreshes on the failed handshake, as it did before.
+ * certificate is checked only when TLS is set up. `pg-pool` opens a client
+ * only for a caller of `connect()` (`query()` included), and that call waits
+ * for `ready()` first.
  */
 class ConnectorPool extends pg.Pool {
   /**
@@ -190,17 +191,18 @@ class ConnectorPool extends pg.Pool {
     let renewing;
     /**
      * Swap in a fresh connector when the current one is old. A renewal that
-     * fails or times out is logged and leaves the current connector in place:
-     * its certificate still has the rest of the hour, and the next try comes
-     * after `RENEW_RETRY_MS`, so an outage costs one attempt a minute, not one
-     * per request.
+     * fails or times out is reported and leaves the current connector in
+     * place, so the request goes ahead: before the hour is up its certificate
+     * still works, and after it the connection fails as it did before this
+     * renewal existed. The next try comes after `RENEW_RETRY_MS`, so an outage
+     * costs one attempt a minute, not one per request.
      */
     this.ready = () => {
       const now = Date.now();
       if (now - since < RENEW_AFTER_MS || now < retryAt) {
         return Promise.resolve();
       }
-      renewing ??= withTimeout(renew(), RENEW_TIMEOUT_MS)
+      renewing ??= withTimeout(RENEW_TIMEOUT_MS, renew())
         .then(
           (fresh) => {
             const old = current;
@@ -210,9 +212,9 @@ class ConnectorPool extends pg.Pool {
           },
           (error) => {
             retryAt = Date.now() + RENEW_RETRY_MS;
-            // eslint-disable-next-line no-console -- server-side: Vercel's function log is where this goes
-            console.error("db: renewing the Cloud SQL connector failed", {
-              message: /** @type {Error} */ (error).message,
+            log.error(error, {
+              report: true,
+              context: { op: "renewConnector" },
             });
           }
         )
@@ -243,10 +245,10 @@ class ConnectorPool extends pg.Pool {
  * that arrives after the timeout is closed, so its refresh timer does not run
  * for the life of the instance.
  *
- * @param {ReturnType<typeof connector.options>} pending
  * @param {number} ms
+ * @param {ReturnType<typeof connector.options>} pending
  */
-const withTimeout = (pending, ms) => {
+const withTimeout = (ms, pending) => {
   /** @type {NodeJS.Timeout | undefined} */
   let timer;
   let late = false;
