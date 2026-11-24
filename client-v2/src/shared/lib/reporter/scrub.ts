@@ -67,7 +67,8 @@ const SENTENCE_END = new Set([".", ",", ";", ":", "!", "?"]);
 /** The opening bracket of each closing one a URL may hold */
 const OPENER: Record<string, string> = { ")": "(", "]": "[" };
 
-const countOf = (char: string) => (text: string) => text.split(char).length - 1;
+const countWith = (char: string) => (text: string) =>
+  text.split(char).length - 1;
 
 /** `match` less its trailing sentence punctuation and the closing brackets it does not open, as in `(see https://x.test/a)` */
 const urlPartOf = (match: string) => {
@@ -76,7 +77,7 @@ const urlPartOf = (match: string) => {
     const last = url.slice(-1);
     const opener = OPENER[last];
     const isUnopened =
-      opener !== undefined && countOf(last)(url) > countOf(opener)(url);
+      opener !== undefined && countWith(last)(url) > countWith(opener)(url);
     if (!SENTENCE_END.has(last) && !isUnopened) break;
     url = url.slice(0, -1);
   }
