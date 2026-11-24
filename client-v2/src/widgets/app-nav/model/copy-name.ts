@@ -8,8 +8,8 @@
  * skip validation and name a project `github-owner/repo/path` or
  * `gist-owner/id`, plus `@rev` when the link pins a revision. Each run of
  * rejected characters becomes one `-`, and a name left with no letter or
- * digit (`проект` -> `-`, since `\w` is ASCII) becomes "Project", so the
- * copy is always a name `createWorkspace` accepts.
+ * digit (a Cyrillic name becomes `-`, since `\w` is ASCII) becomes
+ * "Project", so the copy is always a name `createWorkspace` accepts.
  */
 export const copyName = (name: string, taken: readonly string[]) => {
   const cleaned = name.replace(/[^\w\s-]+/g, "-").trimStart();
@@ -51,8 +51,10 @@ if (import.meta.vitest) {
       });
 
       it("falls back to Project when no letter or digit is left", () => {
-        // `\w` is ASCII only
-        expect(copyName("проект", [])).toBe("Project copy");
+        // A Cyrillic name, escaped so the source stays ASCII (CONTRIBUTING.md)
+        expect(copyName("\u043f\u0440\u043e\u0435\u043a\u0442", [])).toBe(
+          "Project copy"
+        );
         expect(copyName("@@", [])).toBe("Project copy");
       });
 
