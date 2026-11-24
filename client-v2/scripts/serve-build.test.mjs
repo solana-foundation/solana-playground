@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
 
+import { PRODUCTION_HOST } from "./robots.mjs";
 import { createServer, platformRules } from "./serve-build.mjs";
 
 const vercelJson = JSON.parse(
@@ -60,6 +62,43 @@ describe("platformRules", () => {
       platformRules({ headers: [{ source: "/:path*", headers: [] }] })
     );
   });
+
+  it("keeps X-Robots-Tag off the production host only", () => {
+    const { headersFor } = platformRules(vercelJson);
+    assert.equal(headersFor("/", PRODUCTION_HOST)["X-Robots-Tag"], undefined);
+    for (const host of [
+      "solana-playground-teal.vercel.app",
+      "solana-playground-git-x-hoodies.vercel.app",
+      "localhost",
+    ]) {
+      assert.equal(
+        headersFor("/flow/lesson", host)["X-Robots-Tag"],
+        "noindex, nofollow"
+      );
+    }
+  });
+
+  it("matches a host condition whole, never a host that only contains it", () => {
+    const { headersFor } = platformRules(vercelJson);
+    assert.equal(
+      headersFor("/", `${PRODUCTION_HOST}.example.com`)["X-Robots-Tag"],
+      "noindex, nofollow"
+    );
+  });
+
+  it("refuses a condition it would not apply", () => {
+    assert.throws(() =>
+      platformRules({
+        headers: [
+          {
+            source: "/(.*)",
+            has: [{ type: "cookie", key: "x" }],
+            headers: [],
+          },
+        ],
+      })
+    );
+  });
 });
 
 describe("createServer", () => {
@@ -113,6 +152,28 @@ describe("createServer", () => {
     assert.notEqual(
       (await fetch(urlOf("/"))).headers.get("content-security-policy"),
       RUNTIME_CSP
+    );
+  });
+
+  /** A GET with the `Host` header set, which `fetch` cannot send */
+  const headOf = (pathname, host) =>
+    new Promise((resolve, reject) => {
+      http
+        .get(urlOf(pathname), { headers: { host } }, (res) => {
+          res.resume();
+          resolve(res.headers);
+        })
+        .on("error", reject);
+    });
+
+  it("sends X-Robots-Tag to every host but production's", async () => {
+    assert.equal(
+      (await headOf("/", "solana-playground-teal.vercel.app"))["x-robots-tag"],
+      "noindex, nofollow"
+    );
+    assert.equal(
+      (await headOf("/", PRODUCTION_HOST))["x-robots-tag"],
+      undefined
     );
   });
 

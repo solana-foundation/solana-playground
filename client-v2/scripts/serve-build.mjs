@@ -41,27 +41,54 @@ const matcherOf = (source) => {
 };
 
 /**
- * What `vercel.json` asks of this server: the headers each path gets, every
- * matching rule's in order, and the SPA fallback.
+ * A `vercel.json` `has` or `missing` list as a test of the request's host,
+ * matched whole as the platform does. Throws on any other condition type
+ * (`header`, `cookie`, `query`), which this server would otherwise skip
+ * without a word.
  *
- * @param {{headers?: {source: string, headers: {key: string, value: string}[]}[],
+ * @param {{type: string, value?: string}[] | undefined} conditions
+ * @param {string} source the rule's source, named in the error
+ * @returns {RegExp[]}
+ */
+const hostMatchersOf = (conditions, source) =>
+  (conditions ?? []).map((condition) => {
+    if (condition.type !== "host" || condition.value === undefined) {
+      throw new Error(
+        `serve-build: vercel.json conditions headers for ${source} on a ${condition.type}, which this server cannot match`
+      );
+    }
+    return new RegExp(`^(?:${condition.value.replaceAll(".", "\\.")})$`);
+  });
+
+/**
+ * What `vercel.json` asks of this server: the headers each path on each host
+ * gets, every matching rule's in order, and the SPA fallback.
+ *
+ * @param {{headers?: {source: string, has?: {type: string, value?: string}[],
+ *   missing?: {type: string, value?: string}[],
+ *   headers: {key: string, value: string}[]}[],
  *   rewrites?: {source: string, destination: string}[]}} config
- * @returns {{headersFor: (urlPath: string) => Record<string, string>,
+ * @returns {{headersFor: (urlPath: string, host?: string) => Record<string, string>,
  *   spaFallback: RegExp | undefined}}
  */
 export const platformRules = (config) => {
   const rules = (config.headers ?? []).map((rule) => ({
     matcher: matcherOf(rule.source),
+    has: hostMatchersOf(rule.has, rule.source),
+    missing: hostMatchersOf(rule.missing, rule.source),
     headers: rule.headers,
   }));
+  const appliesTo = (rule, host) =>
+    rule.has.every((m) => m.test(host)) &&
+    !rule.missing.some((m) => m.test(host));
   const spa = (config.rewrites ?? []).find(
     (r) => r.destination === "/index.html"
   );
   return {
-    headersFor: (urlPath) => {
+    headersFor: (urlPath, host = "localhost") => {
       const headers = {};
       for (const rule of rules) {
-        if (!rule.matcher.test(urlPath)) continue;
+        if (!rule.matcher.test(urlPath) || !appliesTo(rule, host)) continue;
         for (const { key, value } of rule.headers) headers[key] = value;
       }
       return headers;
@@ -82,7 +109,7 @@ export const createServer = ({ buildDir, config }) => {
   const { headersFor, spaFallback } = platformRules(config);
   const app = express();
   app.use((req, res, next) => {
-    res.set(headersFor(req.path));
+    res.set(headersFor(req.path, req.hostname));
     next();
   });
   // Mounted as the dev server mounts it: the remainder in `url`, the whole path in `originalUrl`.
