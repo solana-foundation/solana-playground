@@ -30,6 +30,7 @@ import { FaucetRefusedToast } from "../../features/fund-wallet";
 import { useCopy, useRenderOnChange } from "../../hooks";
 import { NETWORK_UNREACHABLE } from "../../shared/lib/faucet-limit";
 import { Fn, PgConnection, PgView, PgWallet } from "../../utils";
+import { AccountsHeldError } from "../../utils/wallet/accounts-held";
 import { KeypairFileError } from "../../utils/wallet/keypair-file";
 import Img from "../Img";
 import { useAirdrop, useDarken } from "./hooks";
@@ -72,10 +73,15 @@ const importWallet = async () => {
       options: { name: "wallet-imported" },
     });
   } catch (err) {
-    if (err instanceof KeypairFileError) {
+    // A file that is not a keypair, or accounts a running deploy holds
+    if (err instanceof KeypairFileError || err instanceof AccountsHeldError) {
       const { message } = err;
+      const toast =
+        err instanceof AccountsHeldError
+          ? "wallet-accounts-held"
+          : "wallet-import-not-keypair";
       PgView.setToast(() => <span>{message}</span>, {
-        options: { name: "wallet-import-not-keypair" },
+        options: { name: toast },
       });
       return;
     }

@@ -13,6 +13,8 @@ import { PgDeployRun } from "./run";
 
 /** What each test sets: the run's stop, the wallet's balance, the terminal */
 const env = vi.hoisted(() => ({
+  /** Holds the deploy took on the wallet's accounts and has not released */
+  accountHolds: 0,
   controller: new AbortController(),
   balance: 0,
   /** The buffer account's balance, read when a stop could not close it */
@@ -177,7 +179,10 @@ vi.mock("../../utils", () => ({
     accounts: [],
     create: () => pgWallet,
     balance: 100,
-    holdSwitch: () => () => undefined,
+    holdSwitch: () => {
+      env.accountHolds++;
+      return () => void env.accountHolds--;
+    },
   },
   PgWeb3: {
     BpfLoaderUpgradeableProgram: { getBufferAccountSize: () => 10 },
@@ -226,6 +231,14 @@ const runDeploy = async () => {
     .handle({ signal: env.controller.signal, lockStop: vi.fn() })
     .catch((e: unknown) => e);
 };
+
+// A deploy that finished, failed, stopped, paused or was cancelled leaves
+// the accounts free; a leaked hold would lock them until a reload
+afterEach(() => {
+  const leaked = env.accountHolds;
+  env.accountHolds = 0;
+  expect(leaked).toBe(0);
+});
 
 describe("commands/deploy, while the network is down", () => {
   let checkNetwork: () => void;

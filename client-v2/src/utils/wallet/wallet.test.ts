@@ -9,6 +9,7 @@ import { requireFor } from "../../test-utils/require-for";
 import { PgCommon } from "../common";
 import { PgView } from "../view";
 import { PgWeb3 } from "../web3";
+import { AccountsHeldError } from "./accounts-held";
 import { type KeyFrame, KeyFrameUnavailable } from "./key-origin/client";
 import { handlerWith } from "./key-origin/frame/handler";
 import { CLI_KEY_ERROR, keyOriginSignerProvider } from "./key-origin/provider";
@@ -20,13 +21,7 @@ import type {
   WalletAccount,
   WalletState,
 } from "./types";
-import {
-  AccountsHeldError,
-  loadingWith,
-  PgWallet,
-  readWith,
-  refuseKeylessRecord,
-} from "./wallet";
+import { loadingWith, PgWallet, readWith, refuseKeylessRecord } from "./wallet";
 import { WALLET_LOCAL_KEY, type WalletRead } from "./wallet-storage";
 
 // The connection module reads build-time globals the unit runner does not

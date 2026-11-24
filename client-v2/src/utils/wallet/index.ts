@@ -1,3 +1,3 @@
 export { PgWallet } from "./wallet";
 export type { Wallet, WalletOption } from "./types";
-export { AccountsHeldError } from "./wallet";
+export { AccountsHeldError } from "./accounts-held";

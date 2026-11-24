@@ -65,6 +65,10 @@ export type ModalFrameProps = {
  * Thrown by a submit the user abandoned on the way (closed a dialog it
  * opened, for one): the dialog stays open, shows nothing and reports nothing.
  */
+/** An error that says it is its own message (`PgServerError.isPlain`) */
+const isPlainRefusal = (error: unknown): error is Error =>
+  error instanceof Error && (error as { isPlain?: unknown }).isPlain === true;
+
 export class SubmitCancelled extends Error {
   constructor() {
     super("Submit cancelled");
@@ -191,6 +195,13 @@ export const ModalFrame = ({
     } catch (e) {
       if (e instanceof SubmitCancelled) {
         log.debug("submit cancelled by the user", { context: { name } });
+        return;
+      }
+      // A refusal that is its own message (`isPlain`, such as accounts held
+      // by a running deploy) is shown, not reported as a failing dialog
+      if (isPlainRefusal(e)) {
+        log.info("submit refused", { context: { name } });
+        if (mounted.current) setError(e.message);
         return;
       }
       // The user reads the message in the dialog; the team hears of it so a

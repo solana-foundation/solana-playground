@@ -14,6 +14,7 @@ import {
 import type { Disposable } from "../types";
 import { PgView } from "../view";
 import { PgWeb3 } from "../web3";
+import { AccountsHeldError } from "./accounts-held";
 import {
   type KeyFrame,
   keyFrame,
@@ -651,14 +652,6 @@ const switchHoldListeners = new Set<(isHeld: boolean) => void>();
 const tellSwitchHold = () => {
   for (const cb of switchHoldListeners) cb(switchHolds > 0);
 };
-
-/** The refusal of a change of account while a deploy runs */
-export class AccountsHeldError extends Error {
-  constructor() {
-    super("A deploy is running: accounts cannot change until it ends.");
-    this.name = "AccountsHeldError";
-  }
-}
 
 /** Refuse to change the wallet's accounts while a deploy holds them */
 const refuseWhileSwitchHeld = () => {

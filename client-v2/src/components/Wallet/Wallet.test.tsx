@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { DefaultTheme, ThemeProvider } from "styled-components";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,6 +13,13 @@ const wallets = vi.hoisted(() => ({
   selectStandard: vi.fn(),
   /** A deploy holds the accounts */
   held: false,
+  /** Who listens for the hold; `onHold` is the wallet's subscription */
+  holdListeners: new Set<(isHeld?: boolean) => void>(),
+  noSubscription: () => ({ dispose: () => undefined }),
+  onHold: (cb: (isHeld?: boolean) => void) => {
+    wallets.holdListeners.add(cb);
+    return { dispose: () => void wallets.holdListeners.delete(cb) };
+  },
   standard: [] as { name: string; icon: string }[],
   isPg: true,
   show: false,
@@ -46,20 +53,32 @@ vi.mock("../../utils", () => ({
     get isSwitchHeld() {
       return wallets.held;
     },
-    onDidChangeSwitchHeld: () => ({ dispose: () => undefined }),
+    onDidChangeSwitchHeld: wallets.onHold,
   },
 }));
-vi.mock("../../hooks", () => ({
-  useWallet: () => ({
-    name: "first",
-    isPg: wallets.isPg,
-    icon: "",
-    publicKey: { toBase58: () => "key-first" },
-  }),
-  useKeybind: vi.fn(),
-  useOnClickOutside: vi.fn(),
-  useRenderOnChange: () => wallets.show,
-}));
+vi.mock("../../hooks", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../hooks/useRenderOnChange")
+  >("../../hooks/useRenderOnChange");
+  return {
+    useWallet: () => ({
+      name: "first",
+      isPg: wallets.isPg,
+      icon: "",
+      publicKey: { toBase58: () => "key-first" },
+    }),
+    useKeybind: vi.fn(),
+    useOnClickOutside: vi.fn(),
+    // The real hook for the hold, so a test sees the window re-render on it;
+    // every other subscription reads the fake `show`
+    useRenderOnChange: (onChange: unknown) => {
+      actual.useRenderOnChange(
+        onChange === wallets.onHold ? wallets.onHold : wallets.noSubscription
+      );
+      return wallets.show;
+    },
+  };
+});
 vi.mock("./hooks", () => ({
   useDarken: () => ({ darken: vi.fn(), lighten: vi.fn() }),
 }));
@@ -145,11 +164,18 @@ describe("WalletName accounts menu", () => {
     expect(wallets.switch).not.toHaveBeenCalled();
   });
 
-  it("disables every account while a deploy holds them", async () => {
+  it("disables every account once a deploy holds them, with the window already open", async () => {
     wallets.standard = [{ name: "Phantom", icon: "phantom.svg" }];
-    wallets.held = true;
+    renderName();
+    act(() => {
+      wallets.held = true;
+      for (const cb of wallets.holdListeners) cb(true);
+    });
     try {
-      await openAccounts();
+      const trigger = screen.getByText("first - (key-first)");
+      trigger.focus();
+      fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+      await screen.findByRole("menu");
       for (const item of screen.getAllByRole("menuitem")) {
         expect(item.getAttribute("data-disabled")).not.toBeNull();
       }

@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { FC, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -12,6 +18,7 @@ import { AirdropRefusedError } from "../../commands/airdrop/report";
 import { toggleWallet } from "../../commands/connect/connect-wallet";
 import { FaucetRefusedToast } from "../../features/fund-wallet";
 import { PgConnection, PgView, PgWallet } from "../../utils";
+import { AccountsHeldError } from "../../utils/wallet/accounts-held";
 import { KeypairFileError } from "../../utils/wallet/keypair-file";
 import type { Faucet } from "./hooks";
 import Settings from "./Settings";
@@ -38,7 +45,10 @@ vi.mock("../../utils", () => ({
     export: vi.fn(),
     hasKeysInPage: vi.fn(() => true),
     isSwitchHeld: false,
-    onDidChangeSwitchHeld: () => ({ dispose: () => undefined }),
+    onDidChangeSwitchHeld: (cb: (isHeld?: boolean) => void) => {
+      holdListeners.add(cb);
+      return { dispose: () => void holdListeners.delete(cb) };
+    },
   },
   PgConnection: { cluster: "devnet", getAirdropAmount: () => 5 },
 }));
@@ -49,10 +59,16 @@ vi.mock("./Modals/KeyFile", () => ({
   ExportKey: () => undefined,
 }));
 
-vi.mock("../../hooks", () => ({
+vi.mock("../../hooks", async () => ({
   useCopy: () => [false, vi.fn()],
-  useRenderOnChange: () => undefined,
+  useRenderOnChange: (
+    await vi.importActual<typeof import("../../hooks/useRenderOnChange")>(
+      "../../hooks/useRenderOnChange"
+    )
+  ).useRenderOnChange,
 }));
+/** Who listens for the deploy's hold on the accounts */
+const holdListeners = vi.hoisted(() => new Set<(isHeld?: boolean) => void>());
 const airdropHook = vi.hoisted(() => ({
   airdrop: vi.fn(),
   faucet: "none" as Faucet,
@@ -155,11 +171,14 @@ const openMenu = async () => {
 };
 
 describe("wallet Settings menu", () => {
-  it("disables Add, Remove and Import while a deploy holds the accounts", async () => {
+  it("disables Add, Remove and Import once a deploy holds the accounts, with the window already open", async () => {
     const wallet = PgWallet as unknown as { isSwitchHeld: boolean };
-    wallet.isSwitchHeld = true;
+    render(<Host />);
+    act(() => {
+      wallet.isSwitchHeld = true;
+      for (const cb of holdListeners) cb(true);
+    });
     try {
-      render(<Host />);
       await openMenu();
       for (const name of [/^Add$/, /Remove/, /Import/]) {
         expect(
@@ -407,6 +426,20 @@ describe("wallet Settings menu", () => {
     await waitFor(() => expect(PgView.setToast).toHaveBeenCalledTimes(1));
     expect(vi.mocked(PgView.setToast).mock.calls[0][1]).toEqual({
       options: { name: "wallet-import-not-keypair" },
+    });
+    expect(told).toEqual([]);
+  });
+
+  it("says accounts are held when a deploy began after Import opened the picker", async () => {
+    vi.mocked(PgWallet.import).mockRejectedValueOnce(new AccountsHeldError());
+    render(<Host />);
+    await openMenu();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: /Import/ }));
+
+    await waitFor(() => expect(PgView.setToast).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(PgView.setToast).mock.calls[0][1]).toEqual({
+      options: { name: "wallet-accounts-held" },
     });
     expect(told).toEqual([]);
   });
