@@ -229,7 +229,7 @@ test("runs cache-seal.mjs through a symlinked path and still refuses a wrong sea
     env,
   });
   assert.equal(verify.status, 1);
-  assert.equal(verify.stdout, "");
+  assert.equal(verify.stdout, "mismatch\n");
   const check = spawnSync("node", [link, "check"], {
     encoding: "utf8",
     env: { PATH: process.env.PATH },
@@ -409,4 +409,78 @@ test("takes the default crates back sealed, and stops on a replaced crates archi
   const result = run(tree, "restore_default_crates", PRODUCTION);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /default crates: .* does not match its seal/);
+});
+
+/** A stand-in for cache-seal.mjs that answers `verify` and `sign` with the given output and exit code. */
+function stubSealScript(tree, { stdout, status }) {
+  const file = path.join(tree.root, "seal-stub.mjs");
+  fs.writeFileSync(
+    file,
+    `process.stdout.write(${JSON.stringify(
+      stdout
+    )}); process.exitCode = ${status};\n`
+  );
+  return `SEAL_SCRIPT=${JSON.stringify(file)}`;
+}
+
+for (const [label, stub, message] of [
+  [
+    "an exit 0 without the verdict word",
+    { stdout: "", status: 0 },
+    /gave no verdict/,
+  ],
+  ["an exit 3", { stdout: "", status: 3 }, /failed \(exit 3\)/],
+  [
+    "an exit 1 without the mismatch word",
+    { stdout: "", status: 1 },
+    /failed \(exit 1\)/,
+  ],
+]) {
+  test(`stops on a seal check that answers with ${label}`, () => {
+    const tree = scratchTree();
+    assert.equal(run(tree, restoreWasm, PRODUCTION).status, 0);
+    const result = run(
+      tree,
+      `${stubSealScript(tree, stub)}; ${restoreWasm}`,
+      PRODUCTION
+    );
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, message);
+    assert.doesNotMatch(result.stderr, /Rotate CACHE_SEAL_KEY/);
+  });
+}
+
+test("stops when signing prints a malformed seal", () => {
+  const tree = scratchTree();
+  const stub = stubSealScript(tree, { stdout: "junk\n", status: 0 });
+  const result = run(tree, `${stub}; ${restoreWasm}`, PRODUCTION);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /could not seal/);
+  assert.deepEqual(fs.readdirSync(tree.remote), [], "nothing uploaded");
+});
+
+test("reseeds an empty Remote Cache from a sealed Build Cache copy, seal included", () => {
+  const tree = scratchTree();
+  assert.equal(run(tree, restoreWasm, PRODUCTION).status, 0);
+  const uploaded = fs.readdirSync(tree.remote).sort();
+  for (const name of uploaded) fs.rmSync(path.join(tree.remote, name));
+  const result = run(tree, `${noBuild}; ${restoreWasm}`, PRODUCTION);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /wasm packages: HIT in Build Cache/);
+  assert.deepEqual(fs.readdirSync(tree.remote).sort(), uploaded);
+});
+
+test("rebuilds over a production Build Cache copy without its seal", () => {
+  const tree = scratchTree();
+  assert.equal(run(tree, restoreWasm, PRODUCTION).status, 0);
+  const cache = path.join(tree.client, "node_modules", ".cache", "wasm-pkg");
+  const archive = fs.readdirSync(cache).find((name) => name.endsWith(".tar"));
+  fs.rmSync(path.join(cache, `${archive}.seal`));
+  injectedArchive(path.join(cache, archive));
+  for (const name of fs.readdirSync(tree.remote))
+    fs.rmSync(path.join(tree.remote, name));
+  const result = run(tree, restoreWasm, PRODUCTION);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stderr, /has no seal, discarding/);
+  assert.equal(unpackedPkg(tree), "built-here");
 });

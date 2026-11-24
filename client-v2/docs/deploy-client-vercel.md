@@ -235,6 +235,8 @@ Remote Cache is shared by every build of the team, and anything holding `VERCEL_
 
 This covers the wasm packages and the default crates. Preview and local builds are unchanged and keep the unsealed keys.
 
+Build Cache is out of the cache token's reach, so this change treats it as trusted and does not seal the restored `node_modules`. The seal on the Build Cache copies of the two archives guards against a copy that came from Remote Cache before this check existed.
+
 `CACHE_SEAL_KEY` is set for Production only, so no preview or CI job ever holds it. To recover from a seal that does not match, rotate it: every production key changes with it, so the next production build finds no entries and rebuilds (about an hour for the wasm packages, which may need a second deployment, as on any wasm miss). Rotating it is also the step after any suspected leak.
 
 Rust state (toolchains, cargo registry, and target dir) lives in `client-v2/.cache/rust`, outside `node_modules`. It is larger than the build cache size limit, so on Vercel it is empty at the start of every build. Locally it persists.

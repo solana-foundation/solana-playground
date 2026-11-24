@@ -8,7 +8,8 @@
 //
 //   node scripts/cache-seal.mjs check                                prints `ready` when the secret is usable
 //   node scripts/cache-seal.mjs sign <artifact key> <archive>         prints the seal, 64 hex characters
-//   node scripts/cache-seal.mjs verify <artifact key> <archive> <seal> prints `sealed` and exits 0 when it matches
+//   node scripts/cache-seal.mjs verify <artifact key> <archive> <seal> prints `sealed` and exits 0 when it matches,
+//                                                                    prints `mismatch` and exits 1 when it does not
 //
 // Every success prints its word, and vercel-install.sh requires it: a run that never reached main (a
 // changed entry-point guard, a crash before output) must not read as a pass. Exit 1 is a seal that
@@ -20,7 +21,8 @@ import { fileURLToPath } from "node:url";
 
 export const SEAL_SECRET_VAR = "CACHE_SEAL_KEY";
 
-// Changes only when the sealed message changes shape, so old seals then stop matching.
+// Changes only when the sealed message changes shape. Old seals then stop matching, and every production
+// build would stop on them: ship a bump together with a CACHE_SEAL_KEY rotation, which moves to fresh names.
 const SEAL_VERSION = "cache-seal-v1";
 
 // Below this a secret is too easy to guess; `openssl rand -hex 32` gives 64 characters.
@@ -91,7 +93,10 @@ async function run([command, cacheKey, file, sealPath]) {
     return 0;
   }
   const seal = fs.readFileSync(sealPath, "utf8");
-  if (!(await sealMatches(secret, cacheKey, file, seal))) return 1;
+  if (!(await sealMatches(secret, cacheKey, file, seal))) {
+    process.stdout.write("mismatch\n");
+    return 1;
+  }
   process.stdout.write("sealed\n");
   return 0;
 }

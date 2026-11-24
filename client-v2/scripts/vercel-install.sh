@@ -172,9 +172,9 @@ seal_holds() {
   if [ "$status" -eq 0 ] && [ "$verdict" = sealed ]; then
     return 0
   fi
-  case "$status" in
-    1) echo ">>> $3: $(basename "$2") does not match its seal; production never builds from it. Someone other than a production build wrote this cache entry. Rotate CACHE_SEAL_KEY to rebuild under new names (docs/deploy-client-vercel.md, \"Sealed production cache\")." >&2 ;;
-    0) echo ">>> $3: the seal check of $(basename "$2") gave no verdict; stopping" >&2 ;;
+  case "$status:$verdict" in
+    1:mismatch) echo ">>> $3: $(basename "$2") does not match its seal; production never builds from it. Someone other than a production build wrote this cache entry. Rotate CACHE_SEAL_KEY to rebuild under new names (docs/deploy-client-vercel.md, \"Sealed production cache\")." >&2 ;;
+    0:*) echo ">>> $3: the seal check of $(basename "$2") gave no verdict; stopping" >&2 ;;
     *) echo ">>> $3: the seal check of $(basename "$2") failed (exit $status); stopping" >&2 ;;
   esac
   exit 1
@@ -197,11 +197,13 @@ restore_archive() {
     return 0
   fi
   rm -f "$2.seal"
-  if remote_fetch "$1" "$2" \
-    && { ! production_build || remote_fetch "$(seal_key "$1" "$2")" "$2.seal"; } \
-    && seal_holds "$1" "$2" "$3" && readable_archive "$2" "$3"; then
-    echo ">>> $3: HIT in Remote Cache ($1)"
-    return 0
+  if remote_fetch "$1" "$2"; then
+    if production_build && ! remote_fetch "$(seal_key "$1" "$2")" "$2.seal"; then
+      echo ">>> $3: Remote Cache holds $1 without a seal for its content: a production build that stopped between its two uploads, or a write from outside production. Rebuilding" >&2
+    elif seal_holds "$1" "$2" "$3" && readable_archive "$2" "$3"; then
+      echo ">>> $3: HIT in Remote Cache ($1)"
+      return 0
+    fi
   fi
   rm -f "$2" "$2.seal"
   return 1
