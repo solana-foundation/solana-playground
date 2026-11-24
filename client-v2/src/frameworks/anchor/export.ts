@@ -3,9 +3,9 @@ import {
   addAfter,
   addAfterImports,
   addImports,
+  bindsName,
   fetchCrateVersion,
   fetchServerCargoLock,
-  getImportedNames,
   getJSDependencies,
   getRustDependencies,
   readExportedProject,
@@ -14,8 +14,8 @@ import {
 import { getIdlBuildFeature } from "./idl-build-feature";
 
 /**
- * The TypeScript client of Anchor 1.x, the version the build server compiles with. The Playground runs the 0.29
- * client, `@coral-xyz/anchor`, which Anchor 1.0 renamed to this package, so the export names this one (HOO-2964).
+ * The package of Anchor's TypeScript client since 1.0; the export installs it at the build server's `anchor-lang`
+ * version. The Playground runs the 0.29 client, `@coral-xyz/anchor`, which cannot read an IDL Anchor 1.x writes (HOO-2964).
  */
 const ANCHOR_CLIENT = "@anchor-lang/core";
 
@@ -27,8 +27,12 @@ export const convertFromPlayground = async (
   name: string | undefined
 ) => {
   const project = await readExportedProject(name);
-  // The `anchor-lang` the build server compiles with: the CLI, the crate and the TypeScript client share a version
+  // The `anchor-lang` the build server compiles with: the CLI, the crate and the TypeScript client share a version.
+  // Without it the export would install a client that does not match the program, the failure HOO-2964 fixed
   const anchorVersion = await fetchCrateVersion("anchor-lang");
+  if (!anchorVersion) {
+    throw new Error("The build server's anchor-lang version is unknown");
+  }
   // Program manifest's lib name must match the `#[program]` module name and
   // Anchor.toml programs definition
   const libContent = files.find(([path]) => path.endsWith("lib.rs"))?.[1];
@@ -164,6 +168,7 @@ target
 **/*.rs.bk
 node_modules
 test-ledger
+.surfpool
 .yarn
 `,
     ],
@@ -184,15 +189,11 @@ test-ledger
     // Anchor.toml
     [
       "Anchor.toml",
-      `${
-        anchorVersion
-          ? `[toolchain]
+      `[toolchain]
 anchor_version = "${anchorVersion}"
 package_manager = "yarn"
 
-`
-          : ""
-      }[features]
+[features]
 resolution = true
 skip-lint = false
 
@@ -244,7 +245,7 @@ codegen-units = 1
     "lint": "prettier */*.js \\"*/**/*{.js,.ts}\\" --check"
   },
 ${await getJSDependencies(frameworkFiles, {
-  [ANCHOR_CLIENT]: anchorVersion ?? "*",
+  [ANCHOR_CLIENT]: anchorVersion,
 })}
 }
 `,
@@ -297,10 +298,7 @@ const convertJS = (
   content = addImports(content);
   // Every converted file uses `anchor` (the program set up below). A file that only mentions the word, as
   // `describe("hello_anchor")` does, still needs the import
-  if (
-    !getImportedNames(content).has("anchor") &&
-    !/\b(?:const|let|var)\s+anchor\b/.test(content)
-  ) {
+  if (!bindsName(content, "anchor")) {
     content = `import * as anchor from "${ANCHOR_CLIENT}";\n` + content;
   }
   // The 0.29 client, imported by `addImports` for the `anchor` global or by the file itself
@@ -309,7 +307,7 @@ const convertJS = (
     (_, quote: string) => quote + ANCHOR_CLIENT + quote
   );
   // The 1.x client types `accounts` without the accounts it resolves itself (the system program, PDAs), which the
-  // 0.29 client took. `accountsPartial` takes them all, as Anchor 1.x's own test template calls it
+  // 0.29 client took. `accountsPartial` takes them all, as the test `anchor init` 1.1.2 writes calls it
   content = content.replace(/\.accounts\(/g, ".accountsPartial(");
 
   // Top-level `await` doesn't compile with the exported `tsconfig.json`

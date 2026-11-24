@@ -545,6 +545,21 @@ export const getImportedNames = (content: string) => {
 };
 
 /**
+ * Whether the code binds the name itself, by an import or by a `const`, `let` or `var` declaration (such as
+ * `const anchor = require("@coral-xyz/anchor")`), so it does not read the Playground global of that name.
+ *
+ * @param content JS/TS code
+ * @param name the name, `\w` and `$` characters only
+ * @returns whether the code binds it
+ */
+export const bindsName = (content: string, name: string) =>
+  getImportedNames(content).has(name) ||
+  // eslint-disable-next-line security/detect-non-literal-regexp -- `\w` and `$` characters only, `$` escaped
+  new RegExp(`\\b(?:const|let|var)\\s+${name.replaceAll("$", "\\$")}\\b`).test(
+    maskCommentsAndStrings(content)
+  );
+
+/**
  * Get global packages that are used in the given content.
  *
  * @param content JS/TS code
@@ -552,7 +567,6 @@ export const getImportedNames = (content: string) => {
  */
 const getGlobalPackages = (content: string) => {
   const packages: Record<string, ValueOf<typeof PACKAGES["global"]>> = {};
-  const imported = getImportedNames(content);
   for (const [_packageName, importStyle] of PgCommon.entries(PACKAGES.global)) {
     if (PACKAGES_MAP[_packageName] === null) continue;
     const packageName = PACKAGES_MAP[_packageName] ?? _packageName;
@@ -561,7 +575,7 @@ const getGlobalPackages = (content: string) => {
     const name = style.as ?? style.named ?? style.default;
     // `web3.` also matches inside "@solana/web3.js", so a client that binds
     // the name itself would get it twice
-    if (name !== undefined && imported.has(name)) continue;
+    if (name !== undefined && bindsName(content, name)) continue;
 
     const accessors = [name + ".", name + "("];
     for (const accessor of accessors) {

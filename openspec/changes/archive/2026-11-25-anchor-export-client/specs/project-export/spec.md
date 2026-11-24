@@ -9,7 +9,9 @@ the Anchor version its program compiles with: `package.json` SHALL depend on
 `@anchor-lang/core` at the `anchor-lang` version the build server ships, and
 never on `@coral-xyz/anchor`; the converted client, tests and migration SHALL
 import `@anchor-lang/core`; and `Anchor.toml` SHALL name that version as
-`[toolchain] anchor_version`.
+`[toolchain] anchor_version`. When the build server's `anchor-lang` version is
+unknown, the conversion SHALL fail rather than write a client that may not
+match the program.
 
 #### Scenario: anchor test passes in an exported project (manual)
 

@@ -77,7 +77,10 @@ describe("convertFromPlayground", () => {
   beforeEach(() => {
     // Set at boot by `globals/`, which this test does not load
     PgLanguage.all = [];
-    vi.spyOn(PgCommon, "fetchJSON").mockResolvedValue({});
+    // The build server's crate versions, which the export pins Anchor to
+    vi.spyOn(PgCommon, "fetchJSON").mockImplementation(async (path) =>
+      path === "/crates/versions.json" ? { "anchor-lang": "1.1.2" } : {}
+    );
     // The crates' features and the build server's lock, which the exports fetch
     vi.spyOn(PgCommon, "fetchText").mockImplementation(async (path) =>
       path.endsWith("features.json") ? "{}" : "# server lock\n"
@@ -312,12 +315,40 @@ await pg.program.methods.hello(name).rpc();
       );
     });
 
-    it("pins the Anchor CLI in Anchor.toml", async () => {
+    it("pins the Anchor CLI in Anchor.toml, with the settings Anchor 1.x reads", async () => {
       const files = await exported(LIB, CLIENT);
 
-      expect(files.get("Anchor.toml")).toMatch(
-        /^\[toolchain\]\nanchor_version = "1\.1\.2"$/m
+      const toml = files.get("Anchor.toml") ?? "";
+      expect(toml).toMatch(
+        /^\[toolchain\]\nanchor_version = "1\.1\.2"\npackage_manager = "yarn"$/m
       );
+      expect(toml).toMatch(/^\[features\]\nresolution = true$/m);
+      expect(toml).not.toContain("seeds");
+    });
+
+    it("refuses to export when the build server's Anchor version is unknown", async () => {
+      vi.spyOn(PgCommon, "fetchJSON").mockResolvedValue({});
+
+      await expect(exported(LIB, CLIENT)).rejects.toThrow(
+        "anchor-lang version is unknown"
+      );
+    });
+
+    it.each([
+      ['import * as anchor from "@coral-xyz/anchor";'],
+      ["const anchor = require('@coral-xyz/anchor');"],
+    ])("keeps one anchor binding for a client that has %s", async (line) => {
+      const files = await exported(LIB, [
+        "client/client.ts",
+        `${line}\nconsole.log(anchor.web3);\n`,
+      ]);
+
+      const client = files.get("client/client.ts") ?? "";
+      expect(
+        client.match(/\banchor = require\(|import \* as anchor\b/g)
+      ).toHaveLength(1);
+      expect(client).toContain("@anchor-lang/core");
+      expect(client).not.toContain("@coral-xyz/anchor");
     });
   });
 });

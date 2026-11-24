@@ -8,7 +8,7 @@ pins `anchor-lang` `=1.1.2` in the program's `Cargo.toml`, the version the
 build server compiles with since the move to Anchor 1.1.2, but installs the
 TypeScript client the Playground itself runs, `@coral-xyz/anchor` `0.29.0`.
 That client does not read the IDL Anchor 1.1.2 writes, so `anchor test` stops
-before any test runs (HOO-2964, reported by Sergey Prokhorov on 23 and 24 Nov).
+before any test runs (HOO-2964).
 
 ## What Changes
 
@@ -23,8 +23,11 @@ before any test runs (HOO-2964, reported by Sergey Prokhorov on 23 and 24 Nov).
 - `Anchor.toml` gets `[toolchain] anchor_version` at that version and
   `package_manager = "yarn"`, and `[features] resolution = true` in place of
   `seeds = false`, which Anchor 1.x no longer reads.
+- An unknown `anchor-lang` version fails the conversion instead of writing a
+  mismatched client.
 - A converted file that mentions the word "anchor" (`describe("hello_anchor")`)
-  still gets the `anchor` import it uses.
+  still gets the `anchor` import it uses, and one that declares
+  `const anchor = require(...)` no longer gets a second `anchor` import.
 
 The Playground's own runtime keeps the 0.29 client; moving it is a separate,
 larger task.
@@ -32,5 +35,5 @@ larger task.
 ## Impact
 
 `client-v2/src/frameworks/anchor/export.ts` and `common.ts`
-(`getJSDependencies`, `fetchCrateVersion`). The Seahorse export reuses the
+(`getJSDependencies`, `fetchCrateVersion`, `bindsName`). The Seahorse export reuses the
 Anchor conversion and changes with it.

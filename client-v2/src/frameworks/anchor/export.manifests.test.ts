@@ -31,7 +31,7 @@ vi.mock("../common", () => ({
   getJSDependencies: async () => '"dependencies": {}',
   fetchServerCargoLock: async () => SERVER_LOCK,
   fetchCrateVersion: async () => "1.1.2",
-  getImportedNames: () => new Set<string>(),
+  bindsName: () => false,
   readExportedProject: async (name: string | undefined) => ({
     name,
     kp: undefined,
