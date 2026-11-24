@@ -19,6 +19,7 @@ import {
   BRANCH_PREFIX,
   PR_PREFIX,
 } from "../../../../../scripts/db/preview-name.mjs";
+import { createServerLogger } from "../../../../shared/lib/logger/server.mjs";
 import { POOL_LIMITS } from "./url.mjs";
 
 /** The production instance and database. Only Production may open either. */
@@ -89,16 +90,40 @@ const refusalOf = (env) => {
 };
 
 /**
- * The connector's options for `pg`: a `stream` factory over the connector's
- * TLS socket. The one place that reaches Google; a test replaces `options`
- * with `mock.method` so no case does. Exported for tests.
+ * @typedef {{ stream: () => import("node:stream").Duplex; close: () => void }} Link
+ * One connector, ready to open sockets: `stream` opens a TLS socket to the
+ * instance with the connector's current client certificate, `close` stops its
+ * refresh timer.
+ */
+
+/**
+ * How long one connector opens new sockets before the pool replaces it.
+ *
+ * The connector's client certificate lasts an hour, and a background timer
+ * renews it. Vercel freezes a function between requests, so the timer does
+ * not run while it is frozen: an instance woken after the hour opens its
+ * socket with the expired certificate, and the Cloud SQL front end refuses it
+ * with TLS alert 42, "bad certificate" (HOO-2956). The connector renews only
+ * after that failure, and no version up to 1.13.1 (the latest, November
+ * 2026) has an option to renew on use. So
+ * the pool takes a new connector, with a new certificate, before it opens a
+ * socket through one this old: 45 minutes, under the hour with room for a
+ * clock skew and a slow certificate fetch.
+ */
+const LINK_MAX_AGE_MS = 45 * 60 * 1000;
+
+const log = createServerLogger("persistence:cloud-sql");
+
+/**
+ * The connector, as a `Link`. The one place that reaches Google; a test
+ * replaces `open` with `mock.method` so no case does. Exported for tests.
  */
 export const connector = {
   /**
    * @param {ReturnType<typeof import("../../../../shared/config/server-env.mjs").databaseEnv>} env
-   * @returns {Promise<import("pg").PoolConfig>}
+   * @returns {Promise<Link>}
    */
-  options: async (env) => {
+  open: async (env) => {
     const [{ Connector }, { ExternalAccountClient }, { getVercelOidcToken }] =
       await Promise.all([
         import("@google-cloud/cloud-sql-connector"),
@@ -123,15 +148,114 @@ export const connector = {
       // for Google's audience rather than the one the federation trusts
       subject_token_supplier: { getSubjectToken: () => getVercelOidcToken() },
     });
-    return new Connector({ auth }).getOptions({
+    const opened = new Connector({ auth });
+    const { stream } = await opened.getOptions({
       instanceConnectionName: env.CLOUD_SQL_INSTANCE,
       // The instances have a public IP and no authorised network: only the
       // connector front end, which checks the client certificate, answers
       ipType: "PUBLIC",
       authType: "IAM",
     });
+    return { stream, close: () => opened.close() };
   },
 };
+
+/**
+ * @typedef {{ link: Link; openedAt: number; sockets: number; retired: boolean }} Entry
+ */
+
+/**
+ * The pool's sockets, through a connector no older than `LINK_MAX_AGE_MS`.
+ *
+ * `stream` is `pg`'s socket factory, which `pg` calls synchronously, so it
+ * cannot wait for a certificate; `renew` can, and the pool awaits it before
+ * every `connect`. A replaced connector is closed once its last socket closes,
+ * so no connection the pool holds loses its connector under it. When a new
+ * connector cannot be had, the old one stays: its certificate may still be
+ * valid, and if it is not, the connection fails as it would have anyway. The
+ * next `connect` tries again.
+ *
+ * @param {ReturnType<typeof import("../../../../shared/config/server-env.mjs").databaseEnv>} env
+ */
+const linksFor = async (env) => {
+  /** @param {Link} link @returns {Entry} */
+  const entryOf = (link) => ({
+    link,
+    openedAt: Date.now(),
+    sockets: 0,
+    retired: false,
+  });
+  /** @param {Entry} entry */
+  const closeIfDone = (entry) => {
+    if (entry.retired && entry.sockets === 0) entry.link.close();
+  };
+
+  let current = entryOf(await connector.open(env));
+  /** @type {Promise<void> | undefined} */
+  let renewal;
+
+  /** @returns {Promise<void>} */
+  const renew = () => {
+    if (Date.now() - current.openedAt < LINK_MAX_AGE_MS) {
+      return Promise.resolve();
+    }
+    // One renewal for every `connect` that finds the connector old
+    renewal ??= connector
+      .open(env)
+      .then(
+        (link) => {
+          const old = current;
+          current = entryOf(link);
+          old.retired = true;
+          closeIfDone(old);
+        },
+        (error) => {
+          log.error(error, {
+            report: true,
+            context: { op: "renew", ageMs: Date.now() - current.openedAt },
+          });
+        }
+      )
+      .finally(() => {
+        renewal = undefined;
+      });
+    return renewal;
+  };
+
+  const stream = () => {
+    const entry = current;
+    const socket = entry.link.stream();
+    entry.sockets += 1;
+    socket.once("close", () => {
+      entry.sockets -= 1;
+      closeIfDone(entry);
+    });
+    return socket;
+  };
+
+  return { stream, renew };
+};
+
+/**
+ * A `pg` pool that awaits `renew` before each `connect`. `pg-pool`'s `query`
+ * goes through `connect` too, with a callback, so both forms wait. One pool
+ * for the life of the instance: Better Auth keeps the pool it was given.
+ *
+ * @param {() => Promise<void>} renew
+ */
+const renewingPoolWith =
+  (renew) =>
+  /** @param {import("pg").PoolConfig} config */
+  (config) =>
+    new (class extends pg.Pool {
+      /** @param {(error: Error | undefined, client?: import("pg").PoolClient, done?: (release?: unknown) => void) => void} [callback] */
+      connect(callback) {
+        if (!callback) return renew().then(() => super.connect());
+        // `renew` never rejects: it logs a failed renewal and keeps the old connector
+        void renew().then(() => super.connect(callback));
+        return undefined;
+      }
+    })(config);
 
 /**
  * Build the pool, unless this deployment may not open the database it names.
@@ -153,9 +277,9 @@ export const createPool = async (env) => {
     throw new Error(refusal);
   }
 
-  const options = await connector.options(env);
-  return new pg.Pool({
-    ...options,
+  const { stream, renew } = await linksFor(env);
+  return renewingPoolWith(renew)({
+    stream,
     user: env.CLOUD_SQL_USER,
     database: env.CLOUD_SQL_DATABASE,
     ...POOL_LIMITS,
