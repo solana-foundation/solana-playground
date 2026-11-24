@@ -96,7 +96,9 @@ const refusalOf = (env) => {
 export const connector = {
   /**
    * @param {ReturnType<typeof import("../../../../shared/config/server-env.mjs").databaseEnv>} env
-   * @returns {Promise<import("pg").PoolConfig>}
+   * @returns {Promise<{ stream: () => import("node:stream").Duplex; close: () => void }>}
+   * the connector's socket factory, and `close`, which stops its refresh
+   * timer and destroys the sockets it opened
    */
   options: async (env) => {
     const [{ Connector }, { ExternalAccountClient }, { getVercelOidcToken }] =
@@ -123,15 +125,111 @@ export const connector = {
       // for Google's audience rather than the one the federation trusts
       subject_token_supplier: { getSubjectToken: () => getVercelOidcToken() },
     });
-    return new Connector({ auth }).getOptions({
+    const google = new Connector({ auth });
+    const { stream } = await google.getOptions({
       instanceConnectionName: env.CLOUD_SQL_INSTANCE,
       // The instances have a public IP and no authorised network: only the
       // connector front end, which checks the client certificate, answers
       ipType: "PUBLIC",
       authType: "IAM",
     });
+    return {
+      stream: /** @type {() => import("node:stream").Duplex} */ (stream),
+      close: () => google.close(),
+    };
   },
 };
+
+/**
+ * How long one connector serves new connections before the pool takes a fresh
+ * one. Its client certificate lasts an hour, and the connector renews it on a
+ * timer, which does not run while Vercel has the function frozen: an instance
+ * woken after an hour connected with an expired certificate and the server
+ * answered "bad certificate" (Sentry SOLANA-PLAYGROUND-G). Well inside the
+ * hour, so a renewal that is slow or retried still lands before it ends.
+ */
+export const RENEW_AFTER_MS = 45 * 60_000;
+
+/**
+ * A `pg` pool whose connections go through a connector younger than
+ * `RENEW_AFTER_MS`. The pool itself never changes, since Better Auth keeps
+ * the one it was given for the life of the instance; what changes is the
+ * connector behind its `stream`. A replaced connector is closed once the
+ * last socket it opened has closed, because closing it destroys them.
+ */
+class ConnectorPool extends pg.Pool {
+  /**
+   * @param {{
+   *   config: import("pg").PoolConfig;
+   *   renew: () => ReturnType<typeof connector.options>;
+   *   first: Awaited<ReturnType<typeof connector.options>>;
+   * }} args `config` without `stream`; `renew` builds a connector; `first`
+   * is the one built already
+   */
+  constructor({ config, renew, first }) {
+    /** @type {{ options: Awaited<ReturnType<typeof connector.options>>; since: number; sockets: number; retired: boolean }} */
+    let current = {
+      options: first,
+      since: Date.now(),
+      sockets: 0,
+      retired: false,
+    };
+    /** @param {typeof current} generation */
+    const closeIfDone = (generation) => {
+      if (generation.retired && generation.sockets === 0) {
+        generation.options.close?.();
+      }
+    };
+    super({
+      ...config,
+      stream: () => {
+        const generation = current;
+        const socket = generation.options.stream();
+        generation.sockets += 1;
+        socket.once("close", () => {
+          generation.sockets -= 1;
+          closeIfDone(generation);
+        });
+        return socket;
+      },
+    });
+
+    /** @type {Promise<void> | undefined} */
+    let renewing;
+    /** A connector young enough to connect through, renewed when it is not */
+    this.ready = () => {
+      if (Date.now() - current.since < RENEW_AFTER_MS) return Promise.resolve();
+      renewing ??= renew()
+        .then((options) => {
+          const old = current;
+          current = { options, since: Date.now(), sockets: 0, retired: false };
+          old.retired = true;
+          closeIfDone(old);
+        })
+        .finally(() => {
+          renewing = undefined;
+        });
+      return renewing;
+    };
+  }
+
+  /**
+   * `pg-pool` connects through a callback inside `query()`, Kysely through the
+   * promise; both wait for a usable connector first.
+   *
+   * @param {Parameters<import("pg").Pool["connect"]>[0]} [callback]
+   */
+  // @ts-expect-error -- one implementation for both of pg's overloads
+  connect(callback) {
+    const ready = this.ready();
+    if (!callback) return ready.then(() => super.connect());
+    ready.then(
+      () => super.connect(callback),
+      (error) => callback(error, undefined, () => {})
+    );
+    return undefined;
+  }
+}
 
 /**
  * Build the pool, unless this deployment may not open the database it names.
@@ -153,11 +251,14 @@ export const createPool = async (env) => {
     throw new Error(refusal);
   }
 
-  const options = await connector.options(env);
-  return new pg.Pool({
-    ...options,
-    user: env.CLOUD_SQL_USER,
-    database: env.CLOUD_SQL_DATABASE,
-    ...POOL_LIMITS,
+  const renew = () => connector.options(env);
+  return new ConnectorPool({
+    config: {
+      user: env.CLOUD_SQL_USER,
+      database: env.CLOUD_SQL_DATABASE,
+      ...POOL_LIMITS,
+    },
+    renew,
+    first: await renew(),
   });
 };
