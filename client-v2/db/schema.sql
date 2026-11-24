@@ -168,6 +168,7 @@ CREATE TABLE public.messages (
     kind text NOT NULL,
     payload jsonb NOT NULL,
     created_at timestamp(3) with time zone NOT NULL,
+    bytes integer GENERATED ALWAYS AS (octet_length((payload)::text)) STORED,
     CONSTRAINT messages_kind_check CHECK ((kind = ANY (ARRAY['user'::text, 'assistant'::text, 'tool'::text, 'approval'::text, 'error'::text, 'notice'::text])))
 );
 
@@ -410,6 +411,20 @@ CREATE INDEX conversations_project_idx ON public.conversations USING btree (user
 
 
 --
+-- Name: conversations_user_live_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX conversations_user_live_idx ON public.conversations USING btree (user_id) WHERE (deleted_at IS NULL);
+
+
+--
+-- Name: messages_bytes_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX messages_bytes_idx ON public.messages USING btree (conversation_id) INCLUDE (bytes);
+
+
+--
 -- Name: messages_conversation_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -554,6 +569,7 @@ COPY public.schema_migrations (version) FROM stdin;
 20261102190000
 20261105120000
 20261106120000
+20261123120000
 \.
 
 

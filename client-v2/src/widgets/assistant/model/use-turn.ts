@@ -28,7 +28,6 @@ import {
   rememberedChoice,
 } from "../../../views/sidebar/assistant/model/remembered-backend";
 import { threadBackend } from "../../../views/sidebar/assistant/model/thread-backend";
-import type { Provider } from "../../../views/sidebar/assistant/model/types";
 import {
   isDefaultBackend,
   TurnFailure,
@@ -46,6 +45,8 @@ import {
 import { DEFAULT_CONNECTION } from "./connection";
 import { probeDefaultBackend } from "./default-backend";
 import { KEY_OWNER } from "./head-label";
+import type { HeldProvider } from "./held-provider";
+import { releaseOnConnectionChange } from "./held-provider";
 import type { AssistantEvents } from "./telemetry";
 import { assistantTelemetry } from "./telemetry";
 
@@ -450,19 +451,10 @@ export const useTurn = ({ open, draftKey }: TurnOptions): Turn => {
   // connect and be stored with the thread
   const [promptWaiting, setPromptWaiting] = useState(false);
 
-  const provider = useRef<{
-    connection: Connection;
-    /** The conversation its history was seeded from */
-    threadId: string | null;
-    /** `PgAssistant.conversation` when it was seeded */
-    conversation: number;
-    /**
-     * Every file in the context at a send since it was seeded: what its
-     * history may hold the content of
-     */
-    context: ReadonlySet<string>;
-    instance: Provider;
-  } | null>(null);
+  const provider = useRef<HeldProvider | undefined>(undefined);
+  // A turn still running keeps its own copy until it ends (this hook's
+  // `runTurn`, not `shared/lib/ai`'s)
+  useEffect(() => releaseOnConnectionChange(provider).dispose, []);
   const turn = liveTurn;
   // Set from the first `send` until its turn starts, so a second send in the
   // meantime (a double Enter, a suggestion clicked twice) cannot start another
