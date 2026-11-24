@@ -77,9 +77,10 @@ from that folder's `node_modules`, a fresh worktree has none, and `yarn install`
 `yarn setup` has built the wasm packages. `assets` stops with this instruction when the packages are missing.
 Then run `S assets <worktree>`. It reads `<old>` from `assets-commit.txt` and `<new>` from the
 `client/public` gitlink of the upstream tip that the last upstream sync subject on the worktree's `HEAD` names
-(a third argument, an upstream commit, replaces that tip for a dry run), and stops when they are equal. It
-clones the assets repository into `<worktree git dir>/sync-upstream/assets`, or fetches it there, and goes
-through `git diff --no-renames --name-status <old> <new>`. Every blob it compares or writes first goes through
+(a third argument, an upstream commit, replaces that tip for a dry run), and stops when they are equal and
+every listed tutorial has its `data.json`. It clones the assets repository into
+`<worktree git dir>/sync-upstream/assets`, or fetches it there, and goes through
+`git diff --no-renames --name-status <old> <new>`. Every blob it compares or writes first goes through
 `optimiseImage` (`client-v2/scripts/optimise-image.mjs`), which changes SVG, PNG, and JPEG files and returns
 any other file as it is, because the fork keeps its images optimised:
 
@@ -90,6 +91,11 @@ any other file as it is, because the fork keeps its images optimised:
   fork, never written;
 - a path whose copy already equals `<new>`'s optimised blob is counted as current;
 - any other path takes upstream's add, change, or delete, with the optimised bytes.
+
+A tutorial that `markdown-tutorials.json` lists and that has no `client-v2/public/tutorials/<name>/data.json` is
+imported whole from `<new>`, because that diff never visits a file upstream left unchanged. A file the fork lacks
+is written, a copy that differs from upstream's is reported as changed by the fork, and a listed name that
+upstream lacks is reported.
 
 The optimiser's output is the same only for the svgo and sharp versions `client-v2/package.json` pins. A change
 that bumps either one runs `node scripts/optimise-image.mjs` over every image in `client-v2/public/`,
@@ -105,10 +111,11 @@ nothing. Then decide with the user:
    upstream's, and the build adds the brand head (`client-v2/scripts/brand-head.mjs`). A build that fails in
    `brandHeadFor` after the copy means upstream restructured the head; update `isBrandTag` there.
 2. For each new tutorial, ask whether to enable it. On a yes, add `"<name>": { "added": <the reported date> }`
-   to `markdown-tutorials.json` in alphabetical order (the build keeps the file's order), copy the folder with
-   the command the summary prints, and run `node scripts/optimise-image.mjs` from `client-v2/` on its images.
-3. For a path reported as not imported that the fork now needs, add it to `assets-import.txt` and copy it the
-   same way.
+   to `markdown-tutorials.json` in alphabetical order (the build keeps the file's order), and run `S assets`
+   again with the same arguments: it imports the folder whole.
+3. For a path reported as not imported that the fork now needs, add it to `assets-import.txt`, copy it with
+   `git -C <clone> archive <new8> <path> | tar -x -C <worktree>/client-v2/public`, and run
+   `node scripts/optimise-image.mjs` from `client-v2/` on its images.
 
 ## Contract
 
@@ -129,7 +136,8 @@ dry run's worktree and branch afterwards.
 
 `node --test .claude/skills/sync-upstream/scripts/sync-upstream.test.mjs` checks the message format against the
 merged commit a7a8a1f9, the subject parser against both subject forms, the `GUARDS` matching, the import list
-matcher, and that the import list or `FORK_OWNED` covers every file in `client-v2/public/`.
+matcher, the report a file of a tutorial imported whole goes to, and that the import list or `FORK_OWNED` covers
+every file in `client-v2/public/`.
 
 ## Common mistakes
 

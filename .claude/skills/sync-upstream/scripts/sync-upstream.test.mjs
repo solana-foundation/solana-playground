@@ -12,6 +12,7 @@ import {
   message,
   parseImportList,
   parseSyncedTo,
+  wholeImportReport,
 } from "./sync-upstream.mjs";
 
 const repo = execFileSync(
@@ -108,6 +109,15 @@ describe("sync-upstream", () => {
   ])
     it(`import list: ${name} is ${imported ? "" : "not "}imported`, () => {
       assert.equal(isImported(entries, ["bank-simulator"], file), imported);
+    });
+
+  for (const [name, local, report] of [
+    ["a file the fork lacks", undefined, "whole"],
+    ["a copy equal to upstream's", Buffer.from("upstream"), "current"],
+    ["a copy the fork changed", Buffer.from("fork"), "differs"],
+  ])
+    it(`whole import: ${name} is reported as ${report}`, () => {
+      assert.equal(wholeImportReport(local, Buffer.from("upstream")), report);
     });
 
   it("imports or owns every tracked file under client-v2/public/", () => {

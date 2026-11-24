@@ -567,6 +567,12 @@ const blobAt = (repo, rev, file) => {
 const sameBytes = (a, b) =>
   a === undefined || b === undefined ? a === b : a.equals(b);
 
+/** The report an upstream file of a tutorial imported whole goes to: `differs` keeps a copy the fork changed. */
+export const wholeImportReport = (localBytes, newBytes) => {
+  if (localBytes === undefined) return "whole";
+  return sameBytes(localBytes, newBytes) ? "current" : "differs";
+};
+
 const assets = async (wt, toArg) => {
   const to = toArg
     ? git(wt, "rev-parse", "--verify", `${toArg}^{commit}`)
@@ -577,7 +583,15 @@ const assets = async (wt, toArg) => {
   );
   if (!gitlink) die(`${short(wt, to)} has no client/public gitlink`);
   const next = gitlink[1];
-  if (next === old) {
+  const tutorials = Object.keys(
+    JSON.parse(readFileSync(path.join(wt, MARKDOWN_TUTORIALS), "utf8"))
+  );
+  // The diff of old..next never visits a file upstream left unchanged, so a tutorial listed after the last run is imported whole
+  const enabled = tutorials.filter(
+    (name) =>
+      !existsSync(path.join(wt, PUBLIC_DIR, "tutorials", name, "data.json"))
+  );
+  if (next === old && enabled.length === 0) {
     console.log(
       `${ASSETS_COMMIT} already names ${next.slice(
         0,
@@ -610,20 +624,15 @@ const assets = async (wt, toArg) => {
   const entries = parseImportList(
     readFileSync(path.join(wt, IMPORT_LIST), "utf8")
   );
-  const tutorials = Object.keys(
-    JSON.parse(readFileSync(path.join(wt, MARKDOWN_TUTORIALS), "utf8"))
-  );
-  const changes = git(clone, "diff", "--no-renames", "--name-status", old, next)
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => line.split("\t"));
 
   const report = {
     written: [],
+    whole: [],
     current: [],
     forkOwned: [],
     differs: [],
     skipped: [],
+    absent: [],
   };
   // The worktree's own optimiser, so the bytes match what its fixed-point test expects
   const { optimiseImage } = await import(
@@ -631,6 +640,42 @@ const assets = async (wt, toArg) => {
   );
   const optimised = async (bytes, file) =>
     bytes === undefined ? undefined : optimiseImage(file, bytes);
+
+  // Paths of the tutorials imported whole, which the diff leaves alone
+  const wholeFiles = new Set();
+  for (const name of enabled) {
+    const files = git(
+      clone,
+      "ls-tree",
+      "-r",
+      "-z",
+      "--name-only",
+      next,
+      "--",
+      `tutorials/${name}/`
+    )
+      .split("\0")
+      .filter(Boolean);
+    if (files.length === 0) report.absent.push(name);
+    for (const file of files) {
+      wholeFiles.add(file);
+      const local = path.join(wt, PUBLIC_DIR, file);
+      const localBytes = existsSync(local) ? readFileSync(local) : undefined;
+      const newBytes = await optimised(blobAt(clone, next, file), file);
+      const target = wholeImportReport(localBytes, newBytes);
+      if (target === "whole") {
+        mkdirSync(path.dirname(local), { recursive: true });
+        writeFileSync(local, newBytes);
+      }
+      report[target].push(`A ${file}`);
+    }
+  }
+
+  const changes = git(clone, "diff", "--no-renames", "--name-status", old, next)
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => line.split("\t"))
+    .filter(([, file]) => !wholeFiles.has(file));
 
   for (const [status, file] of changes) {
     const entry = `${status} ${file}`;
@@ -692,9 +737,15 @@ const assets = async (wt, toArg) => {
       report.written.length
     } written, ${report.current.length} already current, ${
       report.forkOwned.length + report.differs.length
-    } for the user, ${report.skipped.length} not imported`
+    } for the user, ${report.skipped.length} not imported, ${
+      report.whole.length
+    } imported whole`
   );
   section("written", report.written);
+  section(
+    `imported whole, tutorials ${MARKDOWN_TUTORIALS} lists that had no local data.json`,
+    report.whole
+  );
   section(
     `fork-owned, not written (upstream's copy: git -C ${clone} show ${next8}:<path>)`,
     report.forkOwned
@@ -702,10 +753,11 @@ const assets = async (wt, toArg) => {
   section(`changed by the fork since ${old8}, not written`, report.differs);
   section(`not imported, no entry in ${IMPORT_LIST}`, report.skipped);
   section(
-    `new Markdown tutorials, not imported (to enable one, add it to ${MARKDOWN_TUTORIALS} and run: git -C ${clone} archive ${next8} tutorials/<name> | tar -x -C ${path.join(
-      wt,
-      PUBLIC_DIR
-    )})`,
+    `listed in ${MARKDOWN_TUTORIALS}, absent from upstream at ${next8}`,
+    report.absent
+  );
+  section(
+    `new Markdown tutorials, not imported (to enable one, add it to ${MARKDOWN_TUTORIALS} and run this command again with the same arguments)`,
     added
   );
   console.log(`\n${ASSETS_COMMIT}: ${next}; nothing is committed`);
