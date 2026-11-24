@@ -153,9 +153,46 @@ test("fails the host whose AUTH_SECRET is the proxy secret", () => {
   assert.doesNotMatch(res.stderr, new RegExp(PROXY_SECRET));
 });
 
-// A local `vercel pull` delivers a Sensitive variable as ""
-test("treats an empty value as unset", () => {
+// Vercel's build machine sets CI. A local `vercel pull` does not, and delivers
+// a Sensitive variable as "": there "" means held, on Vercel it means unset.
+
+test("passes a local host build whose Sensitive secret was pulled as empty", () => {
   const res = run({
+    VERCEL_ENV: "production",
+    AUTH_SECRET: "",
+    AUTH_BASE_URL: STAGING,
+    AUTH_OAUTH_PROXY_HOST: "true",
+    AUTH_OAUTH_PROXY_SECRET: "",
+  });
+  assert.equal(res.status, 0);
+});
+
+test("fails a hosted host build whose proxy secret is empty", () => {
+  const res = run({
+    CI: "1",
+    VERCEL_ENV: "production",
+    AUTH_SECRET: "staging-secret",
+    AUTH_BASE_URL: STAGING,
+    AUTH_OAUTH_PROXY_HOST: "true",
+    AUTH_OAUTH_PROXY_SECRET: "",
+  });
+  assert.equal(res.status, 1);
+  assert.match(res.stderr, /without AUTH_OAUTH_PROXY_SECRET/);
+});
+
+test("fails a local production build that pulled a Sensitive proxy secret", () => {
+  const res = run({
+    VERCEL_ENV: "production",
+    AUTH_SECRET: "",
+    AUTH_OAUTH_PROXY_SECRET: "",
+  });
+  assert.equal(res.status, 1);
+  assert.match(res.stderr, /AUTH_OAUTH_PROXY_SECRET set on a deployment/);
+});
+
+test("passes a hosted production build whose proxy secret is empty", () => {
+  const res = run({
+    CI: "1",
     VERCEL_ENV: "production",
     AUTH_SECRET: "prod-secret",
     AUTH_OAUTH_PROXY_SECRET: "",

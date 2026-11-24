@@ -9,13 +9,21 @@
 // previews". Only vercel.json's buildCommand (scripts/vercel-build.sh) runs
 // it. Names only, never values: the build log is readable by the team.
 
-/** Set and non-empty: a local `vercel pull` delivers a Sensitive variable as "" */
+/** Set and non-empty, for a variable whose value is read */
 const value = (name) => process.env[name] || undefined;
+
+// Vercel's build machine sets CI; a local `vercel build` does not, and pulls a
+// Sensitive variable as "". So "" means unset on Vercel and held locally, as
+// `isSet` in check-agent-env.mjs treats it.
+const onVercel = !!process.env.CI;
+/** Whether a variable is held, for one that may be Sensitive */
+const isHeld = (name) =>
+  onVercel ? !!process.env[name] : process.env[name] !== undefined;
 
 const isPreview = process.env.VERCEL_ENV === "preview";
 const hostFlag = value("AUTH_OAUTH_PROXY_HOST");
-const proxyURL = value("AUTH_OAUTH_PROXY_URL");
-const proxySecret = value("AUTH_OAUTH_PROXY_SECRET");
+const proxyURL = isHeld("AUTH_OAUTH_PROXY_URL");
+const proxySecret = isHeld("AUTH_OAUTH_PROXY_SECRET");
 
 const problems = [];
 
@@ -79,7 +87,9 @@ if (isPreview) {
   }
 }
 
-if (proxySecret && proxySecret === value("AUTH_SECRET")) {
+// Compared only when both are readable: a local pull hides Sensitive values
+const proxySecretValue = value("AUTH_OAUTH_PROXY_SECRET");
+if (proxySecretValue && proxySecretValue === value("AUTH_SECRET")) {
   problems.push(
     "AUTH_SECRET equals AUTH_OAUTH_PROXY_SECRET. Every preview holds the " +
       "proxy secret, so it must never sign a deployment's cookies; generate " +
