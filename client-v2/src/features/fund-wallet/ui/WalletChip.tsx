@@ -13,6 +13,7 @@ import {
 } from "@/commands/connect/connect";
 import { PgDeployRun } from "@/commands/deploy/run";
 import { useAirdrop } from "@/components/Wallet/hooks";
+import { payingAccountName } from "@/entities/wallet";
 import { useBalance, useRenderOnChange, useWallet } from "@/hooks";
 import {
   DEVNET_FAUCET_SOL,
@@ -289,9 +290,7 @@ const WalletChip = ({ isSignedOut, isSignInFailure }: WalletChipProps) => {
         // A deploy keeps the signer it started with: a switch mid-deploy
         // would name another account than the one paying
         onManage={isDeploying ? undefined : () => (PgWallet.show = true)}
-        account={
-          !owner && PgWallet.accounts.length > 1 ? wallet.name : undefined
-        }
+        account={payingAccountName(wallet, PgWallet.accounts.length)}
         onDisconnect={() => {
           if (!owner) return;
           disconnectStandard(owner.name)

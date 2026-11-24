@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { NETWORKS } from "@/constants";
+import { payingAccountName } from "@/entities/wallet";
 import { isSignInFailure, PgSession } from "@/features/auth";
 import type { GuideFrom } from "@/features/cli-deploy";
 import { CliDeployGuide } from "@/features/cli-deploy";
@@ -140,8 +141,7 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
         balance: typeof balance === "number" ? balance : undefined,
         playground: wallet.isPg === true,
         name: wallet.isPg ? undefined : wallet.name,
-        account:
-          wallet.isPg && PgWallet.accounts.length > 1 ? wallet.name : undefined,
+        account: payingAccountName(wallet, PgWallet.accounts.length),
       }
     : undefined;
 
