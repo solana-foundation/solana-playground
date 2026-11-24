@@ -35,5 +35,6 @@ larger task.
 ## Impact
 
 `client-v2/src/frameworks/anchor/export.ts` and `common.ts`
-(`getJSDependencies`, `fetchCrateVersion`, `bindsName`). The Seahorse export reuses the
-Anchor conversion and changes with it.
+(`getJSDependencies`, `fetchCrateVersion`, `hasOwnBinding`), and
+`client-v2/src/frameworks/native/export.ts`, which passes `getJSDependencies` its new
+argument. The Seahorse export reuses the Anchor conversion and changes with it.

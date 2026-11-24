@@ -279,6 +279,10 @@ ${await getJSDependencies(frameworkFiles, {
   return frameworkFiles;
 };
 
+/** `const anchor = require(...)` of an Anchor client, the 0.x packages or 1.x's, at the start of a line */
+const ANCHOR_REQUIRE =
+  /^(?:const|let|var)\s+anchor\s*=\s*require\((["'])(?:@coral-xyz\/anchor|@project-serum\/anchor|@anchor-lang\/core)\1\);?/;
+
 /**
  * Try to make the JS/TS file work in a local `node` environment by making the
  * necessary conversions.
@@ -295,11 +299,17 @@ const convertJS = (
   opts?: { isTest?: boolean }
 ) => {
   // A top-level require of an Anchor client becomes an import, so the program set up below, which goes after the
-  // imports, follows it
-  content = content.replace(
-    /^(?:const|let|var)\s+anchor\s*=\s*require\((["'])(?:@coral-xyz|@project-serum)\/anchor\1\);?[^\S\n]*$/m,
-    `import * as anchor from "${ANCHOR_CLIENT}";`
-  );
+  // imports, follows it. A trailing line comment goes with it
+  content = content
+    .split("\n")
+    .map((line) => {
+      const required = ANCHOR_REQUIRE.exec(line);
+      const rest = required ? line.slice(required[0].length).trim() : "";
+      return required && (rest === "" || rest.startsWith("//"))
+        ? `import * as anchor from "${ANCHOR_CLIENT}";`
+        : line;
+    })
+    .join("\n");
 
   // Handle imports
   content = addImports(content);

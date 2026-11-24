@@ -337,6 +337,8 @@ await pg.program.methods.hello(name).rpc();
     it.each([
       ['import * as anchor from "@coral-xyz/anchor";'],
       ["const anchor = require('@coral-xyz/anchor');"],
+      ['const anchor = require("@coral-xyz/anchor"); // the client'],
+      ['const anchor = require("@anchor-lang/core");'],
     ])("keeps one anchor binding for a client that has %s", async (line) => {
       const files = await exported(LIB, [
         "client/client.ts",
