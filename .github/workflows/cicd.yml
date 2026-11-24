@@ -28,11 +28,12 @@ jobs:
 
       - id: tag
         name: Compute App Engine version tag
+        # The event and ref come from the runner's environment, never from an expression inside the script
         run: |
           # Only solana-foundation/solana-playground (id 1003072868) deploys: forks such as hoodieshq hold no GCP access.
           # A push there stays green with nothing to deploy; a dispatch there fails, so it does not read as a deploy.
           if [ "$GITHUB_REPOSITORY_ID" != "1003072868" ]; then
-            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
               echo "::error::Deploy from solana-foundation/solana-playground; $GITHUB_REPOSITORY deploys nothing." >&2
               exit 1
             fi
@@ -40,8 +41,14 @@ jobs:
             echo "version_tag=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          # Only master deploys: the OIDC provider and the playground-server environment admit nothing else
+          # (docs/server-release.md), so a dispatch from a branch fails here instead of further on.
+          if [ "$GITHUB_REF" != "refs/heads/master" ]; then
+            echo "::error::Deploy from master; $GITHUB_REF deploys nothing." >&2
+            exit 1
+          fi
           # Tags are already present from checkout (fetch-depth: 0); no network fetch needed.
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
             # Manual deploy: use the latest reachable tag; fail loudly rather than deploy a sentinel version.
             TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
             if [ -z "$TAG" ]; then
@@ -68,6 +75,8 @@ jobs:
       - resolve_version
       - checks
     if: needs.resolve_version.outputs.version_tag != ''
+    # Protected to master in the repository settings; the GCP secrets live in it (docs/server-release.md)
+    environment: playground-server
     permissions:
       contents: read
       id-token: write
