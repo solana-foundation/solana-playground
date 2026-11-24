@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { isDroppedRequest } from "@/shared/lib/ai";
 import { createLogger } from "@/shared/lib/logger";
 
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
@@ -95,6 +96,15 @@ const ask = async (): Promise<Asked> => {
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
   } catch (error) {
+    if (isDroppedRequest(error)) {
+      // The user's connection, not the deployment: counted, and the next
+      // caller asks again, but nothing for error tracking (SOLANA-PLAYGROUND-F)
+      log.warn(`could not ask for the AI status: ${String(error)}`);
+      assistantTelemetry.track("assistant_default_probe_failed", {
+        reason: "network",
+      });
+      return { backend: { state: "unreachable" }, failed: true };
+    }
     return failed("network", error);
   }
   if (res.status === 404) {

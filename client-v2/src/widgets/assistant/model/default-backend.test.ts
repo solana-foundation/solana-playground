@@ -137,6 +137,25 @@ describe("probeDefaultBackend", () => {
     expectFailure("network");
   });
 
+  it.each([
+    // Chrome's and Safari's dropped connection (Sentry SOLANA-PLAYGROUND-F)
+    new TypeError("Failed to fetch"),
+    new TypeError("Load failed"),
+    new DOMException("aborted", "AbortError"),
+  ])(
+    "is unreachable, warned of and counted, not reported, when the request gets %s",
+    async (error) => {
+      vi.spyOn(globalThis, "fetch").mockRejectedValue(error);
+      expect(await probeDefaultBackend()).toEqual({ state: "unreachable" });
+      expect(logs.entries.map((e) => [e.ns, e.level, e.report])).toEqual([
+        ["assistant:connect", "warn", false],
+      ]);
+      expect(events.events.map((e) => [e.name, e.params])).toEqual([
+        ["assistant_default_probe_failed", { reason: "network" }],
+      ]);
+    }
+  );
+
   it("is unreachable and reported when the route answers a 5xx", async () => {
     answer({}, 503);
     expect(await probeDefaultBackend()).toEqual({ state: "unreachable" });

@@ -38,6 +38,19 @@ export const isNetworkFailure = (error: unknown) =>
   isUpstreamDrop(error) ||
   (error instanceof Error && isDroppedFetch(error.cause));
 
+/**
+ * Whether a request failed on the user's side: the connection dropped
+ * (`isNetworkFailure`), or the browser aborted it (`AbortError`), as on
+ * leaving the page. Nothing for error tracking: the app goes on offline and
+ * asks again. Running out of a timeout of ours (`TimeoutError`) is not one: a
+ * route that hangs times out for every reader, so it is still reported.
+ */
+export const isDroppedRequest = (error: unknown) =>
+  isNetworkFailure(error) ||
+  (typeof error === "object" &&
+    error !== null &&
+    (error as { name?: unknown }).name === "AbortError");
+
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
@@ -52,6 +65,19 @@ if (import.meta.vitest) {
       ]) {
         expect(isNetworkFailure(new TypeError(message))).toBe(true);
       }
+    });
+
+    it("takes an abort for a dropped request, and a timeout or a bug for neither", () => {
+      expect(isDroppedRequest(new TypeError("Load failed"))).toBe(true);
+      expect(isDroppedRequest(new DOMException("aborted", "AbortError"))).toBe(
+        true
+      );
+      expect(
+        isDroppedRequest(new DOMException("timed out", "TimeoutError"))
+      ).toBe(false);
+      expect(isDroppedRequest(new TypeError("x is not a function"))).toBe(
+        false
+      );
     });
 
     it("matches a dropped connection the SDK wrapped", () => {

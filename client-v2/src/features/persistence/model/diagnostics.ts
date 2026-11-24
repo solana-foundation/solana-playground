@@ -8,12 +8,16 @@
  *
  * So failures are recorded here and reported through the logger at `error`,
  * which reaches the console and error tracking in production too: this fires
- * when data the user created failed to be stored, retrieved or synced.
+ * when data the user created failed to be stored, retrieved or synced. A
+ * request the user's side dropped (`isDroppedRequest`) is recorded and warned
+ * of, never reported: sync retries it once the connection is back, and each
+ * one reached Sentry as noise (SOLANA-PLAYGROUND-E).
  *
  * While diagnosing, the whole list is one command away in the browser console:
  *
  *   __pgSyncDiagnostics.failures()
  */
+import { isDroppedRequest } from "@/shared/lib/ai";
 import { isMissing } from "@/shared/lib/is-missing";
 import { createLogger } from "@/shared/lib/logger";
 
@@ -33,7 +37,12 @@ const failures: Failure[] = [];
 export const report = (what: string, error: unknown) => {
   failures.push({ what, error, at: new Date().toISOString() });
   if (failures.length > MAX) failures.shift();
-  log.error(error, { report: true, context: { what: `${what} failed` } });
+  const context = { what: `${what} failed` };
+  if (isDroppedRequest(error)) {
+    log.warn(String(error), { context });
+    return;
+  }
+  log.error(error, { report: true, context });
 };
 
 /** Shared with entities that read the same filesystem (`useTutorialProgress`) */
@@ -97,6 +106,34 @@ if (import.meta.vitest) {
           report: true,
           context: { what: "write thread failed" },
         }),
+      ]);
+    });
+
+    it.each([
+      // Safari's and Chrome's dropped connection (Sentry SOLANA-PLAYGROUND-E)
+      new TypeError("Load failed"),
+      new TypeError("Failed to fetch"),
+      // The browser dropping the request, as on leaving the page
+      new DOMException("aborted", "AbortError"),
+    ])("records, but does not report, a request that got %s", (error) => {
+      report("pull thread", error);
+
+      expect(getLastFailure()).toMatchObject({ what: "pull thread", error });
+      expect(logged.entries).toEqual([
+        expect.objectContaining({
+          ns: "persistence:diagnostics",
+          level: "warn",
+          context: { what: "pull thread failed" },
+        }),
+      ]);
+      expect(logged.entries.some((e) => e.report)).toBe(false);
+    });
+
+    it("still reports a TypeError that is a bug, not the network", () => {
+      report("pull thread", new TypeError("x.fetch is not a function"));
+
+      expect(logged.entries).toEqual([
+        expect.objectContaining({ level: "error", report: true }),
       ]);
     });
 
