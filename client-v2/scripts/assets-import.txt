@@ -7,5 +7,4 @@ index.html
 languages/
 manifest.json
 programs/
-robots.txt
 themes/

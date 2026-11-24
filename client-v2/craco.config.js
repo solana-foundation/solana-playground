@@ -19,6 +19,7 @@ const {
   missingObservabilityIds,
 } = require("./src/features/api/server/observability.mjs");
 const { brandHeadFor, resolveSiteUrl } = require("./scripts/brand-head.mjs");
+const { isRobotsDisallowed, robotsTxt } = require("./scripts/robots.mjs");
 
 // The build succeeds without these, so say in the build log what it ships without
 const warnAboutMissingObservabilityIds = () => {
@@ -274,6 +275,25 @@ class SwapFilesPlugin {
         const stub = this.swaps.get(createData.resource);
         if (stub) createData.resource = stub;
       });
+    });
+  }
+}
+
+/** Emits the deployment's `robots.txt` (`scripts/robots.mjs`); `public/` holds none, so the dev server and the build serve this one */
+class RobotsTxtPlugin {
+  constructor(text) {
+    this.text = text;
+  }
+
+  apply(compiler) {
+    const name = "RobotsTxtPlugin";
+    const { Compilation, sources } = compiler.webpack;
+    compiler.hooks.thisCompilation.tap(name, (compilation) => {
+      compilation.hooks.processAssets.tap(
+        { name, stage: Compilation.PROCESS_ASSETS_STAGE_ADDITIONAL },
+        () =>
+          compilation.emitAsset("robots.txt", new sources.RawSource(this.text))
+      );
     });
   }
 }
@@ -657,6 +677,16 @@ module.exports = {
       htmlPlugin.userOptions.templateContent = brandHeadFor(
         resolveSiteUrl(process.env)
       )(fs.readFileSync(htmlPlugin.userOptions.template, "utf8"));
+
+      // The environment decides the file, so a preview or a staging project keeps crawlers out
+      webpackConfig.plugins.push(new RobotsTxtPlugin(robotsTxt(process.env)));
+      if (env === "production") {
+        console.log(
+          isRobotsDisallowed(process.env)
+            ? "craco: disallowed every crawler in robots.txt"
+            : "craco: allowed crawlers in robots.txt except /api/"
+        );
+      }
 
       // Ignore useless warnings
       webpackConfig.ignoreWarnings = [

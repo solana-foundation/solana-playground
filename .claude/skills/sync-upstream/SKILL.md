@@ -70,7 +70,8 @@ tutorial folder that `client-v2/src/tutorials/markdown-tutorials.json` lists is 
 there, so enabling a Markdown tutorial is one edit. Upstream's `fonts/`, `icons/`, `frameworks/`, and `pyth/`
 are left out: client-v2 takes its code fonts from npm packages, its icons from `lucide-react`, and its
 framework logos from `client-v2/src/frameworks/<name>/`, and it has no Pyth generator, so a change upstream
-makes there is reported as not imported.
+makes there is reported as not imported. Upstream's `robots.txt` is left out too: the build writes the fork's
+per deployment (`client-v2/scripts/robots.mjs`).
 
 On the polish branch, first run `yarn setup` in the worktree's `client-v2/`. The command loads svgo and sharp
 from that folder's `node_modules`, a fresh worktree has none, and `yarn install` alone refuses to run until

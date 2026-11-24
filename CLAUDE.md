@@ -227,7 +227,9 @@ Asked to build something in the client, look in `openspec/changes/` first.
   `src/tutorials/<slug>/`. An upstream sync imports changes to the listed
   paths with the `sync-upstream` skill's `assets` command. The code fonts
   (npm packages imported in `src/index.tsx`), the icons (`lucide-react`), and
-  the framework logos (`src/frameworks/<name>/`) are not in `public/`. Every
+  the framework logos (`src/frameworks/<name>/`) are not in `public/`, and
+  neither is `robots.txt`: the build writes it per deployment
+  (`scripts/robots.mjs`, emitted by `craco.config.js`). Every
   image there, in `src/tutorials/`, and in `src/frameworks/` goes through
   `client-v2/scripts/optimise-image.mjs` first; `yarn test-api` fails on one
   the script would still change.
