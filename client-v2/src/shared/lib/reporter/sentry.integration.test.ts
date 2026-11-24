@@ -175,7 +175,11 @@ describe("fetch spans", () => {
         ([, event]) =>
           (
             event as unknown as {
-              spans?: { op?: string; data?: Record<string, unknown> }[];
+              spans?: {
+                op?: string;
+                description?: string;
+                data?: Record<string, unknown>;
+              }[];
             }
           ).spans ?? []
       )
@@ -200,7 +204,8 @@ describe("fetch spans", () => {
     expect(JSON.stringify(envelopes)).not.toContain(TOKEN);
   });
 
-  it("should redact a token-like host label in a fetch span's server.address and url.domain", async () => {
+  // The description and `url.full` are scrubbed twice, by `beforeSendSpan` and by `beforeSendTransaction`
+  it("should redact a token-like host label in a fetch span's description, url.full, server.address and url.domain", async () => {
     const LABEL = "acme-mainnet-4f2a9c1b7d3e";
 
     await Sentry.startNewTrace(() =>
@@ -211,7 +216,9 @@ describe("fetch spans", () => {
     await Sentry.flush();
 
     const [span] = httpSpansOf();
+    expect(span.description).toBe("GET https://[redacted].rpc.example.test/");
     expect(span.data).toMatchObject({
+      "url.full": "https://[redacted].rpc.example.test/",
       "server.address": "[redacted].rpc.example.test",
       "url.domain": "[redacted].rpc.example.test",
     });
@@ -482,7 +489,43 @@ describe("reporter scrub", () => {
       expect(transaction.spans).toEqual([
         expect.objectContaining({
           description: "Span withheld: scrubbing it failed",
-          data: { "scrub.withheld": true },
+          data: { "sentry.op": "http.client", "scrub.withheld": true },
+        }),
+      ]);
+      expect(JSON.stringify(envelopes)).not.toContain(KEY);
+    });
+
+    // Sentry sends a standalone span's `data` as its attributes, and neither its `op` nor its measurements
+    it("should send a standalone span, as INP is sent, marked, with its op and its Web Vital value", async () => {
+      Sentry.startNewTrace(() =>
+        Sentry.startInactiveSpan({
+          name: "button#deploy",
+          attributes: {
+            "sentry.op": "ui.interaction.click",
+            "browser.web_vital.inp.value": 120,
+            hostile,
+          },
+          experimental: { standalone: true },
+        }).end()
+      );
+      await Sentry.flush();
+
+      const spans = envelopes
+        .flatMap((envelope) => itemsOf(envelope))
+        .filter(([header]) => header.type === "span")
+        .map(([, container]) => container);
+      expect(spans).toEqual([
+        expect.objectContaining({
+          items: [
+            expect.objectContaining({
+              name: "Span withheld: scrubbing it failed",
+              attributes: {
+                "sentry.op": { type: "string", value: "ui.interaction.click" },
+                "browser.web_vital.inp.value": { type: "integer", value: 120 },
+                "scrub.withheld": { type: "boolean", value: true },
+              },
+            }),
+          ],
         }),
       ]);
       expect(JSON.stringify(envelopes)).not.toContain(KEY);

@@ -238,6 +238,14 @@ for (const [label, env, expected] of [
     /REACT_APP_MAINNET_RPC_URL carries a credential in its query/,
   ],
   [
+    "fails a bare term in padded base64 in the query",
+    {
+      REACT_APP_MAINNET_RPC_URL:
+        "https://rpc.example.com/?MTIzNDU2Nzg5MGFiY2RlZg==",
+    },
+    /REACT_APP_MAINNET_RPC_URL carries a credential in its query/,
+  ],
+  [
     "fails credentials before the host of a restricted URL",
     {
       REACT_APP_MAINNET_RPC_URL: "https://u:p@rpc.example.com",

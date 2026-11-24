@@ -76,8 +76,10 @@ export const maskHostWith = (mask) => {
 /**
  * A URL's query as written, split into its terms: `[name, value]` for
  * `name=value`, `[term, undefined]` for a bare term, empty terms kept so the
- * query can be written back as it was. Nothing is decoded, so `+` and `%2F`
- * stay the key characters `isTokenLike` reads them as.
+ * query can be written back as it was. A term with nothing but `=` after its
+ * first `=` is a bare term too, so the padding of base64 stays in the run
+ * `isTokenLike` judges. Nothing is decoded, so `+` and `%2F` stay the key
+ * characters `isTokenLike` reads them as.
  *
  * @param {string} search `URL.search`, `?` included, or empty
  * @returns {Array<[string, string | undefined]>}
@@ -88,7 +90,7 @@ export const queryTermsOf = (search) =>
     .split("&")
     .map((term) => {
       const at = term.indexOf("=");
-      return at < 0
+      return at < 0 || /^=*$/.test(term.slice(at + 1))
         ? [term, undefined]
         : [term.slice(0, at), term.slice(at + 1)];
     });
@@ -147,6 +149,7 @@ export const maskQueryWith = (mask) => {
     queryTermsOf(`?${query}`)
       .map(([name, value]) => {
         if (value === undefined) return maskTokens(name);
+        // The name is never masked: a provider puts its key in a value or a bare term, and `maxSupportedTransactionVersion` would read as a token
         return `${name}=${
           isKeyNamedTerm(name, value) ? mask : maskTokens(value)
         }`;
@@ -163,50 +166,94 @@ export const maskQueryWith = (mask) => {
 export const maskFragmentWith = maskTokensWith;
 
 /**
- * `url` rebuilt from its parsed parts with credentials and tokens replaced by `mask`, an {@link isAppAsset} file name kept.
- * Built by hand so `mask` is never percent-encoded; a value that does not parse is `mask` whole.
+ * A URL's path with each token in a segment replaced by `mask`, an {@link isAppAsset} file name kept.
  *
  * @param {string} mask what stands for each secret
- * @returns {(url: string) => { text: string, masked: boolean }} the text, and whether anything was masked
+ * @returns {(pathname: string) => string}
+ */
+export const maskPathWith = (mask) => {
+  const maskTokens = maskTokensWith(mask);
+  return (pathname) => {
+    const segments = pathname.split("/");
+    const assetAt = isAppAsset(pathname) ? segments.length - 1 : -1;
+    return segments
+      .map((segment, i) => (i === assetAt ? segment : maskTokens(segment)))
+      .join("/");
+  };
+};
+
+/**
+ * A host label the URL parser keeps as written and `url` does not hold. It stands for a mask already in `url`
+ * while the URL is parsed: the parser refuses a host label `[redacted]` and gives `••••` back encoded.
+ *
+ * @param {string} url
+ * @returns {string}
+ */
+const standInFor = (url) => {
+  const lower = url.toLowerCase();
+  let standIn = "masked";
+  while (lower.includes(standIn)) standIn += "x";
+  return standIn;
+};
+
+/**
+ * What {@link maskUrlWith} makes of a value: `text` is safe to show, the value itself only when `outcome` is `unchanged`.
+ * `unparsable`: not a URL, so `text` is the mask alone. `masked`: the mask stands for a secret. `rewritten`: nothing is
+ * masked, but the parser changed the URL (`/<key>/../v2` is `/v2`). `unchanged`: the parser keeps it, a bare origin's added `/` aside.
+ *
+ * @typedef {{ text: string, outcome: "unparsable" | "masked" | "rewritten" | "unchanged" }} MaskedUrl
+ */
+
+/**
+ * `url` rebuilt from its parsed parts with credentials and tokens replaced by `mask`, an {@link isAppAsset} file name kept.
+ * Built by hand so `mask` is never percent-encoded. A mask already in `url` stays, so masking a masked URL changes nothing.
+ *
+ * @param {string} mask what stands for each secret
+ * @returns {(url: string) => MaskedUrl}
  */
 export const maskUrlWith = (mask) => {
   const maskHost = maskHostWith(mask);
-  const maskTokens = maskTokensWith(mask);
+  const maskPath = maskPathWith(mask);
   const maskQuery = maskQueryWith(mask);
   const maskFragment = maskFragmentWith(mask);
   return (url) => {
+    const standIn = standInFor(url);
+    const parsable = url.replaceAll(mask, standIn);
     let parsed;
     try {
-      parsed = new URL(url);
+      parsed = new URL(parsable);
     } catch {
       // Not a URL: any part of it may be the key, so none of it is kept
-      return { text: mask, masked: true };
+      return { text: mask, outcome: "unparsable" };
     }
+    // A function, so a `$` in `mask` is not read as a replacement pattern
+    /** @type {(part: string) => string} */
+    const written = (part) => part.replaceAll(standIn, () => mask);
     const hasAuth = parsed.username !== "" || parsed.password !== "";
     // A username and a password, either or both, show as one mask
     const auth = hasAuth ? `${mask}@` : "";
     const port = parsed.port ? `:${parsed.port}` : "";
-    const segments = parsed.pathname.split("/");
-    const assetAt = isAppAsset(parsed.pathname) ? segments.length - 1 : -1;
-    const path = segments
-      .map((segment, i) => (i === assetAt ? segment : maskTokens(segment)))
-      .join("/");
-    const search = parsed.search.slice(1);
-    const query = parsed.search ? `?${maskQuery(search)}` : "";
-    const hash = parsed.hash.slice(1);
-    const fragment = parsed.hash ? `#${maskFragment(hash)}` : "";
-    const hostname = maskHost(parsed.hostname);
+    const hostname = written(parsed.hostname);
+    const pathname = written(parsed.pathname);
+    const search = written(parsed.search);
+    const hash = written(parsed.hash);
+    const host = maskHost(hostname);
+    const path = maskPath(pathname);
+    const query = search && `?${maskQuery(search.slice(1))}`;
+    const fragment = hash && `#${maskFragment(hash.slice(1))}`;
+    const text = `${parsed.protocol}//${auth}${host}${port}${path}${query}${fragment}`;
     // A part equals its masked form only when nothing in it was masked, or it held the mask already
-    const masked =
+    if (
       hasAuth ||
-      hostname !== parsed.hostname ||
-      path !== parsed.pathname ||
-      (parsed.search !== "" && query !== parsed.search) ||
-      (parsed.hash !== "" && fragment !== parsed.hash);
-
-    return {
-      text: `${parsed.protocol}//${auth}${hostname}${port}${path}${query}${fragment}`,
-      masked,
-    };
+      host !== hostname ||
+      path !== pathname ||
+      query !== search ||
+      fragment !== hash
+    ) {
+      return { text, outcome: "masked" };
+    }
+    const isAsWritten =
+      parsed.href === parsable || parsed.href === `${parsable}/`;
+    return { text, outcome: isAsWritten ? "unchanged" : "rewritten" };
   };
 };

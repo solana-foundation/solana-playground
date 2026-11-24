@@ -274,10 +274,12 @@ be replaced with `[redacted]`, in keys as in values. An object with `toJSON`
 SHALL be scrubbed as what `toJSON` returns, and an `Error` as its name,
 message and stack. An event that cannot be scrubbed SHALL be replaced by one
 that says it was withheld, keeps its release, environment and exception type,
-and groups by namespace. Base58 text of 32 to 44 characters SHALL be kept, so
-a public key in base58 stays, and so does a 32-byte seed written in base58 or
-base64, which cannot be told from one; any 32-byte value in hex or as bytes,
-a public key included, is redacted. A feedback SHALL be sent as the user
+and groups by namespace. Outside a URL that "URLs in reports carry no
+credentials" covers, base58 text of 32 to 44 characters SHALL be kept, so a
+public key in base58 stays, and so does a 32-byte seed written in base58 or
+base64, which cannot be told from one; inside such a URL it is masked as a
+token-like run. Any 32-byte value in hex or as bytes, a public key included,
+is redacted. A feedback SHALL be sent as the user
 wrote it: it is text they chose to send. Unit and integration tests
 (`reporter/scrub.ts`, `reporter/sentry.integration.test.ts`) support these
 rules; the scenarios are checked by hand on a preview with a DSN.
@@ -344,13 +346,18 @@ Web Vitals.
 
 ### Requirement: URLs in reports carry no credentials
 
-In every URL the browser sends to Sentry, comma-joined URLs each on their own,
-and in a span's `url.query`, `url.fragment`, `server.address` and
-`url.domain`, credentials, each token-like run in a host label, path segment,
-query value or fragment, and a key-named query value SHALL be `[redacted]`, by
-the rule that masks a saved RPC's URL. The rest SHALL stay as the URL
-parser reads it, a port and a hashed file name under `static/` whose name is
-not token-like, with its `:line:col`, included.
+In every absolute `http(s)` or `ws(s)` URL in a value the browser sends to
+Sentry, as the whole value or inside text, comma-joined URLs each on their
+own, in a value that is one relative URL (a single leading `/`, no
+whitespace), and in a span's `url.query`, `url.fragment`, `server.address`
+and `url.domain`, credentials, each token-like run in a host label, path
+segment, query value, bare query term or fragment, and a key-named query
+value SHALL be `[redacted]`, by the rule that masks a saved RPC's URL. A bare
+query term SHALL include its `=` padding, so a term in padded base64 is
+judged as one run. The rest of an absolute URL SHALL stay as the URL parser
+reads it, and the rest of a relative URL as written, a port and a hashed file
+name under `static/` whose name is not token-like, with its `:line:col`,
+included.
 
 #### Scenario: A provider key in the path (manual)
 
