@@ -74,10 +74,15 @@ export const resetDefaultBackendProbe = () => {
   PgAssistant.setDefaultProbe("unasked");
 };
 
-const failed = (reason: ProbeFailure, error: unknown): Asked => {
-  log.error(error, { report: true, context: { reason } });
+/** A failed ask, counted: the default reads as unreachable and the next caller asks again */
+const unreachable = (reason: ProbeFailure): Asked => {
   assistantTelemetry.track("assistant_default_probe_failed", { reason });
   return { backend: { state: "unreachable" }, failed: true };
+};
+
+const failed = (reason: ProbeFailure, error: unknown): Asked => {
+  log.error(error, { report: true, context: { reason } });
+  return unreachable(reason);
 };
 
 const answered = (backend: DefaultBackend): Asked => ({
@@ -102,10 +107,7 @@ const ask = async (): Promise<Asked> => {
       // Our own timeout is still reported, as `TimeoutError` or, where fetch
       // drops the signal's reason, `AbortError`: nothing else aborts this
       log.warn(`could not ask for the AI status: ${String(error)}`);
-      assistantTelemetry.track("assistant_default_probe_failed", {
-        reason: "network",
-      });
-      return { backend: { state: "unreachable" }, failed: true };
+      return unreachable("network");
     }
     return failed("network", error);
   }
