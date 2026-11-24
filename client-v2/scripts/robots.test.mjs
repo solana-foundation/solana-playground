@@ -36,6 +36,7 @@ test("serves production an Allow that keeps crawlers out of the API", () => {
 });
 
 test("serves a disallowed deployment DISALLOW_ALL", () => {
+  assert.equal(DISALLOW_ALL, "User-agent: *\nDisallow: /\n");
   assert.equal(robotsTxt({ VERCEL_ENV: "preview" }), DISALLOW_ALL);
   assert.equal(
     robotsTxt({ VERCEL_ENV: "production", [DISALLOW_ROBOTS]: "true" }),
