@@ -17,22 +17,28 @@ const RUNTIME_CSP = "sandbox allow-scripts; frame-ancestors 'self'";
 
 describe("platformRules", () => {
   it("takes the COOP and COEP headers the app needs from vercel.json", () => {
-    const headers = platformRules(vercelJson).headersFor("/");
+    const headers = platformRules(vercelJson).headersFor("/", "localhost");
     assert.equal(headers["Cross-Origin-Embedder-Policy"], "require-corp");
     assert.equal(headers["Cross-Origin-Opener-Policy"], "same-origin");
   });
 
   it("adds the sandbox's CORP header to /static/ paths only", () => {
     const { headersFor } = platformRules(vercelJson);
-    const asset = headersFor("/static/js/main.js");
+    const asset = headersFor("/static/js/main.js", "localhost");
     assert.equal(asset["Cross-Origin-Resource-Policy"], "cross-origin");
     assert.equal(asset["Cross-Origin-Embedder-Policy"], "require-corp");
     // The sandbox loads its scripts with `crossorigin`, from an opaque origin
     assert.equal(asset["Access-Control-Allow-Origin"], "*");
-    assert.equal(headersFor("/")["Cross-Origin-Resource-Policy"], undefined);
-    assert.equal(headersFor("/")["Access-Control-Allow-Origin"], undefined);
     assert.equal(
-      headersFor("/staticky")["Cross-Origin-Resource-Policy"],
+      headersFor("/", "localhost")["Cross-Origin-Resource-Policy"],
+      undefined
+    );
+    assert.equal(
+      headersFor("/", "localhost")["Access-Control-Allow-Origin"],
+      undefined
+    );
+    assert.equal(
+      headersFor("/staticky", "localhost")["Cross-Origin-Resource-Policy"],
       undefined
     );
   });
@@ -40,20 +46,23 @@ describe("platformRules", () => {
   it("serves /runtime.html sandboxed and framed by the app alone", () => {
     const { headersFor } = platformRules(vercelJson);
     assert.equal(
-      headersFor("/runtime.html")["Content-Security-Policy"],
+      headersFor("/runtime.html", "localhost")["Content-Security-Policy"],
       RUNTIME_CSP
     );
     // Firefox checks the frame's own load against the app's COEP as a
     // cross-origin request, since the `sandbox` attribute makes it opaque
     assert.equal(
-      headersFor("/runtime.html")["Cross-Origin-Resource-Policy"],
+      headersFor("/runtime.html", "localhost")["Cross-Origin-Resource-Policy"],
       "cross-origin"
     );
     // The app's own policy, never the sandbox's
-    assert.notEqual(headersFor("/")["Content-Security-Policy"], RUNTIME_CSP);
+    assert.notEqual(
+      headersFor("/", "localhost")["Content-Security-Policy"],
+      RUNTIME_CSP
+    );
     assert.equal(
-      headersFor("/runtime.html.map")["Content-Security-Policy"],
-      headersFor("/")["Content-Security-Policy"]
+      headersFor("/runtime.html.map", "localhost")["Content-Security-Policy"],
+      headersFor("/", "localhost")["Content-Security-Policy"]
     );
   });
 
@@ -83,6 +92,30 @@ describe("platformRules", () => {
     assert.equal(
       headersFor("/", `${PRODUCTION_HOST}.example.com`)["X-Robots-Tag"],
       "noindex, nofollow"
+    );
+  });
+
+  it("matches a host whatever its case", () => {
+    const { headersFor } = platformRules(vercelJson);
+    assert.equal(
+      headersFor("/", PRODUCTION_HOST.toUpperCase())["X-Robots-Tag"],
+      undefined
+    );
+  });
+
+  it("refuses a host condition that is not a plain hostname", () => {
+    assert.throws(
+      () =>
+        platformRules({
+          headers: [
+            {
+              source: "/(.*)",
+              missing: [{ type: "host", value: "^wallet-keys\\..*$" }],
+              headers: [],
+            },
+          ],
+        }),
+      /cannot match/
     );
   });
 

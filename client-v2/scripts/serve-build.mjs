@@ -40,24 +40,35 @@ const matcherOf = (source) => {
   return new RegExp(`^${escaped}${literal === source ? "" : ".*"}$`);
 };
 
+/** A hostname with no pattern in it: the only host condition this server reads */
+const PLAIN_HOST = /^[\w-]+(\.[\w-]+)*$/;
+
 /**
- * A `vercel.json` `has` or `missing` list as a test of the request's host,
- * matched whole as the platform does. Throws on any other condition type
- * (`header`, `cookie`, `query`), which this server would otherwise skip
- * without a word.
+ * A `vercel.json` `has` or `missing` list as a test of the request's host:
+ * equal to the value, ignoring case. Vercel reads the value as a pattern, so
+ * this server takes only a plain hostname, where the two agree, and throws on
+ * a pattern or any other condition type (`header`, `cookie`, `query`), which it
+ * would otherwise misapply without a word.
  *
  * @param {{type: string, value?: string}[] | undefined} conditions
  * @param {string} source the rule's source, named in the error
- * @returns {RegExp[]}
+ * @returns {((host: string) => boolean)[]}
  */
 const hostMatchersOf = (conditions, source) =>
   (conditions ?? []).map((condition) => {
-    if (condition.type !== "host" || condition.value === undefined) {
+    if (
+      condition.type !== "host" ||
+      condition.value === undefined ||
+      !PLAIN_HOST.test(condition.value)
+    ) {
       throw new Error(
-        `serve-build: vercel.json conditions headers for ${source} on a ${condition.type}, which this server cannot match`
+        `serve-build: vercel.json conditions headers for ${source} on ${
+          condition.type
+        } ${condition.value ?? ""}, which this server cannot match`
       );
     }
-    return new RegExp(`^(?:${condition.value.replaceAll(".", "\\.")})$`);
+    const expected = condition.value.toLowerCase();
+    return (host) => host.toLowerCase() === expected;
   });
 
 /**
@@ -68,7 +79,7 @@ const hostMatchersOf = (conditions, source) =>
  *   missing?: {type: string, value?: string}[],
  *   headers: {key: string, value: string}[]}[],
  *   rewrites?: {source: string, destination: string}[]}} config
- * @returns {{headersFor: (urlPath: string, host?: string) => Record<string, string>,
+ * @returns {{headersFor: (urlPath: string, host: string) => Record<string, string>,
  *   spaFallback: RegExp | undefined}}
  */
 export const platformRules = (config) => {
@@ -79,13 +90,13 @@ export const platformRules = (config) => {
     headers: rule.headers,
   }));
   const appliesTo = (rule, host) =>
-    rule.has.every((m) => m.test(host)) &&
-    !rule.missing.some((m) => m.test(host));
+    rule.has.every((matches) => matches(host)) &&
+    !rule.missing.some((matches) => matches(host));
   const spa = (config.rewrites ?? []).find(
     (r) => r.destination === "/index.html"
   );
   return {
-    headersFor: (urlPath, host = "localhost") => {
+    headersFor: (urlPath, host) => {
       const headers = {};
       for (const rule of rules) {
         if (!rule.matcher.test(urlPath) || !appliesTo(rule, host)) continue;
