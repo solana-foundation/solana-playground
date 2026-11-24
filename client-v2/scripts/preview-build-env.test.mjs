@@ -81,20 +81,41 @@ test("drops the OIDC token, SOURCES, the Sentry token and comments", () => {
   );
 });
 
-test("finds a public value equal to a secret one", () => {
+test("finds a public value that holds a secret one", () => {
   assert.deepEqual(publicSecrets(PULLED), []);
   assert.deepEqual(
     publicSecrets(
-      'REACT_APP_KEY="sk-made-up"\nPG_AI_API_KEY="sk-made-up"\nREACT_APP_EMPTY=""\nX=""\n'
+      'REACT_APP_KEY="sk-made-up-key"\nREACT_APP_URL="https://x.example/?k=sk-made-up-key"\nPG_AI_API_KEY="sk-made-up-key"\n'
     ),
-    ["REACT_APP_KEY = PG_AI_API_KEY"]
+    ["REACT_APP_KEY holds PG_AI_API_KEY", "REACT_APP_URL holds PG_AI_API_KEY"]
+  );
+});
+
+test("does not take a shared flag value for a secret", () => {
+  assert.deepEqual(
+    publicSecrets(
+      'SENTRY_PREVIEW_ENABLED="true"\nSYNC_ENABLED="true"\nVERCEL="1"\nFEATURE_X="1"\nVERCEL_ENV="preview"\nMODE="preview"\n'
+    ),
+    []
+  );
+});
+
+test("takes a URL with a password for a secret, whatever its name", () => {
+  assert.deepEqual(
+    publicSecrets(
+      'POSTGRES_URL="postgres://u:made-up-pw@db.example:5432/x"\nREACT_APP_DB="postgres://u:made-up-pw@db.example:5432/x"\n'
+    ),
+    ["REACT_APP_DB holds POSTGRES_URL"]
   );
 });
 
 test("the CLI refuses a pulled file whose public value is a secret", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "preview-build-env-"));
   const input = path.join(dir, "in");
-  writeFileSync(input, 'REACT_APP_X="s3cret"\nAPI_KEY="s3cret"\n');
+  writeFileSync(
+    input,
+    'REACT_APP_X="s3cret-made-up"\nAPI_KEY="s3cret-made-up"\n'
+  );
   const run = spawnSync(
     process.execPath,
     [SCRIPT, input, path.join(dir, "out")],
@@ -103,7 +124,7 @@ test("the CLI refuses a pulled file whose public value is a secret", () => {
     }
   );
   assert.equal(run.status, 1);
-  assert.match(run.stderr, /REACT_APP_X = API_KEY/);
+  assert.match(run.stderr, /REACT_APP_X holds API_KEY/);
 });
 
 test("no secret value survives", () => {

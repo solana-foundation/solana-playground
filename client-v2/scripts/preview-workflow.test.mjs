@@ -120,3 +120,32 @@ test("job deploy checks the build output before it deploys", () => {
   assert.doesNotMatch(block, /preview-check-output\.mjs[^\n]*(\|\||;|&)/);
   assert.ok(check < block.indexOf(" deploy --prebuilt"));
 });
+
+test("the run as a whole holds the concurrency group, unrelated runs one of their own", () => {
+  const top = text.slice(0, text.indexOf("\njobs:\n"));
+  assert.match(
+    top,
+    /^concurrency:\n {2}group: >-[\s\S]*preview-\{0\}[\s\S]*\|\| github\.run_id \}\}\n {2}cancel-in-progress: true$/m
+  );
+  for (const [name] of jobs)
+    assert.doesNotMatch(code(name), /^ {4}concurrency:/m, name);
+});
+
+test("job prepare uploads only what preview-build-env.mjs wrote, never the pulled file", () => {
+  const block = code("prepare");
+  assert.match(
+    block,
+    /preview-build-env\.mjs \.vercel\/\.env\.preview\.local inputs\//
+  );
+  assert.doesNotMatch(block, /cp [^\n]*\.env\.preview\.local/);
+  assert.match(block, /name: preview-inputs\n\s+path: inputs\n/);
+});
+
+test("job deploy refuses climbing paths and hard links before unpacking", () => {
+  const block = code("deploy");
+  const unpack = block.indexOf("tar -xzf");
+  for (const check of ["climbing=", "grep -q '^h'"]) {
+    const at = block.indexOf(check);
+    assert.ok(at >= 0 && at < unpack, check);
+  }
+});

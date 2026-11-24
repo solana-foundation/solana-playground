@@ -84,8 +84,8 @@ env:
   PREVIEW_LABEL: preview
   BRANCH: preview/pr-${{ github.event.pull_request.number }}
   # Same name as in client-v2/.env; see client-v2/docs/neon.md. NEON_API_KEY is
-  # given per step instead, to keep it from `vercel build`, which runs the PR's
-  # code.
+  # given per step (per job in teardown, which runs nothing else), to keep it
+  # from the steps that need none, the Vercel CLI's among them.
   NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
   PREVIEW_DB_PROVIDER: ${{ vars.PREVIEW_DB_PROVIDER }}
   # The preview instance and the user the application connects as, read by
@@ -118,9 +118,10 @@ jobs:
   # `needs`. The run as a whole holds the concurrency group (above `jobs:`).
   database:
     name: preview database
-    # A fork's PR gets no secrets, and Dependabot gets only Dependabot
-    # secrets, so neither could provision, pull or deploy: a Dependabot PR
-    # never deploys, even labelled by a human. Unrelated label changes do not
+    # A fork's PR gets no secrets, and a run Dependabot triggers gets only
+    # Dependabot secrets. A Dependabot PR never deploys, even when a human's
+    # label gives the run full secrets: the `user.login` condition below keeps
+    # it out, not missing secrets, so keep it. Unrelated label changes do not
     # redeploy.
     # Runs only where PREVIEW_REPOSITORY names this repository and a provider
     # is configured (see the header).
@@ -332,8 +333,10 @@ jobs:
           rm -rf .vercel
 
       # vercel-install.sh's Remote Cache lookups, read-only. A miss is not a
-      # failure: the build makes what is missing and, with no token, keeps it.
-      # A refused token is, since every preview would then rebuild for an hour.
+      # failure: the build makes what is missing, and having no token it
+      # stores nothing, so a labelled branch that changes wasm/ rebuilds on
+      # every push until a build on Vercel fills the cache.
+      # A refused token is a failure, since every preview would rebuild.
       - name: Fetch the cache archives
         run: |
           for key in "$WASM_KEY" "$CRATES_KEY"; do

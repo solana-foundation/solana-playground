@@ -21,8 +21,11 @@
 //   parses, and SENTRY_AUTH_TOKEN, which upload-sourcemaps.mjs would send to
 //   Sentry (without it a labelled preview uploads no source maps).
 //   VERCEL_OIDC_TOKEN is a credential and is dropped too.
-// - A public value equal to a secret one fails the run: public-env.mjs, which
-//   refuses such a value in the bundle, only sees placeholders in this build.
+// - A public value that holds a secret value fails the run: public-env.mjs,
+//   which refuses such a value in the bundle, only sees placeholders in this
+//   build. A secret here is what public-env.mjs's isSecretEntry calls one: at
+//   least 8 characters, under a secret-sounding name or a URL with a
+//   password. A Sensitive variable is pulled empty, so neither check sees it.
 //
 // Lines that are not NAME=value (Vercel's header comment) are dropped.
 //
@@ -64,18 +67,43 @@ const entriesOf = (text) =>
     return match ? [[match[1], match[2]]] : [];
   });
 
+/** As in client-v2/scripts/public-env.mjs: shorter values ("true") match by chance */
+const MIN_SECRET_LENGTH = 8;
+
+/** As public-env.mjs's isSecretName */
+const isSecretName = (name) =>
+  /SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|PRIVATE|BYPASS/i.test(name) ||
+  /(^|_)(API_)?KEY$/i.test(name) ||
+  /^DATABASE_URL/i.test(name);
+
+const hasUrlPassword = (value) =>
+  URL.canParse(value) && new URL(value).password !== "";
+
+/** The value inside the quotes Vercel writes */
+const unquoted = (value) => value.trim().replace(/^(["'])(.*)\1$/, "$2");
+
 /**
  * @param {string} text the pulled env file
- * @returns {string[]} each public name whose value equals a secret one, as `PUBLIC = SECRET`
+ * @returns {string[]} each public name whose value holds a secret one, as `PUBLIC holds SECRET`
  */
 export const publicSecrets = (text) => {
-  const entries = entriesOf(text).filter(([, value]) => !isEmpty(value));
-  const secret = new Map(
-    entries.filter(([name]) => !isPublic(name)).map(([name, v]) => [v, name])
+  const entries = entriesOf(text).map(([name, value]) => [
+    name,
+    unquoted(value),
+  ]);
+  const secrets = entries.filter(
+    ([name, value]) =>
+      !isPublic(name) &&
+      value.length >= MIN_SECRET_LENGTH &&
+      (isSecretName(name) || hasUrlPassword(value))
   );
   return entries
-    .filter(([name, value]) => isPublic(name) && secret.has(value))
-    .map(([name, value]) => `${name} = ${secret.get(value)}`);
+    .filter(([name]) => isPublic(name))
+    .flatMap(([name, value]) =>
+      secrets
+        .filter(([, secret]) => value.includes(secret))
+        .map(([secretName]) => `${name} holds ${secretName}`)
+    );
 };
 
 /** @param {string} text the pulled env file @returns {string} the build's env file */

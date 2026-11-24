@@ -3,7 +3,7 @@
 // `yarn test-api` collects only client-v2's tests.
 
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -71,10 +71,13 @@ test("refuses a relative link that climbs out of the output", () => {
 test("refuses a chain of links that leaves the output through a folder link", () => {
   const folder = buildOutput();
   const staticDir = path.join(folder, ".vercel/output/static");
-  // `d` points back at the output itself, so `d/../..` is the folder above it
+  // `d` points back at the output itself, so the kernel reads `d/../..` as
+  // the folder holding .vercel, where the runner file is
   symlinkSync("..", path.join(staticDir, "d"));
-  symlinkSync("d/../../project.json", path.join(staticDir, "p.json"));
+  writeFileSync(path.join(folder, "runner-file"), "secret");
+  symlinkSync("d/../../runner-file", path.join(staticDir, "p.json"));
   assert.deepEqual(outputProblems(folder), [
+    "unexpected entry: runner-file",
     "link out of the output: .vercel/output/static/p.json",
   ]);
 });
@@ -84,7 +87,7 @@ test("refuses a function config that is a link", () => {
   const func = path.join(folder, ".vercel/output/functions/api/agent.func");
   writeFileSync(path.join(func, "config.json"), "{}");
   symlinkSync("config.json", path.join(func, ".vc-config.json.tmp"));
-  // Replace the real config with a link to a sibling
+  // An unparseable config, and a second function whose config is a link
   writeFileSync(path.join(func, ".vc-config.json"), "");
   const other = path.join(folder, ".vercel/output/functions/api/b.func");
   mkdirSync(other);
@@ -103,6 +106,43 @@ test("refuses a test function that is a link", () => {
   );
   assert.deepEqual(outputProblems(folder), [
     "test file deployed as a function: .vercel/output/functions/api/agent.test.func",
+  ]);
+});
+
+test("refuses an output folder that is a link", () => {
+  const folder = buildOutput();
+  const elsewhere = mkdtempSync(path.join(tmpdir(), "elsewhere-"));
+  const output = path.join(folder, ".vercel/output");
+  execFileSync("rm", ["-rf", output]);
+  symlinkSync(elsewhere, output);
+  assert.deepEqual(outputProblems(folder), ["no .vercel/output folder"]);
+});
+
+test("refuses a FIFO", () => {
+  const folder = buildOutput();
+  execFileSync("mkfifo", [path.join(folder, ".vercel/output/static/pipe")]);
+  assert.deepEqual(outputProblems(folder), [
+    "not a file, folder or link: .vercel/output/static/pipe",
+  ]);
+});
+
+test("judges a dangling link by its text", () => {
+  const folder = buildOutput();
+  const staticDir = path.join(folder, ".vercel/output/static");
+  symlinkSync("missing.html", path.join(staticDir, "in.html"));
+  symlinkSync("/nowhere/missing", path.join(staticDir, "out.html"));
+  assert.deepEqual(outputProblems(folder), [
+    "link out of the output: .vercel/output/static/out.html",
+  ]);
+});
+
+test("refuses a project.json that is not a file", () => {
+  const folder = buildOutput();
+  const project = path.join(folder, ".vercel/project.json");
+  execFileSync("rm", [project]);
+  symlinkSync("/etc/hosts", project);
+  assert.deepEqual(outputProblems(folder), [
+    "not a file: .vercel/project.json",
   ]);
 });
 

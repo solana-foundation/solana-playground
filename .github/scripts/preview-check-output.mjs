@@ -82,12 +82,16 @@ export const outputProblems = (folder) => {
     if (stat.isSymbolicLink()) {
       if (name === ".vc-config.json")
         problems.push(`function config is a link: ${shown}`);
-      // A dangling link is judged by its text, which is all there is to upload
+      // A dangling link is judged by its text, from its folder's real path:
+      // the text is all there is to upload
       let target;
       try {
         target = realpathSync.native(full);
       } catch {
-        target = path.resolve(path.dirname(full), readlinkSync(full));
+        target = path.resolve(
+          realpathSync.native(path.dirname(full)),
+          readlinkSync(full)
+        );
       }
       if (!isInside(realOutput, target))
         problems.push(`link out of the output: ${shown}`);
@@ -101,7 +105,9 @@ export const outputProblems = (folder) => {
         problems.push(`function config is not JSON: ${shown}`);
         continue;
       }
-      if (config.filePathMap && Object.keys(config.filePathMap).length)
+      if (typeof config !== "object" || config === null)
+        problems.push(`function config is not an object: ${shown}`);
+      else if (config.filePathMap && Object.keys(config.filePathMap).length)
         problems.push(`function names files outside itself: ${shown}`);
     }
   }
