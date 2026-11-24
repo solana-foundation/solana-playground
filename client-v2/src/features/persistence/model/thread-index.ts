@@ -160,6 +160,7 @@ export class PgThreadIndex {
       // project that never existed; an entry left pointing at a missing file
       // just reads as an empty thread.
       if (!(await PgChatStorage.remove(threadId))) return false;
+      PgThreadIndex._emitDrop(threadId);
       const { [workspaceId]: _gone, ...rest } = await PgThreadIndex._refresh();
       return PgThreadIndex._commit(rest);
     });
@@ -230,6 +231,7 @@ export class PgThreadIndex {
         }
       }
 
+      PgThreadIndex._emitDrop(threadId);
       // Moved whether or not this lands: an old entry left behind points at
       // a file that is gone, which is an empty conversation, and the old
       // workspace's delete that follows forgets it
@@ -276,6 +278,27 @@ export class PgThreadIndex {
     if (index) PgThreadIndex._cache = index;
     return index;
   }
+
+  /**
+   * Fires with a thread id once `forget` has removed its file or `carry` has
+   * moved it to a fresh id: nothing pushes under that id again, so what is
+   * kept in memory about it can go. `clear` does not fire it; it runs with a
+   * sign-out, and the account change drops that state already.
+   */
+  static onDidDropThread(cb: (threadId: string) => void): {
+    dispose: () => void;
+  } {
+    PgThreadIndex._dropListeners.add(cb);
+    return { dispose: () => PgThreadIndex._dropListeners.delete(cb) };
+  }
+
+  private static _emitDrop(threadId: string) {
+    for (const cb of PgThreadIndex._dropListeners) cb(threadId);
+  }
+
+  private static readonly _dropListeners = new Set<
+    (threadId: string) => void
+  >();
 
   /** Forget everything. Sign-out clears the whole directory with it. */
   static async clear() {
@@ -674,6 +697,18 @@ if (import.meta.vitest) {
           await expect(PgThreadIndex.forget("never")).resolves.toBe(true);
         });
 
+        it("says which thread it dropped", async () => {
+          const threadId = await PgThreadIndex.ensure("tut:hello");
+          await PgChatStorage.write(threadId, [item(1)]);
+          const dropped = vi.fn();
+          const sub = PgThreadIndex.onDidDropThread(dropped);
+
+          await PgThreadIndex.forget("tut:hello");
+
+          expect(dropped).toHaveBeenCalledExactlyOnceWith(threadId);
+          sub.dispose();
+        });
+
         it("keeps the entry when the file could not be removed", async () => {
           // An entry dropped over a file that stayed left the file for the next
           // load's migration, which adopted it as a workspace named after the
@@ -741,6 +776,18 @@ if (import.meta.vitest) {
         // "Keep a copy": the project was deleted on another device,
         // its conversation tombstoned with it, and the user keeps this device's
         // work under a new id -- chat included
+        it("says the old thread id is dropped", async () => {
+          const old = await PgThreadIndex.ensure("p1");
+          await PgChatStorage.write(old, [item(1)]);
+          const dropped = vi.fn();
+          const sub = PgThreadIndex.onDidDropThread(dropped);
+
+          await PgThreadIndex.carry({ from: "p1", to: "p2" });
+
+          expect(dropped).toHaveBeenCalledExactlyOnceWith(old);
+          sub.dispose();
+        });
+
         it("moves the items under a fresh thread id, and drops the old one", async () => {
           const old = await PgThreadIndex.ensure("p1");
           await PgChatStorage.write(old, [item(1), item(2)]);

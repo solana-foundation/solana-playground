@@ -19,6 +19,13 @@ type SessionEvents = {
   session_sign_out_ended:
     | { outcome: "ok"; items_kept: number }
     | { outcome: "cancelled" };
+  /**
+   * The account deletion question in the account menu closed: `ok` once the
+   * server deleted the account, `cancelled` on its Cancel or when the menu
+   * closed over it. A failed deletion sends nothing, the question stays open;
+   * closing the menu over a failed question counts as `cancelled`.
+   */
+  session_delete_account_ended: { outcome: "ok" | "cancelled" };
 };
 
 export const sessionTelemetry = createTracker<SessionEvents>();

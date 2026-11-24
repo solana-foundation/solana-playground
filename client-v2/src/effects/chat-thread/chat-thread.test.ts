@@ -2,6 +2,7 @@ import type { MockInstance } from "vitest";
 
 import { PgSession } from "../../features/auth";
 import { PgChatSync } from "../../features/persistence/model/chat-sync";
+import { PgProjectSync } from "../../features/persistence/model/project-sync";
 import { PgThreadFence } from "../../features/persistence/model/thread-fence";
 import { PgThreadIndex } from "../../features/persistence/model/thread-index";
 import { PgExplorer } from "../../utils/explorer/explorer";
@@ -70,6 +71,47 @@ describe("the chat-thread effect", () => {
     await settle();
 
     expect(push).toHaveBeenCalledWith("p1");
+  });
+
+  it("pushes a thread refused for no-project once its project is accepted", async () => {
+    // The sign-in dump uploads threads before the projects they belong to,
+    // and the server no longer makes a project row for a thread (HOO-2882)
+    let accepted: (projectId: string) => void = () => {};
+    vi.spyOn(PgProjectSync, "onDidAccept").mockImplementation((cb) => {
+      accepted = cb;
+      return { dispose: () => {} };
+    });
+    vi.spyOn(PgChatSync, "awaiting").mockImplementation((projectId) =>
+      projectId === "w2" ? ["t2"] : []
+    );
+    effect = chatThread();
+    await settle();
+    push.mockClear();
+
+    accepted("w9");
+    await settle();
+    expect(push).not.toHaveBeenCalled();
+
+    accepted("w2");
+    await settle();
+    expect(push).toHaveBeenCalledWith("t2");
+  });
+
+  it("forgets the cap and the wait of a thread the index drops", async () => {
+    // A deleted project takes its thread with it, and no later push of that
+    // thread would clear the panel's warning
+    let dropped: (threadId: string) => void = () => {};
+    vi.spyOn(PgThreadIndex, "onDidDropThread").mockImplementation((cb) => {
+      dropped = cb;
+      return { dispose: () => {} };
+    });
+    const forget = vi.spyOn(PgChatSync, "forgetThread");
+    effect = chatThread();
+    await settle();
+
+    dropped("t2");
+
+    expect(forget).toHaveBeenCalledExactlyOnceWith("t2");
   });
 
   it("waits for the last write to land before pushing", async () => {

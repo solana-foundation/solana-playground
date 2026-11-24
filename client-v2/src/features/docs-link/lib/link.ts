@@ -6,18 +6,18 @@ export interface DocsLink {
   name: string;
   /** The file's text */
   code: string;
-  /** Shown above the code, as "From {host}: {title}" */
+  /** Shown above the code, as "Opened from a link: {title}" */
   title: string;
   /** The `https:` page on `solana.com` the link came from */
   from?: string;
-  /** Devnet SOL the script needs before it can run */
+  /** Devnet SOL the script needs before it can run, at most `MAX_LINK_SOL` */
   sol?: number;
 }
 
 /**
  * Why a link did not open: a required key absent, another format version,
  * code that does not decode, a file empty or over the cap, a bad file name, or
- * a `sol` that is not a positive number
+ * a `sol` that is not a positive number up to `MAX_LINK_SOL`
  */
 export type DocsLinkFailure =
   | "missing"
@@ -36,6 +36,13 @@ const VERSION = "1";
 
 /** Largest file a link may carry, inflated */
 export const MAX_DOCS_LINK_BYTES = 100 * 1024;
+
+/**
+ * The most SOL a link may ask the user to fund the wallet with. A link is
+ * anyone's to write, and the funding card would otherwise ask for whatever
+ * it names; the Quickstart asks for 0.02.
+ */
+export const MAX_LINK_SOL = 1;
 
 /** A file name a link may give: no folders, a script's extension */
 const NAME_REGEX = /^[A-Za-z0-9._-]+\.(ts|js)$/;
@@ -178,7 +185,7 @@ export const decodeDocsLink = (fragment: string): DecodedDocsLink => {
   if (!NAME_REGEX.test(name)) return fail("name");
 
   const sol = params.has("sol") ? Number(params.get("sol")) : undefined;
-  if (sol !== undefined && !(Number.isFinite(sol) && sol > 0)) {
+  if (sol !== undefined && !(sol > 0 && sol <= MAX_LINK_SOL)) {
     return fail("sol");
   }
 
@@ -286,6 +293,10 @@ if (import.meta.vitest) {
       expect(reasonOf(withParam("sol", "lots"))).toBe("sol");
       expect(reasonOf(withParam("sol", "0"))).toBe("sol");
       expect(reasonOf(withParam("sol", "Infinity"))).toBe("sol");
+      // A link may not ask for more than the cap, which a docs page never needs
+      expect(reasonOf(withParam("sol", "2"))).toBe("sol");
+      expect(reasonOf(withParam("sol", "1.000001"))).toBe("sol");
+      expect(reasonOf(withParam("sol", String(MAX_LINK_SOL)))).toBe("ok");
 
       const tooBig = encodeDocsLink({
         name: "a.ts",

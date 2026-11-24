@@ -6,6 +6,7 @@ import { GoogleAnalytics } from "@/shared/lib/telemetry";
 
 import type { ObservabilityConfig } from "../model/init";
 import { initObservability } from "../model/init";
+import { ConsentBanner } from "./ConsentBanner";
 
 export interface ObservabilityProps extends ObservabilityConfig {
   /** Shown in place of `children` after a render error */
@@ -32,6 +33,7 @@ export const Observability = ({
     <LoggerErrorBoundary fallback={fallback}>
       <GoogleAnalytics measurementId={googleAnalytics.measurementId} />
       {children}
+      {googleAnalytics.measurementId && <ConsentBanner />}
     </LoggerErrorBoundary>
   );
 };

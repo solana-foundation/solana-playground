@@ -93,7 +93,7 @@ VERCEL_TOKEN_ARG = $${VERCEL_TOKEN:+--token=$$VERCEL_TOKEN}
 
 .PHONY: vercel-login vercel-link vercel-auth vercel-link-preview vercel-link-production \
 	deploy-client-to-vercel-preview deploy-client-to-vercel-production deploy-client-to-vercel-prod-fast \
-	preview-db-branch migrate-preview-db migrate-production-db
+	preview-db-branch migrate-preview-db migrate-production-db encrypt-production-github-tokens
 
 # Both IDs come from the link file because an exported VERCEL_PROJECT_ID outranks
 # it in the CLI's project resolution, leaving orgId unresolved.
@@ -341,6 +341,46 @@ migrate-production-db: ## Apply pending migrations to the production database (S
 				read -r reply || { echo "aborted: no answer on stdin" >&2; exit 1; }; \
 				[ "$$reply" = yes ] || { echo "aborted" >&2; exit 1; }; \
 				dbmate --no-dump-schema migrate' sh "$$database" "$$instance";; \
+	*) \
+		echo "Production's DB_PROVIDER must be url, cloud-sql or unset, not \"$$provider\"" >&2; exit 1;; \
+	esac
+
+# Encrypts the OAuth tokens production's `account` rows still hold in plaintext
+# (HOO-2881) with Production's AUTH_SECRET, over the connection
+# migrate-production-db uses. Run it after the deploy that turned
+# `encryptOAuthTokens` on, never before: an older deployment reads a stored
+# token as it is and would send the ciphertext to GitHub. Safe to run again.
+# The script counts first; when rows are left it checks AUTH_SECRET against a
+# token a sign-in already encrypted, then asks for a typed `yes` in a terminal.
+# BETTER_AUTH_SECRETS is blanked so a value in the operator's shell cannot
+# make the script refuse, or encrypt with a key other than AUTH_SECRET.
+# What it does and why: $(CLIENT_DIR)/scripts/db/encrypt-github-tokens.mjs.
+encrypt-production-github-tokens: ## Encrypt production's plaintext GitHub tokens with AUTH_SECRET (SERVES PRODUCTION)
+	$(call vercel_expected_project)
+	export VERCEL_ORG_ID=$$(jq -r .orgId .vercel/project.json) && \
+		export VERCEL_PROJECT_ID=$$(jq -r .projectId .vercel/project.json) && \
+		npx $(VERCEL_CLI) env pull .vercel/.env.production.local --environment=production --yes $(VERCEL_TOKEN_ARG)
+	@prodenv() { grep -m1 "^$$1=" .vercel/.env.production.local 2>/dev/null | cut -d= -f2- | tr -d '"'; }; \
+	secret=$$(prodenv AUTH_SECRET); \
+	[ -n "$$secret" ] || { echo "no AUTH_SECRET in the Production pull (a Sensitive variable pulls empty): run the script by hand, as $(CLIENT_DIR)/docs/deploy-client-vercel.md, \"GitHub tokens at rest\", shows" >&2; exit 1; }; \
+	provider=$$(prodenv DB_PROVIDER); \
+	case "$$provider" in \
+	''|url) \
+		url=$$(prodenv DATABASE_URL_UNPOOLED); \
+		[ -n "$$url" ] || { echo "no DATABASE_URL_UNPOOLED in the Production environment" >&2; exit 1; }; \
+		printf 'production database: %s\n' "$$(printf '%s\n' "$$url" | sed -E 's#^[^@]*@([^/?]*).*#\1#')"; \
+		cd $(CLIENT_DIR) || exit 1; \
+		DATABASE_URL="$$url" AUTH_SECRET="$$secret" BETTER_AUTH_SECRETS= \
+			node scripts/db/encrypt-github-tokens.mjs --apply;; \
+	cloud-sql) \
+		instance=$$(prodenv CLOUD_SQL_INSTANCE); database=$$(prodenv CLOUD_SQL_DATABASE); user=$$(prodenv CLOUD_SQL_USER); \
+		[ -n "$$instance" ] && [ -n "$$database" ] && [ -n "$$user" ] || { \
+			echo "Production's DB_PROVIDER is cloud-sql, but CLOUD_SQL_INSTANCE, CLOUD_SQL_DATABASE or CLOUD_SQL_USER is not set there" >&2; exit 1; }; \
+		printf 'production database: %s on Cloud SQL instance %s\n' "$$database" "$$instance"; \
+		cd $(CLIENT_DIR) || exit 1; \
+		CLOUD_SQL_INSTANCE="$$instance" CLOUD_SQL_DATABASE="$$database" CLOUD_SQL_USER="$$user" CLOUD_SQL_LOGIN_USER= \
+			AUTH_SECRET="$$secret" BETTER_AUTH_SECRETS= \
+			scripts/db/cloud-sql/migration-url production -- node scripts/db/encrypt-github-tokens.mjs --apply;; \
 	*) \
 		echo "Production's DB_PROVIDER must be url, cloud-sql or unset, not \"$$provider\"" >&2; exit 1;; \
 	esac

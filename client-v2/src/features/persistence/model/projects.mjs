@@ -506,8 +506,11 @@ export const writeProject = async (q, userId, input) => {
  *
  * The row stays so another device's next sync sees "deleted" rather than
  * "missing" and does not push its local copy back up. Its files go: a
- * tombstone is never read back, and the name is freed from the live-rows
- * unique index by the same stroke.
+ * tombstone is never read back. Its name goes too, set to the empty string
+ * since the column is `not null`: a name can say what the user was working on,
+ * and a tombstone needs none. The unique index covers live rows only, so the
+ * empty name collides with nothing. A tutorial started again takes the name
+ * its new run sends.
  *
  * Its conversations are tombstoned with it, in the same transaction. They
  * are listed by project id, and a tutorial started again reuses its id, so a
@@ -528,7 +531,7 @@ export const writeProject = async (q, userId, input) => {
 export const deleteProject = async (userId, id) => {
   await transaction(async (q) => {
     await q(
-      `update projects set deleted_at = now()
+      `update projects set deleted_at = now(), name = ''
         where user_id = $1 and id = $2 and deleted_at is null`,
       [userId, id]
     );
@@ -553,4 +556,18 @@ export const deleteProject = async (userId, id) => {
       [userId, id]
     );
   });
+};
+
+/**
+ * Clear the name of every deleted row that still has a name (rows tombstoned
+ * by older code). Run daily by the retention job.
+ *
+ * @returns {Promise<number>} how many rows changed
+ */
+export const clearDeletedProjectNames = async () => {
+  const { rowCount } = await query(
+    `update projects set name = ''
+      where deleted_at is not null and name <> ''`
+  );
+  return rowCount ?? 0;
 };
