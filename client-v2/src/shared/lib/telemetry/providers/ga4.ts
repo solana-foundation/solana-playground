@@ -116,6 +116,23 @@ if (import.meta.vitest) {
       expect(window.gtag).toBeUndefined();
     });
 
+    it("should leave window.gtag undefined after an Allow storage refused", () => {
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+        throw new Error("blocked");
+      });
+      vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+        throw new Error("blocked");
+      });
+      writeConsent("allowed");
+
+      ga4Provider({ measurementId: "G-TEST" }).send({
+        name: "dply_started",
+        params: {},
+      });
+
+      expect(window.gtag).toBeUndefined();
+    });
+
     it("should queue an event for gtag.js once allowed, before gtag.js has loaded", () => {
       writeConsent("allowed");
 

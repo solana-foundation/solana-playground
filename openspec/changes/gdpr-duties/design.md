@@ -46,9 +46,17 @@ See [proposal.md](proposal.md), "Why". The facts the approach rests on, read at
 ### Account deletion is our route, not Better Auth's `deleteUser`
 
 `DELETE /api/account` (`api/account.mjs`) runs, in one `transaction`:
-`scrubIdentity(q, userId)`
-(`update build_audit set login = null, github_id = null where user_id = $1`),
-then `delete from "user" where id = $1`. The cascades do the rest.
+`delete from "user" where id = $1`, then `scrubIdentity(q, userId)`
+(`update build_audit set login = null, github_id = null where user_id = $1`).
+The cascades do the rest.
+
+The order closes a race with a build. `startAuditWith` inserts its
+`build_audit` row from the user row `for share`. An insert that took the lock
+first commits before the delete can proceed, and the scrub after the delete
+sees its row; an insert that comes after the delete finds no user, writes
+nothing, and the build route refuses the build. Scrubbing first left a window
+in which a build's row, written between the scrub and the commit, kept the
+GitHub identity.
 
 Better Auth's `deleteUser` was the alternative. It needs enabling in
 `getAuth`, runs its own deletes outside our pool's transaction, and offers
@@ -132,6 +140,10 @@ stops `gtag.js` from sending, removes `window.gtag` and `window.dataLayer` so no
 queue exists while declined, and expires the `_ga` and `_ga_*` cookies on the
 app's domain (`ga-cookies.ts`). A later Allow reinstalls the queue. It does so only while mounted with a
 measurement id, which is the only case in which GA4 runs.
+
+A write the browser refuses is held in memory only when it is a Decline, so a
+withdrawal stops sending at once; a refused Allow is not held, so a choice that
+could not be stored never turns analytics on.
 
 A Settings entry through `createSetting` was the alternative. A setting is
 two-valued with a default, and the banner needs a third state, "not asked yet".

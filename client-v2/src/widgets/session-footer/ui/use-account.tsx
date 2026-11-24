@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 
 import { connectWallet } from "@/commands/connect/connect-wallet";
 import { isSetupRejected } from "@/commands/connect/setup-rejected";
-import { isSignInFailure, PgSession } from "@/features/auth";
+import { isDeletionFailure, isSignInFailure, PgSession } from "@/features/auth";
 import { FeedbackMenuItems, useFeedbackSend } from "@/features/feedback";
 import { openFundDialog } from "@/features/fund-wallet";
 import { useBalance, useRenderOnChange, useWallet } from "@/hooks";
@@ -26,6 +26,7 @@ import {
   DELETE_ACCOUNT_FAILED,
   DELETE_ACCOUNT_RETRY,
   GITHUB_APPLICATIONS_URL,
+  leftoversText,
   REVOKE_AT_GITHUB,
   sessionWith,
   shownDeleteAccountState,
@@ -48,23 +49,26 @@ const warnWallet = () =>
     { options: { name: "wallet-failed" } }
   );
 
-/** A deletion that succeeded behind a closed menu, GitHub's grant revoked */
-const toastAccountDeleted = () =>
+/**
+ * A deletion that succeeded behind a closed menu, GitHub's grant revoked,
+ * with the leftovers line when projects stayed
+ */
+const toastAccountDeleted = (kept: number) =>
   PgView.setToast(
     () => (
       <span>
-        <strong>{ACCOUNT_DELETED}</strong>
+        <strong>{ACCOUNT_DELETED}</strong> {leftoversText(kept)}
       </span>
     ),
     { options: { name: "account-deleted" } }
   );
 
 /** A deletion that succeeded behind a closed menu, GitHub's grant left standing */
-const toastRevokeAtGithub = () =>
+const toastRevokeAtGithub = (kept: number) =>
   PgView.setToast(
     () => (
       <span>
-        <strong>{ACCOUNT_DELETED}</strong>{" "}
+        <strong>{ACCOUNT_DELETED}</strong> {leftoversText(kept)}{" "}
         <a
           href={GITHUB_APPLICATIONS_URL}
           target="_blank"
@@ -307,31 +311,40 @@ export const useAccount = ({
     if (deleting.current) return;
     setDeleteState({ status: "running" });
     deleting.current = PgSession.deleteAccount()
-      .then(({ githubRevoked }) => {
+      .then(({ githubRevoked, kept }) => {
         sessionTelemetry.track("session_delete_account_ended", {
           outcome: "ok",
         });
         // Said in the menu that deleted, never in one opened later. The
-        // GitHub line goes with it: the person can still remove the app there.
-        // Closed over meanwhile, what the menu would say is a toast, since
-        // nothing else would ever say it
+        // GitHub line and the leftovers line go with it: the person can still
+        // remove the app there, and what stayed is still here. Closed over
+        // meanwhile, what the menu would say is a toast, since nothing else
+        // would ever say it
         if (menuOpen.current) {
-          setDeleteState({ status: "done", githubRevoked });
+          setDeleteState({ status: "done", githubRevoked, kept });
           return;
         }
         setDeleteState({ status: "idle" });
-        if (githubRevoked) toastAccountDeleted();
-        else toastRevokeAtGithub();
+        if (githubRevoked) toastAccountDeleted(kept);
+        else toastRevokeAtGithub(kept);
       })
       .catch((error: unknown) => {
         // `PgSession.deleteAccount` has logged and reported a refusal; the
-        // reason is the person's to read. Closed over meanwhile, the menu
-        // opens on its items next time
-        log.info("account deletion failed; still signed in", {
-          context: { error: String(error) },
-        });
-        const reason =
-          error instanceof Error ? error.message : DELETE_ACCOUNT_RETRY;
+        // reason is the person's to read. Anything else is a defect of ours.
+        // Closed over meanwhile, the menu opens on its items next time
+        if (isDeletionFailure(error)) {
+          log.info("account deletion failed; still signed in", {
+            context: { reason: error.reason, status: error.status },
+          });
+        } else {
+          log.error(error, {
+            report: true,
+            context: { item: "delete-account" },
+          });
+        }
+        const reason = isDeletionFailure(error)
+          ? error.message
+          : DELETE_ACCOUNT_RETRY;
         if (menuOpen.current) {
           setDeleteState({ status: "failed", reason });
           return;

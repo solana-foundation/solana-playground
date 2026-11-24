@@ -178,6 +178,37 @@ describe("a choice storage refuses", () => {
     expect(toast).toHaveBeenCalledTimes(1);
   });
 
+  it("should keep the banner on Allow, leave analytics off, and say so", async () => {
+    window.localStorage.clear();
+    render(<ConsentBanner />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Allow" }));
+
+    expect(readConsent()).toBe("unanswered");
+    expect(banner()).not.toBeNull();
+    expect(toast).toHaveBeenCalledTimes(1);
+    expect(toastText()).toBe(
+      "Couldn't save your choice, so analytics stays off."
+    );
+  });
+
+  it("should leave the Settings switch off when turning it on is refused", async () => {
+    window.localStorage.clear();
+    render(<AnalyticsSwitch />);
+
+    await userEvent.click(screen.getByRole("switch", { name: "Analytics" }));
+
+    expect(readConsent()).toBe("unanswered");
+    expect(
+      screen
+        .getByRole("switch", { name: "Analytics" })
+        .getAttribute("aria-checked")
+    ).toBe("false");
+    expect(toastText()).toBe(
+      "Couldn't save your choice, so analytics stays off."
+    );
+  });
+
   it("should toast nothing when the choice is stored", async () => {
     vi.mocked(Storage.prototype.setItem).mockRestore();
     render(<AnalyticsSwitch />);

@@ -4,12 +4,15 @@
 import { PgSession } from "./model/session";
 
 export {
+  isDeletionFailure,
   isSignInFailure,
   PgSession,
   SIGN_IN_FAILED_UNKNOWN,
 } from "./model/session";
 export type {
   AccountDeleted,
+  DeletionFailure,
+  DeletionFailureReason,
   ReadState,
   SessionUser,
   SignInState,

@@ -47,6 +47,7 @@ import {
   formatBalance,
   GITHUB_APPLICATIONS_URL,
   githubProfileUrl,
+  keptAfter,
   leftoversText,
   profileName,
   REVOKE_AT_GITHUB,
@@ -455,8 +456,8 @@ const BaseAccountMenu = ({
   page = false,
 }: BaseAccountMenuProps) => {
   const { cluster, wallet } = account;
-  const leftovers =
-    signOut.status === "done" ? leftoversText(signOut.kept) : undefined;
+  // The sign-out's line, and the deletion's in the same words
+  const leftovers = leftoversText(keptAfter(signOut, deleteAccount));
   // A pick that opens the settings waits for the menu to close: while the
   // menu is mounted its focus trap pulls back the focus the settings take as
   // they open, and as it closes it puts focus back on its trigger

@@ -17,15 +17,16 @@ const isConsent = (value: unknown): value is Consent =>
   value === "unanswered" || value === "allowed" || value === "declined";
 
 /**
- * The choice of a write storage refused, held for this page only. It wins
- * over what storage says, so a decline stops sending at once even when it
- * cannot be kept; a reload forgets it. Cleared by a write that is stored, and
- * by another tab's.
+ * A decline storage refused, held for this page only. It wins over what
+ * storage says, so a withdrawal stops sending at once even when it cannot be
+ * kept; a reload forgets it. An Allow storage refused is never held: a choice
+ * the browser cannot keep never turns analytics on (`analytics-consent`).
+ * Cleared by a write that is stored, and by another tab's.
  */
-let unsaved: ConsentChoice | undefined;
+let unsaved: "declined" | undefined;
 
 /**
- * The visitor's choice: one this page could not store, else the stored one.
+ * The visitor's choice: a decline this page could not store, else the stored one.
  * A missing or unreadable value, a value that is none of the three, and
  * storage that throws (blocked cookies, private windows) all read as
  * `unanswered`, so the page never loads GA4 on a guess.
@@ -48,9 +49,9 @@ type Listener = (choice: Consent) => void;
 const listeners = new Set<Listener>();
 
 /**
- * Stores `choice` and tells every subscriber. When storage refuses the write,
- * the choice still holds for this page (`unsaved`), and the subscribers hear
- * it all the same.
+ * Stores `choice` and tells every subscriber what the choice now reads. When
+ * storage refuses the write, a decline still holds for this page (`unsaved`);
+ * an Allow does not, and the choice keeps reading what it read before.
  *
  * @returns whether the choice was stored, so it outlives a reload
  */
@@ -61,16 +62,14 @@ export const writeConsent = (choice: ConsentChoice): boolean => {
     unsaved = undefined;
     isSaved = true;
   } catch (error) {
-    log.warn(
-      "the analytics choice could not be stored; it holds until reload",
-      {
-        context: { error: String(error) },
-      }
-    );
-    unsaved = choice;
+    log.warn("the analytics choice could not be stored", {
+      context: { choice, error: String(error) },
+    });
+    if (choice === "declined") unsaved = choice;
     isSaved = false;
   }
-  listeners.forEach((listener) => listener(choice));
+  const now = readConsent();
+  listeners.forEach((listener) => listener(now));
   return isSaved;
 };
 
@@ -140,6 +139,42 @@ if (import.meta.vitest) {
       expect(readConsent()).toBe("declined");
       expect(heard).toEqual(["declined"]);
       unsubscribe();
+    });
+
+    it("should not hold an Allow storage refused, and keep reading what it read", () => {
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+        throw new Error("blocked");
+      });
+      const heard: Consent[] = [];
+      const unsubscribe = subscribe((choice) => heard.push(choice));
+
+      expect(writeConsent("allowed")).toBe(false);
+      expect(readConsent()).toBe("unanswered");
+      expect(heard).toEqual(["unanswered"]);
+      unsubscribe();
+    });
+
+    it("should keep a held decline when a later Allow is refused", () => {
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+        throw new Error("blocked");
+      });
+
+      writeConsent("declined");
+      writeConsent("allowed");
+
+      expect(readConsent()).toBe("declined");
+    });
+
+    it("should read unanswered after an Allow when storage throws on every access", () => {
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+        throw new Error("blocked");
+      });
+      vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+        throw new Error("blocked");
+      });
+
+      expect(writeConsent("allowed")).toBe(false);
+      expect(readConsent()).toBe("unanswered");
     });
 
     it("should say a stored choice was saved, and drop one held for the page", () => {

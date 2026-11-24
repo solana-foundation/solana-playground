@@ -39,8 +39,25 @@ The route against Postgres: pinned by `client-v2/api/account.test.mjs` under `ya
 
 #### Scenario: A failed deletion changes nothing (manual)
 The route against Postgres: pinned by `client-v2/api/account.test.mjs` under `yarn test-api`.
-- **WHEN** the transaction fails after the `build_audit` update
+- **WHEN** the transaction fails at the `build_audit` update, after the `user` delete
 - **THEN** the route answers `500`, the `user` row and the `build_audit` identities are unchanged, and the error is reported
+
+### Requirement: A build that races the deletion keeps no identity
+
+A build's audit row SHALL be written only while the user row exists, and SHALL
+be ordered against the deletion's transaction, so no `build_audit` row of a
+deleted user holds their `login` or `github_id`. A build whose user is gone by
+the time its row is written SHALL be refused.
+
+#### Scenario: A build that waited on the deletion (manual)
+The route against Postgres: pinned by `client-v2/api/account.test.mjs` under `yarn test-api`.
+- **WHEN** a build's audit row is written while the deletion's transaction holds the user row
+- **THEN** the write waits, finds no user once the deletion commits, writes no row, and the build is refused
+
+#### Scenario: A build just before the deletion (manual)
+The route against Postgres: pinned by `client-v2/api/account.test.mjs` under `yarn test-api`.
+- **WHEN** a build's audit row is written just before the user deletes their account
+- **THEN** the deletion scrubs that row too, and it holds neither `login` nor `github_id`
 
 ### Requirement: The account route refuses what it must not act on
 
@@ -104,6 +121,29 @@ from your GitHub settings too.", linking `https://github.com/settings/applicatio
 #### Scenario: Deletion refused
 - **WHEN** the server answers the deletion with an error
 - **THEN** the person stays signed in, every project stays, and the question says the account could not be deleted
+
+### Requirement: A deletion says what stayed in this browser
+
+After a deletion, the menu's done state, and the toast shown when the menu was
+closed during it, SHALL say how many projects stayed in this browser, in the
+words of sign-out's leftovers line ("{n} projects stayed in this browser because
+they weren't saved to your account."). When none stayed, no line SHALL show.
+
+#### Scenario: One project stayed (manual)
+Pinned by `client-v2/src/widgets/session-footer/ui/BaseAccountMenu.test.tsx` and `SessionFooter.test.tsx`, under `yarn test-unit`.
+- **WHEN** a deletion succeeds and one project the account never held stays in the browser
+- **THEN** the menu says "Your account was deleted." and "1 project stayed in this browser because it wasn't saved to your account."
+
+### Requirement: A sign-out during a deletion still signs out
+
+A sign-out asked for while a deletion runs SHALL wait for it. When the deletion
+succeeded, the sign-out SHALL resolve with no request of its own; when it
+failed, the sign-out SHALL then run as an ordinary sign-out.
+
+#### Scenario: A sign-out joins a refused deletion (manual)
+Pinned by the in-source block of `client-v2/src/features/auth/model/session.ts`, under `yarn test-unit`.
+- **WHEN** a sign-out is asked for while a deletion runs, and the server refuses the deletion
+- **THEN** the sign-out request is sent after the deletion's answer, and nobody is signed in afterwards
 
 ### Requirement: The account menu counts how deletion ended
 

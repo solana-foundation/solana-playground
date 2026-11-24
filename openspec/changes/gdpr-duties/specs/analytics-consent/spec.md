@@ -26,6 +26,24 @@ Pinned by the in-source blocks of `client-v2/src/shared/lib/telemetry/consent.ts
 - **WHEN** the browser throws on every `localStorage` access
 - **THEN** the page renders, the choice reads `unanswered`, and GA4 does not load
 
+### Requirement: A choice the browser cannot store never turns analytics on
+
+When storage refuses a Decline, the choice SHALL read `declined` until the page
+reloads, so a withdrawal stops sending at once, and the visitor SHALL be told
+"Couldn't save your choice; it applies until you reload." When storage refuses
+an Allow, the choice SHALL keep reading what it read before, GA4 SHALL NOT load,
+and the visitor SHALL be told "Couldn't save your choice, so analytics stays off."
+
+#### Scenario: A Decline storage refuses (manual)
+Pinned by the in-source block of `client-v2/src/shared/lib/telemetry/consent.ts` and `client-v2/src/widgets/observability/ui/ConsentBanner.test.tsx`, under `yarn test-unit`.
+- **WHEN** a visitor who allowed analytics turns it off and storage throws on the write
+- **THEN** the choice reads `declined` until reload, no further event reaches `gtag`, and the toast says the choice applies until reload
+
+#### Scenario: An Allow storage refuses (manual)
+Pinned by the in-source block of `client-v2/src/shared/lib/telemetry/consent.ts` and `client-v2/src/widgets/observability/ui/ConsentBanner.test.tsx`, under `yarn test-unit`.
+- **WHEN** a visitor presses Allow and storage throws on the write
+- **THEN** the choice still reads `unanswered`, GA4 does not load, and the toast says analytics stays off
+
 ### Requirement: GA4 runs only while the choice is allowed
 
 With a measurement id set, GA4 SHALL load `gtag.js` and receive events only

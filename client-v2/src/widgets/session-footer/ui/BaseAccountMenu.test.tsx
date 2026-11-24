@@ -591,8 +591,10 @@ it("opens the export once the menu has closed", async () => {
 });
 
 it("says the account was deleted, and where to remove the app when GitHub kept the grant", async () => {
-  await openDeleteQuestion({ status: "done", githubRevoked: false });
+  await openDeleteQuestion({ status: "done", githubRevoked: false, kept: 0 });
   expect(screen.getByText("Your account was deleted.")).toBeTruthy();
+  // Nothing stayed, so no leftovers line
+  expect(screen.queryByText(/stayed in this browser/)).toBeNull();
   const github = screen.getByRole("link", {
     name: "Remove Playground from your GitHub settings too.",
   });
@@ -604,7 +606,16 @@ it("says the account was deleted, and where to remove the app when GitHub kept t
 });
 
 it("says only that the account was deleted when GitHub revoked the grant", async () => {
-  await openDeleteQuestion({ status: "done", githubRevoked: true });
+  await openDeleteQuestion({ status: "done", githubRevoked: true, kept: 0 });
   expect(screen.getByText("Your account was deleted.")).toBeTruthy();
   expect(screen.queryByText(/GitHub settings/)).toBeNull();
+});
+
+it("says how many projects stayed after the deletion, as after a sign-out", async () => {
+  await openDeleteQuestion({ status: "done", githubRevoked: true, kept: 1 });
+  expect(
+    screen.getByText(
+      "1 project stayed in this browser because it wasn't saved to your account."
+    )
+  ).toBeTruthy();
 });

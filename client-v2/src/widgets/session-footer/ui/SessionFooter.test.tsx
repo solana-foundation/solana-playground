@@ -11,7 +11,11 @@ import {
 } from "vitest";
 
 import { SETUP_REJECTED } from "@/commands/connect/setup-rejected";
+import type { AccountDeleted } from "@/features/auth";
 import { PgSession } from "@/features/auth";
+// Past the slice's entry, which exports only the type: this stands in for
+// `deleteAccount`'s own rejection
+import { DeletionFailure } from "@/features/auth/model/session";
 import {
   initLogger,
   memoryProvider as logMemory,
@@ -651,7 +655,7 @@ it("deletes on the confirmation, says so with the GitHub line, and counts ok onc
     .spyOn(PgSession, "deleteAccount")
     .mockImplementation(async () => {
       PgSession.reset();
-      return { githubRevoked: false };
+      return { githubRevoked: false, kept: 0 };
     });
   draw("footer");
 
@@ -660,6 +664,8 @@ it("deletes on the confirmation, says so with the GitHub line, and counts ok onc
   await confirmDelete();
 
   expect(await screen.findByText("Your account was deleted.")).toBeTruthy();
+  // Nothing stayed, so no leftovers line
+  expect(screen.queryByText(/stayed in this browser/)).toBeNull();
   expect(
     screen
       .getByRole("link", {
@@ -688,7 +694,7 @@ it("leaves the GitHub line out when GitHub revoked the grant", async () => {
   await signInAsTester();
   vi.spyOn(PgSession, "deleteAccount").mockImplementation(async () => {
     PgSession.reset();
-    return { githubRevoked: true };
+    return { githubRevoked: true, kept: 0 };
   });
   draw("footer");
 
@@ -700,11 +706,31 @@ it("leaves the GitHub line out when GitHub revoked the grant", async () => {
   expect(screen.queryByText(/GitHub settings/)).toBeNull();
 });
 
+it("says how many projects stayed in this browser, in the sign-out's words", async () => {
+  await signInAsTester();
+  vi.spyOn(PgSession, "deleteAccount").mockImplementation(async () => {
+    PgSession.reset();
+    return { githubRevoked: true, kept: 2 };
+  });
+  draw("footer");
+
+  await pick("Delete account");
+  await deleteQuestion();
+  await confirmDelete();
+
+  expect(await screen.findByText("Your account was deleted.")).toBeTruthy();
+  expect(
+    screen.getByText(
+      "2 projects stayed in this browser because they weren't saved to your account."
+    )
+  ).toBeTruthy();
+});
+
 it("keeps the question after a refused deletion, with the reason, and counts nothing", async () => {
   await signInAsTester();
   const deleteAccount = vi
     .spyOn(PgSession, "deleteAccount")
-    .mockRejectedValue(new Error("Try again."));
+    .mockRejectedValue(new DeletionFailure({ reason: "refused", status: 500 }));
   draw("footer");
 
   await pick("Delete account");
@@ -721,7 +747,7 @@ it("keeps the question after a refused deletion, with the reason, and counts not
   // A retry the server accepts
   deleteAccount.mockImplementation(async () => {
     PgSession.reset();
-    return { githubRevoked: true };
+    return { githubRevoked: true, kept: 0 };
   });
   await confirmDelete();
   expect(await screen.findByText("Your account was deleted.")).toBeTruthy();
@@ -737,7 +763,7 @@ it("keeps the deletion busy so it cannot run twice, and counts a close while it 
     new Promise((resolve) => {
       finish = () => {
         PgSession.reset();
-        resolve({ githubRevoked: true });
+        resolve({ githubRevoked: true, kept: 0 });
       };
     })
   );
@@ -775,9 +801,7 @@ describe("a deletion that settles after the menu closed", () => {
    * settle it
    */
   const deleteThenClose = async () => {
-    let settle: (
-      outcome: () => Promise<{ githubRevoked: boolean }>
-    ) => void = () => {};
+    let settle: (outcome: () => Promise<AccountDeleted>) => void = () => {};
     vi.spyOn(PgSession, "deleteAccount").mockReturnValue(
       new Promise((resolve, reject) => {
         settle = (outcome) => {
@@ -806,12 +830,17 @@ describe("a deletion that settles after the menu closed", () => {
 
     settle(async () => {
       PgSession.reset();
-      return { githubRevoked: false };
+      return { githubRevoked: false, kept: 1 };
     });
 
     await waitFor(() => expect(setToast).toHaveBeenCalledTimes(1));
     drawnToast(setToast);
     expect(screen.getByText("Your account was deleted.")).toBeTruthy();
+    expect(
+      screen.getByText(
+        /1 project stayed in this browser because it wasn't saved to your account\./
+      )
+    ).toBeTruthy();
     expect(
       screen
         .getByRole("link", {
@@ -827,7 +856,7 @@ describe("a deletion that settles after the menu closed", () => {
 
     settle(async () => {
       PgSession.reset();
-      return { githubRevoked: true };
+      return { githubRevoked: true, kept: 0 };
     });
 
     await waitFor(() => expect(setToast).toHaveBeenCalledTimes(1));
@@ -836,6 +865,7 @@ describe("a deletion that settles after the menu closed", () => {
     ]);
     drawnToast(setToast);
     expect(screen.getByText("Your account was deleted.")).toBeTruthy();
+    expect(screen.queryByText(/stayed in this browser/)).toBeNull();
     expect(
       screen.queryByRole("link", {
         name: "Remove Playground from your GitHub settings too.",
@@ -848,7 +878,7 @@ describe("a deletion that settles after the menu closed", () => {
     const settle = await deleteThenClose();
 
     settle(async () => {
-      throw new Error("The server did not answer.");
+      throw new DeletionFailure({ reason: "unknown-outcome" });
     });
 
     await waitFor(() => expect(setToast).toHaveBeenCalledTimes(1));
@@ -856,7 +886,25 @@ describe("a deletion that settles after the menu closed", () => {
     expect(
       screen.getByText("Couldn't delete your account.").parentElement
         ?.textContent
-    ).toBe("Couldn't delete your account. The server did not answer.");
+    ).toBe(
+      "Couldn't delete your account. We couldn't tell whether your account was deleted. Reload Playground to check."
+    );
     expect(PgSession.get()?.id).toBe("u1");
+  });
+
+  it("toasts the generic retry for a failure that is no deletion failure", async () => {
+    await signInAsTester();
+    const settle = await deleteThenClose();
+
+    settle(async () => {
+      throw new TypeError("a defect");
+    });
+
+    await waitFor(() => expect(setToast).toHaveBeenCalledTimes(1));
+    drawnToast(setToast);
+    expect(
+      screen.getByText("Couldn't delete your account.").parentElement
+        ?.textContent
+    ).toBe("Couldn't delete your account. Try again.");
   });
 });

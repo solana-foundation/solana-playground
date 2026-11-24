@@ -102,9 +102,10 @@ export type SignOutHook = () => Promise<SignOutTeardown | undefined>;
 
 /**
  * Local cleanup after the server deleted the account; see
- * `PgSession.setOnAccountDeleted`
+ * `PgSession.setOnAccountDeleted`. Resolves with how many projects stayed in
+ * this browser, as `AccountDeleted.kept`.
  */
-export type AccountDeletedTeardown = () => Promise<void>;
+export type AccountDeletedTeardown = () => Promise<number>;
 
 /**
  * Runs before the deletion request and uploads nothing; see
@@ -121,7 +122,59 @@ export interface AccountDeleted {
    * removes the app in their GitHub settings themselves.
    */
   githubRevoked: boolean;
+  /**
+   * How many projects stayed in this browser: those the teardown could not
+   * vouch the server held. `0` when no teardown ran, which happens only when
+   * none is registered or the read half failed, and the failure is reported.
+   */
+  kept: number;
 }
+
+/**
+ * What is ending the session, with the promise a caller joins. A sign-out's
+ * `step` is `teardown` once the server has ended the session; a deletion
+ * holds pushes off from its start (`PgSession.isEnding`).
+ */
+type Ending =
+  | { kind: "sign-out"; step: "request" | "teardown"; done: Promise<void> }
+  | { kind: "deletion"; done: Promise<AccountDeleted> };
+
+/** What `PgSession.deleteAccount` did instead of deleting the account */
+export type DeletionFailureReason =
+  /** A sign-out was under way; the deletion never started */
+  | "signing-out"
+  /** The route answered 401: the server did not act */
+  | "session-ended"
+  /** No answer, so the account may or may not be gone; a reload tells */
+  | "unknown-outcome"
+  /** The route answered anything else but 200; `status` says what */
+  | "refused";
+
+type DeletionFailureOf =
+  | { reason: "signing-out" | "unknown-outcome" }
+  | { reason: "session-ended" | "refused"; status: number };
+
+/**
+ * A deletion that did not happen. `message` is the person-facing reason;
+ * `reason` and `status` are for code, so no caller matches on the words.
+ * The slice's entry exports only its type and `isDeletionFailure`: only
+ * `deleteAccount` makes one, and a widget test that stands in for it.
+ */
+export class DeletionFailure extends Error {
+  readonly reason: DeletionFailureReason;
+  /** The route's answer, when it gave one */
+  readonly status: number | undefined;
+
+  constructor(failure: DeletionFailureOf) {
+    super(deletionMessageOf(failure));
+    this.reason = failure.reason;
+    this.status = "status" in failure ? failure.status : undefined;
+  }
+}
+
+/** Whether a rejected `PgSession.deleteAccount` said why; anything else is a defect */
+export const isDeletionFailure = (error: unknown): error is DeletionFailure =>
+  error instanceof DeletionFailure;
 
 /**
  * How long the browser waits for the deletion to answer, in milliseconds.
@@ -132,16 +185,27 @@ export interface AccountDeleted {
  */
 const DELETE_ACCOUNT_TIMEOUT_MS = 30_000;
 
-/** Why a deletion did not happen, by the status the route answered */
-const DELETION_REFUSED: Record<number, string> = {
-  401: "Your session ended, so the account was not deleted. Sign in, then delete it again.",
-  503: "Accounts are not available right now. Try again later.",
+/** Why a deletion did not happen, in words for the person */
+const DELETION_MESSAGES: Record<DeletionFailureReason, string> = {
+  "signing-out": "A sign-out is under way.",
+  "session-ended":
+    "Your session ended, so the account was not deleted. Sign in, then delete it again.",
+  // The request may have reached the server, so a reload tells
+  "unknown-outcome":
+    "We couldn't tell whether your account was deleted. Reload Playground to check.",
+  refused: "Try again.",
 };
-const DELETION_FAILED = "Try again.";
-/** No answer: the request may have reached the server, so a reload tells */
-const DELETION_UNKNOWN =
-  "We couldn't tell whether your account was deleted. Reload Playground to check.";
-const DELETION_BLOCKED_BY_SIGN_OUT = "A sign-out is under way.";
+
+/** A refusal whose status has words of its own */
+const DELETION_UNAVAILABLE =
+  "Accounts are not available right now. Try again later.";
+
+function deletionMessageOf(failure: DeletionFailureOf) {
+  if (failure.reason === "refused" && failure.status === 503) {
+    return DELETION_UNAVAILABLE;
+  }
+  return DELETION_MESSAGES[failure.reason];
+}
 
 /**
  * Where the last sign-in stands. Held here, not by the control that started
@@ -394,12 +458,12 @@ export class PgSession {
   /**
    * `fetch` for a route that needs the session. A 401 for a known user asks for
    * a session read, which decides: one route's answer signs nobody out. Not
-   * during a sign-out, whose own flush may race the cookie. A read already out
+   * during a sign-out or a deletion, whose own requests may race the cookie. A read already out
    * may have left before the cookie died, so one more follows it.
    */
   static async fetchAuthed(url: string, init: RequestInit) {
     const response = await fetch(url, init);
-    if (response.status === 401 && PgSession._user && !PgSession._signingOut) {
+    if (response.status === 401 && PgSession._user && !PgSession._ending) {
       PgSession._readAfterCurrent();
     }
     return response;
@@ -414,7 +478,7 @@ export class PgSession {
     PgSession._isReadQueued = true;
     void PgSession._reading.then(() => {
       PgSession._isReadQueued = false;
-      if (PgSession._user && !PgSession._signingOut) void PgSession.refresh();
+      if (PgSession._user && !PgSession._ending) void PgSession.refresh();
     });
   }
 
@@ -769,12 +833,26 @@ export class PgSession {
    *
    * A call while one is running joins it rather than starting another: two
    * teardowns at once deleted the same workspaces twice.
+   *
+   * A call while an account deletion runs waits for it. A deletion that
+   * succeeded left nobody signed in, so this resolves; one that failed left
+   * the user signed in, so this then runs a sign-out of its own rather than
+   * reject with the deletion's reason.
    */
   static signOut(): Promise<void> {
-    PgSession._signingOut ??= PgSession._signOut().finally(() => {
-      PgSession._signingOut = undefined;
-    });
-    return PgSession._signingOut;
+    const ending = PgSession._ending;
+    if (ending?.kind === "sign-out") return ending.done;
+    if (ending?.kind === "deletion") {
+      return ending.done.then(
+        () => undefined,
+        () => PgSession.signOut()
+      );
+    }
+    const done: Promise<void> = PgSession._signOut().finally(() =>
+      PgSession._endIfStill(done)
+    );
+    PgSession._ending = { kind: "sign-out", step: "request", done };
+    return done;
   }
 
   /**
@@ -786,11 +864,13 @@ export class PgSession {
    * after a sign-out the cookie is gone, every request answers 401, and each
    * one was reported as a sync failure on an ordinary sign-out.
    *
-   * An account deletion sets it from before its request (`deleteAccount`):
-   * nothing may upload into an account about to be deleted.
+   * An account deletion holds it from before its request (`deleteAccount`):
+   * nothing may upload into an account about to be deleted. A sign-out holds
+   * it only once the server has ended the session, since its hook uploads.
    */
   static get isEnding(): boolean {
-    return PgSession._ending;
+    const ending = PgSession._ending;
+    return ending?.kind === "deletion" || ending?.step === "teardown";
   }
 
   private static async _signOut() {
@@ -835,19 +915,21 @@ export class PgSession {
 
     removeRememberedUser();
     PgSession._expiredUser = undefined;
-    PgSession._ending = true;
-    try {
-      // While the user is still readable: what it removes is keyed by their id
-      try {
-        await teardown?.();
-      } catch (error) {
-        // The previous account's data may be left on this browser
-        log.error(error, { report: true, context: { step: "teardown" } });
-      }
-      PgSession._set(undefined);
-    } finally {
-      PgSession._ending = false;
+    if (PgSession._ending?.kind === "sign-out") {
+      PgSession._ending = {
+        kind: "sign-out",
+        step: "teardown",
+        done: PgSession._ending.done,
+      };
     }
+    // While the user is still readable: what it removes is keyed by their id
+    try {
+      await teardown?.();
+    } catch (error) {
+      // The previous account's data may be left on this browser
+      log.error(error, { report: true, context: { step: "teardown" } });
+    }
+    PgSession._set(undefined);
     authTelemetry.track("auth_signed_out", {});
   }
 
@@ -880,38 +962,34 @@ export class PgSession {
    * while it reads what the server holds or while the request is out, and
    * only once the server answers `200` does the hook's teardown run. Any
    * other answer, or none, leaves the user signed in with nothing torn down
-   * and rejects with the reason, in words for the person. A `401` says the
-   * server did not act; a request whose answer was lost may or may not have
-   * deleted the account, and a reload finds out. Neither reports an erasure
-   * nobody confirmed.
+   * and rejects with a `DeletionFailure` (`isDeletionFailure`) whose message
+   * is the reason in words for the person. A `401` says the server did not
+   * act; a request whose answer was lost may or may not have deleted the
+   * account, and a reload finds out. Neither reports an erasure nobody
+   * confirmed. Once the server answered `200` this never rejects.
    *
-   * Shares the sign-out's latch: a deletion while a sign-out runs is refused,
-   * a sign-out while a deletion runs joins it, and a second deletion joins
-   * the first.
+   * One ending at a time (`_ending`): a deletion while a sign-out runs is
+   * refused, a second deletion joins the first, and a sign-out while a
+   * deletion runs waits for it (see `signOut`).
    */
   static deleteAccount(): Promise<AccountDeleted> {
-    if (PgSession._deleting) return PgSession._deleting;
-    if (PgSession._signingOut) {
-      return Promise.reject(new Error(DELETION_BLOCKED_BY_SIGN_OUT));
+    const ending = PgSession._ending;
+    if (ending?.kind === "deletion") return ending.done;
+    if (ending?.kind === "sign-out") {
+      return Promise.reject(new DeletionFailure({ reason: "signing-out" }));
     }
-    const deleting = PgSession._deleteAccount().finally(() => {
-      PgSession._deleting = undefined;
-      PgSession._signingOut = undefined;
-    });
-    PgSession._deleting = deleting;
-    const latch = deleting.then(() => undefined);
-    // Handled here so a deletion nobody joined is no unhandled rejection;
-    // a sign-out that joins it still sees the rejection
-    latch.catch(() => undefined);
-    PgSession._signingOut = latch;
-    return deleting;
+    // Started a turn later, so `isEnding` holds before the hook runs: a push
+    // that started now could land before the server's delete, mark the
+    // project as held, and have the teardown remove the only copy of work the
+    // person never saw saved
+    const done: Promise<AccountDeleted> = Promise.resolve()
+      .then(() => PgSession._deleteAccount())
+      .finally(() => PgSession._endIfStill(done));
+    PgSession._ending = { kind: "deletion", done };
+    return done;
   }
 
   private static async _deleteAccount(): Promise<AccountDeleted> {
-    // Before the request: a push that started now could land before the
-    // server's delete, mark the project as held, and have the teardown remove
-    // the only copy of work the person never saw saved
-    PgSession._ending = true;
     // While the cookie is valid: what the server holds is read now, and only
     // what it held then may leave the browser. A hook that throws returns no
     // teardown, so nothing local is removed
@@ -950,18 +1028,19 @@ export class PgSession {
           },
         });
       }
-      PgSession._ending = false;
-      throw new Error(DELETION_UNKNOWN);
+      throw new DeletionFailure({ reason: "unknown-outcome" });
     }
     // Only a 200 says the account is gone. Any other answer, a 2xx included,
     // keeps everything: a session that did end is found by the next request
     if (res.status !== 200) {
-      PgSession._ending = false;
       log.error(new Error(`account deletion answered ${res.status}`), {
         report: true,
         context: { step: "delete-request", status: res.status },
       });
-      throw new Error(DELETION_REFUSED[res.status] ?? DELETION_FAILED);
+      throw new DeletionFailure({
+        reason: res.status === 401 ? "session-ended" : "refused",
+        status: res.status,
+      });
     }
 
     // The account is gone whatever the body says; one that cannot be read
@@ -984,6 +1063,9 @@ export class PgSession {
    * End the session of an account the server deleted: the teardown, while
    * the user is still readable since what it removes is keyed by their id,
    * then the user cleared.
+   *
+   * Never rejects: the account is gone, so the person is told so whatever
+   * fails here. Each step that could throw is caught and reported on its own.
    */
   private static async _endDeletedAccount(
     teardown: AccountDeletedTeardown | undefined,
@@ -991,22 +1073,25 @@ export class PgSession {
   ): Promise<AccountDeleted> {
     removeRememberedUser();
     PgSession._expiredUser = undefined;
+    let kept = 0;
     try {
-      try {
-        await teardown?.();
-      } catch (error) {
-        // The deleted account's data may be left on this browser
-        log.error(error, {
-          report: true,
-          context: { step: "delete-teardown" },
-        });
-      }
-      PgSession._set(undefined);
-    } finally {
-      PgSession._ending = false;
+      kept = (await teardown?.()) ?? 0;
+    } catch (error) {
+      // The deleted account's data may be left on this browser
+      log.error(error, { report: true, context: { step: "delete-teardown" } });
     }
-    authTelemetry.track("auth_account_deleted", {});
-    return { githubRevoked };
+    try {
+      PgSession._set(undefined);
+    } catch (error) {
+      // A listener threw; the person is still told the account is gone
+      log.error(error, { report: true, context: { step: "delete-clear" } });
+    }
+    try {
+      authTelemetry.track("auth_account_deleted", {});
+    } catch (error) {
+      log.error(error, { report: true, context: { step: "delete-track" } });
+    }
+    return { githubRevoked, kept };
   }
 
   /**
@@ -1053,9 +1138,7 @@ export class PgSession {
     PgSession._channel = undefined;
     PgSession._openChannelImpl = openPopupChannel;
     PgSession._signingInFrom = undefined;
-    PgSession._signingOut = undefined;
-    PgSession._deleting = undefined;
-    PgSession._ending = false;
+    PgSession._ending = undefined;
     PgSession._pending = undefined;
     PgSession._pendingScopes = [];
     PgSession._signInState = IDLE;
@@ -1064,11 +1147,16 @@ export class PgSession {
     PgSession._reading = undefined;
   }
 
-  /** A sign-out or an account deletion under way: one at a time, see `deleteAccount` */
-  private static _signingOut: Promise<void> | undefined;
-  /** The account deletion under way, joined by a second `deleteAccount` */
-  private static _deleting: Promise<AccountDeleted> | undefined;
-  private static _ending = false;
+  /**
+   * The sign-out or account deletion under way, one at a time (see
+   * `signOut` and `deleteAccount`); `isEnding` is read from it
+   */
+  private static _ending: Ending | undefined;
+
+  /** Clear `_ending` once the ending that settled is still the one recorded */
+  private static _endIfStill(done: Promise<unknown>) {
+    if (PgSession._ending?.done === done) PgSession._ending = undefined;
+  }
   private static _user: SessionUser | undefined;
   private static _expiredUser: SessionUser | undefined;
   private static _isResuming = false;
@@ -2988,6 +3076,7 @@ if (import.meta.vitest) {
 
           expect(await PgSession.deleteAccount()).toEqual({
             githubRevoked: true,
+            kept: 0,
           });
 
           expect(request).toHaveBeenCalledExactlyOnceWith(
@@ -3034,6 +3123,7 @@ if (import.meta.vitest) {
                   PgSession.isEnding
                 }`
               );
+              return 0;
             };
           });
           deletionAnswers(order, {
@@ -3225,9 +3315,47 @@ if (import.meta.vitest) {
 
           expect(await PgSession.deleteAccount()).toEqual({
             githubRevoked: false,
+            kept: 0,
           });
           expect(teardown).toHaveBeenCalledOnce();
           expect(PgSession.get()).toBeUndefined();
+        });
+
+        it("resolves with how many projects the teardown says stayed", async () => {
+          await PgSession.refreshWith(ada);
+          PgSession.setOnAccountDeleted(async () => async () => 2);
+          deletionAnswers([], { status: 200, body: { githubRevoked: true } });
+
+          expect(await PgSession.deleteAccount()).toEqual({
+            githubRevoked: true,
+            kept: 2,
+          });
+        });
+
+        it("still resolves after the 200 when a listener throws, and reports it", async () => {
+          await PgSession.refreshWith(ada);
+          const logged = memoryProvider();
+          initLogger({ providers: [logged] });
+          const failure = new Error("listener");
+          PgSession.onDidChange(() => {
+            if (!PgSession.get()) throw failure;
+          });
+          deletionAnswers([], { status: 200, body: { githubRevoked: true } });
+
+          expect(await PgSession.deleteAccount()).toEqual({
+            githubRevoked: true,
+            kept: 0,
+          });
+          expect(PgSession.isEnding).toBe(false);
+          expect(
+            logged.entries.filter(({ ns }) => ns === "auth:session")
+          ).toEqual([
+            expect.objectContaining({
+              error: failure,
+              report: true,
+              context: { step: "delete-clear" },
+            }),
+          ]);
         });
 
         it("joins a deletion already running, and a sign-out joins it too", async () => {
@@ -3247,11 +3375,89 @@ if (import.meta.vitest) {
             PgSession.signOut(),
           ]);
 
-          expect(first).toEqual({ githubRevoked: false });
+          expect(first).toEqual({ githubRevoked: false, kept: 0 });
           expect(second).toBe(first);
           expect(request).toHaveBeenCalledOnce();
           expect(teardown).toHaveBeenCalledOnce();
           expect(signOutHook).not.toHaveBeenCalled();
+        });
+
+        /** `/api/account` answers `deletion`; the sign-out route answers 200 */
+        const deletionThenSignOut = (deletion: number) =>
+          vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+            String(input) === "/api/account"
+              ? ({
+                  ok: deletion === 200,
+                  status: deletion,
+                  json: async () => ({ githubRevoked: true }),
+                } as Response)
+              : ({ ok: true, status: 200 } as Response)
+          );
+
+        const requested = (request: Mock) =>
+          request.mock.calls.map(([input]) => String(input));
+
+        it("signs out after a refused deletion it joined, rather than reject with its reason", async () => {
+          await PgSession.refreshWith(ada);
+          initLogger({ providers: [memoryProvider()] });
+          const signOutTeardown = vi.fn().mockResolvedValue(undefined);
+          PgSession.setOnSignOut(async () => signOutTeardown);
+          const request = deletionThenSignOut(500);
+
+          const deleting = PgSession.deleteAccount();
+          const signingOut = PgSession.signOut();
+
+          await expect(deleting).rejects.toThrow("Try again.");
+          await signingOut;
+          expect(requested(request)).toEqual([
+            "/api/account",
+            "/api/auth/sign-out",
+          ]);
+          expect(signOutTeardown).toHaveBeenCalledOnce();
+          expect(PgSession.get()).toBeUndefined();
+          expect(PgSession.isEnding).toBe(false);
+        });
+
+        it("resolves a sign-out that joined a deletion that succeeded, with no request of its own", async () => {
+          await PgSession.refreshWith(ada);
+          const signOutHook = vi.fn(async () => undefined);
+          PgSession.setOnSignOut(signOutHook);
+          const request = deletionThenSignOut(200);
+
+          const deleting = PgSession.deleteAccount();
+          await PgSession.signOut();
+
+          expect(await deleting).toEqual({ githubRevoked: true, kept: 0 });
+          expect(requested(request)).toEqual(["/api/account"]);
+          expect(signOutHook).not.toHaveBeenCalled();
+          expect(PgSession.get()).toBeUndefined();
+        });
+
+        it.each([
+          ["session-ended", 401, answered(401)],
+          ["refused", 503, answered(503)],
+          ["refused", 500, answered(500)],
+          ["unknown-outcome", undefined, offline],
+          ["unknown-outcome", undefined, timedOut],
+        ] as const)(
+          "rejects with a %s failure, status %s, for code to tell apart",
+          // eslint-disable-next-line max-params -- `it.each` spreads each row into the callback
+          async (reason, status, deletion) => {
+            await PgSession.refreshWith(ada);
+            initLogger({ providers: [memoryProvider()] });
+            vi.spyOn(globalThis, "fetch").mockImplementation(deletion);
+
+            const failure = await PgSession.deleteAccount().catch(
+              (error: unknown) => error
+            );
+
+            expect(isDeletionFailure(failure)).toBe(true);
+            expect(failure).toMatchObject({ reason, status });
+          }
+        );
+
+        it("tells no other error for a deletion failure", () => {
+          expect(isDeletionFailure(new Error("Try again."))).toBe(false);
         });
 
         it("refuses to start while a sign-out runs", async () => {
@@ -3265,9 +3471,12 @@ if (import.meta.vitest) {
           const signingOut = PgSession.signOut();
           await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
 
-          await expect(PgSession.deleteAccount()).rejects.toThrow(
-            "A sign-out is under way."
-          );
+          const refused = PgSession.deleteAccount();
+          await expect(refused).rejects.toThrow("A sign-out is under way.");
+          await expect(refused).rejects.toMatchObject({
+            reason: "signing-out",
+            status: undefined,
+          });
 
           answer({ ok: true, status: 200 } as Response);
           await signingOut;

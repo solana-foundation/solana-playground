@@ -929,6 +929,26 @@ describe("deleting the account", () => {
     effect.dispose();
   });
 
+  it("counts the projects the release left in this browser", async () => {
+    serverDeletes(accepted);
+    const names = vi.spyOn(PgExplorer, "allWorkspaceNames", "get");
+    vi.mocked(restore.releaseProjectsUnchangedSince).mockImplementation(
+      async () => {
+        // "Newest" matched the server's copy and left; "Hello Anchor" stays
+        names.mockReturnValue(["Hello Anchor"]);
+        return ["Newest"];
+      }
+    );
+
+    const effect = await mount();
+
+    expect(await PgSession.deleteAccount()).toEqual({
+      githubRevoked: true,
+      kept: 1,
+    });
+    effect.dispose();
+  });
+
   it("forgets exactly what the read found on the server", async () => {
     serverDeletes(accepted);
 

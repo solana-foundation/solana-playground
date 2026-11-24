@@ -124,8 +124,24 @@ export type DeleteAccountState =
   | { status: "asking" }
   | { status: "running" }
   | { status: "failed"; reason: string }
-  /** Deleted; `githubRevoked` false asks the person to remove the app at GitHub */
-  | { status: "done"; githubRevoked: boolean };
+  /**
+   * Deleted; `githubRevoked` false asks the person to remove the app at
+   * GitHub, and `kept` projects stayed in this browser (`leftoversText`)
+   */
+  | { status: "done"; githubRevoked: boolean; kept: number };
+
+/**
+ * How many projects stayed in this browser after the sign-out or the account
+ * deletion this menu finished, for `leftoversText`; `0` before either
+ */
+export const keptAfter = (
+  signOut: SignOutState,
+  deleteAccount: DeleteAccountState
+) => {
+  if (signOut.status === "done") return signOut.kept;
+  if (deleteAccount.status === "done") return deleteAccount.kept;
+  return 0;
+};
 
 /**
  * What the menu shows of the deletion question, given the session now: as
@@ -574,7 +590,7 @@ if (import.meta.vitest) {
       const ASKING = { status: "asking" } as const;
       const RUNNING = { status: "running" } as const;
       const FAILED = { status: "failed", reason: "Try again." } as const;
-      const DONE = { status: "done", githubRevoked: false } as const;
+      const DONE = { status: "done", githubRevoked: false, kept: 0 } as const;
 
       it("drops a question, asked or failed, whose session ended elsewhere", () => {
         expect(shownDeleteAccountState(ASKING, { signedIn: false })).toEqual({
@@ -628,6 +644,16 @@ if (import.meta.vitest) {
         expect(leftoversText(3)).toBe(
           "3 projects stayed in this browser because they weren't saved to your account."
         );
+      });
+    });
+
+    describe("keptAfter", () => {
+      it("counts what a finished sign-out or deletion kept, and nothing before", () => {
+        expect(keptAfter({ status: "done", kept: 2 }, IDLE)).toBe(2);
+        expect(
+          keptAfter(IDLE, { status: "done", githubRevoked: true, kept: 3 })
+        ).toBe(3);
+        expect(keptAfter(IDLE, { status: "running" })).toBe(0);
       });
     });
 

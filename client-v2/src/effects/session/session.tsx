@@ -339,7 +339,9 @@ export const session = (): Disposable => {
    * an unpushed edit, a project never synced, or one another tab pushed
    * meanwhile stays. What stays is owned by the
    * deleted account (`claimUnowned` names it over a folder nobody owns), so
-   * the next account's sign-in fences it rather than uploading it.
+   * the next account's sign-in fences it rather than uploading it. The
+   * teardown resolves with how many projects stayed, for the account menu's
+   * leftovers line (`AccountDeleted.kept`).
    */
   const releaseDeletedAccount = async () => {
     PgAccountList.forget();
@@ -370,8 +372,12 @@ export const session = (): Disposable => {
       await step("release local projects", () =>
         releaseProjectsUnchangedSince(marks)
       );
+      // Everything the release left, as the sign-out's leftovers line counts
+      // it: a release that failed removed nothing, and all of it stayed
+      const kept = PgExplorer.allWorkspaceNames?.length ?? 0;
       await step("close thread", () => PgAssistant.closeThread());
       await step("forget account", () => PgProjectSync.forgetAccount());
+      return kept;
     };
   };
 

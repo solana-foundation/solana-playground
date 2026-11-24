@@ -21,8 +21,8 @@ after 1.1 is merged and before the release.
 - [x] 1.2 `DELETE /api/account` (HOO-2955). `features/build-server` exports
   `scrubIdentity(query, userId)`; `persistence/server.mjs` exports
   `transaction`; `features/auth/server.mjs` exports the token read and the
-  grant revocation. `api/account.mjs` reads the token, runs the scrub and the
-  `user` delete in one transaction, then revokes, as in design.md "Account
+  grant revocation. `api/account.mjs` reads the token, runs the `user` delete
+  and then the scrub in one transaction, then revokes, as in design.md "Account
   deletion is our route". Verified by `api/account.test.mjs` covering every
   `account-deletion` scenario marked as pinned there, with `fetch` to GitHub
   stubbed, under `yarn test-api`.

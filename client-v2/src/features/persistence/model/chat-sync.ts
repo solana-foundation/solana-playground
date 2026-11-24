@@ -655,8 +655,9 @@ export class PgChatSync {
    * lacks or has deleted (404), a read that fails, a local copy that cannot
    * be read, a thread a fence names, and every thread while another account
    * owns the folder, stay on this device: logged, not reported, since each
-   * is an answer this hand-over expects, except a failed read that is not
-   * the network dropping, which is reported. An empty thread is in, as
+   * is an answer this hand-over expects, except a read the server refused
+   * with any other status, or one that failed for a reason other than the
+   * network dropping, which is reported. An empty thread is in, as
    * `push` counts it pushed.
    *
    * Hashed from the copy compared, as `pushAll` hashes before its push, so a
@@ -733,7 +734,13 @@ export class PgChatSync {
       case "missing":
         return keep("not on the server");
       case "refused":
-        return keep(`HTTP ${pulled.status}`);
+        // A 404 is `missing`, which the hand-over expects; any other refusal
+        // (a 401, a 5xx) keeps the thread for a reason the team must hear of
+        report(
+          `read held thread ${threadId}: HTTP ${pulled.status}`,
+          new Error(`thread read answered ${pulled.status}`)
+        );
+        return undefined;
       case "failed":
         // A dropped connection is the user's network; anything else (a body
         // that does not parse, a fault of ours) is reported
@@ -2009,17 +2016,6 @@ if (import.meta.vitest) {
               Promise.reject(new TypeError("Failed to fetch"))
             ),
         ],
-        [
-          "the server answers an error",
-          () =>
-            respondingWith(() =>
-              Promise.resolve({
-                ok: false,
-                status: 500,
-                json: async () => ({}),
-              })
-            ),
-        ],
       ])("keeps a thread when %s, and reports nothing", async (_, arrange) => {
         await signedIn();
         await PgChatStorage.write(threadId, [item(1)]);
@@ -2033,6 +2029,29 @@ if (import.meta.vitest) {
         await PgChatSync.forget(handed);
         expect(await PgChatStorage.read(threadId)).toEqual([item(1)]);
       });
+
+      it.each([500, 401])(
+        "keeps a thread the server refuses with %i, and reports it",
+        async (status) => {
+          await signedIn();
+          await PgChatStorage.write(threadId, [item(1)]);
+          respondingWith(() =>
+            Promise.resolve({ ok: false, status, json: async () => ({}) })
+          );
+          const failures = getFailures().length;
+
+          const handed = await PgChatSync.syncedThreads();
+
+          expect(handed).toEqual({ handedOver: [], complete: false });
+          expect(getFailures().slice(failures)).toEqual([
+            expect.objectContaining({
+              what: `read held thread ${threadId}: HTTP ${status}`,
+            }),
+          ]);
+          await PgChatSync.forget(handed);
+          expect(await PgChatStorage.read(threadId)).toEqual([item(1)]);
+        }
+      );
 
       it("keeps a thread written to between the read and forget", async () => {
         // The deletion request runs between the two, with the panel open
