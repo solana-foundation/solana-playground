@@ -291,8 +291,9 @@ it("keeps the example when its build fails to run, and reports it", async () => 
   expect(utils.PgView.setToast).not.toHaveBeenCalled();
 });
 
-// SOLANA-PLAYGROUND-H: a signed-out first visit reported the build server's
-// "Sign in with GitHub to build." as an error
+// A signed-out first visit reported the build server's "Sign in with GitHub
+// to build." as an error (Sentry SOLANA-PLAYGROUND-H); a busy server's
+// refusal is the same kind of answer
 it.each([
   [
     "a sign-in",
@@ -318,8 +319,24 @@ it.each([
         logged.entries.map((e) => [e.ns, e.report, e.context?.reason])
       ).toEqual([["home:first-run", false, "refused"]])
     );
+    expect(utils.PgCommand.build.execute).toHaveBeenCalledTimes(1);
+    expect(utils.PgView.setToast).not.toHaveBeenCalled();
   }
 );
+
+it("still reports a 503 that carries no wait, which is no busy refusal", async () => {
+  const failure = Object.assign(new Error("Sign-in is unavailable"), {
+    status: 503,
+  });
+  utils.PgCommand.build.execute.mockRejectedValueOnce(failure);
+  const { home } = draw();
+  fireEvent.click(home.getByRole("button", { name: "Run it" }));
+  await waitFor(() =>
+    expect(logged.entries.map((e) => [e.ns, e.error, e.report])).toEqual([
+      ["home:first-run", failure, true],
+    ])
+  );
+});
 
 it("builds nothing once the user has opened another project", async () => {
   utils.PgExplorer.createWorkspace.mockImplementation(async (name: string) => {
