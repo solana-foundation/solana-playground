@@ -101,19 +101,43 @@ const isWholeUrl = (text: string) => {
 
 const maskUrl = maskUrlWith(REDACTED);
 
-/** `url` with its secrets masked; one the parser would change, as `/<key>/../` is, is sent as masked, never as written */
-const maskedUrl = (url: string) => {
-  const { text, outcome } = maskUrl(url);
-  return outcome === "unchanged" ? url : text;
-};
-
-/** One URL found in text, a leading comma kept, with its secrets masked and its trailing punctuation kept */
-const maskFoundUrl = (found: string) => {
+/** One URL found in text, a leading comma kept, masked by `mask` with its trailing punctuation kept */
+const maskFoundWith = (mask: (url: string) => string) => (found: string) => {
   const comma = found.startsWith(",") ? "," : "";
   const match = found.slice(comma.length);
   const url = urlPartOf(match);
-  return comma + maskedUrl(url) + match.slice(url.length);
+  return comma + mask(url) + match.slice(url.length);
 };
+
+/** `text` with each absolute URL in it masked by `mask`, comma-joined URLs each on their own */
+const maskFoundUrlsWith = (mask: (url: string) => string) => (text: string) =>
+  text.replace(URL_IN_TEXT, (match) =>
+    match.split(NEXT_URL).map(maskFoundWith(mask)).join("")
+  );
+
+/** How many URLs deep a URL inside a URL is masked as a URL of its own; a crafted chain of schemes must not exhaust the stack */
+const MAX_NESTED_URLS = 4;
+
+/**
+ * `url` with its secrets masked, each URL inside it first as a URL of its own: a proxy's `?url=` holds another URL's credentials.
+ * One the parser would change, as `/<key>/../` is, is sent as masked, never as written.
+ */
+const maskUrlAt = (depth: number, url: string): string => {
+  const at = url.indexOf("://") + 3;
+  const outer =
+    depth < MAX_NESTED_URLS
+      ? url.slice(0, at) +
+        maskFoundUrlsWith((nested) => maskUrlAt(depth + 1, nested))(
+          url.slice(at)
+        )
+      : url;
+  const { text, outcome } = maskUrl(outer);
+  return outcome === "unchanged" ? outer : text;
+};
+
+const maskedUrl = (url: string) => maskUrlAt(0, url);
+
+const maskFoundUrls = maskFoundUrlsWith(maskedUrl);
 
 const maskPath = maskPathWith(REDACTED);
 const maskQuery = maskQueryWith(REDACTED);
@@ -144,13 +168,7 @@ const maskRelativeUrl = (text: string) => {
 
 /** `text` with the secrets of each absolute URL in it masked, and its own where it is one relative URL */
 const maskUrlsIn = (text: string) =>
-  isWholeUrl(text)
-    ? maskedUrl(text)
-    : maskRelativeUrl(
-        text.replace(URL_IN_TEXT, (match) =>
-          match.split(NEXT_URL).map(maskFoundUrl).join("")
-        )
-      );
+  isWholeUrl(text) ? maskedUrl(text) : maskRelativeUrl(maskFoundUrls(text));
 
 const redactText = (text: string) =>
   SECRET_PATTERNS.reduce(
@@ -839,8 +857,19 @@ if (import.meta.vitest) {
           shown:
             "https://a.test/v2/[redacted],wss://[redacted]@b.test/v2/[redacted]",
         },
+        {
+          name: "the credentials of another URL in its query",
+          text: "https://proxy.test/?url=https://u:pw@x.test/",
+          shown: "https://proxy.test/?url=https://[redacted]@x.test/",
+        },
       ])("should mask a URL with $name", ({ text, shown }) => {
         expect(redact(text)).toBe(shown);
+      });
+
+      it("should scrub a chain of schemes longer than the stack is deep", () => {
+        expect(() =>
+          redact(`${"https://".repeat(20_000)}x.test/`)
+        ).not.toThrow();
       });
 
       it.each([
