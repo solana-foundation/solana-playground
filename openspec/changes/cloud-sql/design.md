@@ -251,6 +251,14 @@ database `postgres`, one built-in user `postgres`.
   cold and warm latency of the first production deployment's
   `GET /api/sync` so the cost is a number before the release; task 2.7
   records it again for previews.
+- [The connector renews its one-hour client certificate on a timer, which
+  does not run while Vercel has the function frozen, so an instance woken
+  after an hour connected with an expired certificate and was refused "bad
+  certificate" (Sentry SOLANA-PLAYGROUND-G)] → the pool takes a fresh
+  connector before a new connection once the current one is 45 minutes old.
+  So a warm instance also pays the exchange about once every 45 minutes it
+  serves. A renewal that fails or takes over 10 seconds is logged, the current
+  connector keeps serving, and the next try comes a minute later.
 - [`preview-shared-db.yml` fails, and `solpg_preview` falls behind
   `master`] → the run fails red on `master`; a PR's copy still applies what it
   lacks, and a manual dispatch reruns it.

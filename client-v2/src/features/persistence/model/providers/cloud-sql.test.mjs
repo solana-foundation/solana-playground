@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
 
-import { connector, createPool } from "./cloud-sql.mjs";
+import { connector, createPool, RENEW_TIMEOUT_MS } from "./cloud-sql.mjs";
 
 /** A preview deployment, which `createPool` lets open its database */
 const ENV = {
@@ -82,12 +82,13 @@ describe("cloud-sql pool", () => {
   });
 
   it("renews once for connections that ask at the same time", async () => {
-    const { options } = stubConnectors();
+    const { options, streams } = stubConnectors();
     const pool = await createPool(ENV);
     mock.timers.tick(46 * MINUTE);
 
     await Promise.allSettled([pool.connect(), pool.connect()]);
     assert.equal(options.mock.callCount(), 2);
+    assert.deepEqual(streams, [0, 2]);
   });
 
   it("serves query(), which connects through a callback", async () => {
@@ -100,34 +101,80 @@ describe("cloud-sql pool", () => {
     assert.deepEqual(streams, [0, 1]);
   });
 
-  it("closes a replaced connector once its last socket has closed", async () => {
+  it("closes the replaced connector", async () => {
     const { closes } = stubConnectors();
     const pool = await createPool(ENV);
 
-    // A connection still open on the first connector
-    const open = pool.options.stream();
     mock.timers.tick(46 * MINUTE);
     await assert.rejects(() => pool.connect(), /no database here/);
-    assert.deepEqual(closes, [0, 0]);
-
-    open.destroy();
-    await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(closes, [1, 0]);
+
+    mock.timers.tick(46 * MINUTE);
+    await assert.rejects(() => pool.connect(), /no database here/);
+    assert.deepEqual(closes, [1, 1, 0]);
   });
 
-  it("keeps the current connector when a renewal fails, and retries it", async () => {
+  it("connects through the current connector when a renewal fails, and retries a minute later", async () => {
     const { options, streams } = stubConnectors();
+    const errors = mock.method(console, "error", () => {});
     const pool = await createPool(ENV);
     mock.timers.tick(46 * MINUTE);
 
     options.mock.mockImplementationOnce(async () => {
       throw new Error("sts unavailable");
     }, options.mock.callCount());
-    await assert.rejects(() => pool.connect(), /sts unavailable/);
-    assert.deepEqual(streams, [0]);
+    await assert.rejects(() => pool.connect(), /no database here/);
+    assert.deepEqual(streams, [1]);
+    assert.match(String(errors.mock.calls[0].arguments[0]), /renewing/);
 
+    // Within the minute: no second attempt
+    await assert.rejects(() => pool.connect(), /no database here/);
+    assert.equal(options.mock.callCount(), 2);
+
+    mock.timers.tick(MINUTE);
     await assert.rejects(() => pool.connect(), /no database here/);
     assert.equal(options.mock.callCount(), 3);
-    assert.deepEqual(streams, [0, 1]);
+    assert.deepEqual(streams, [2, 1]);
+  });
+
+  it("serves query() through the current connector when a renewal fails", async () => {
+    const { options, streams } = stubConnectors();
+    mock.method(console, "error", () => {});
+    const pool = await createPool(ENV);
+    mock.timers.tick(46 * MINUTE);
+
+    options.mock.mockImplementationOnce(async () => {
+      throw new Error("sts unavailable");
+    }, options.mock.callCount());
+    await assert.rejects(() => pool.query("select 1"), /no database here/);
+    assert.deepEqual(streams, [1]);
+  });
+
+  it("stops waiting for a hung renewal, and closes the connector it brings late", async () => {
+    // This case also drives the renewal's timeout
+    mock.timers.reset();
+    mock.timers.enable({ apis: ["Date", "setTimeout"], now: 0 });
+    const { options, streams, closes } = stubConnectors();
+    mock.method(console, "error", () => {});
+    const pool = await createPool(ENV);
+    mock.timers.tick(46 * MINUTE);
+
+    /** @type {(value: unknown) => void} */
+    let arrive = () => {};
+    const late = { stream: failingSocket, close: mock.fn() };
+    options.mock.mockImplementationOnce(
+      () => new Promise((resolve) => (arrive = resolve)),
+      options.mock.callCount()
+    );
+    const connecting = pool.connect();
+    await new Promise((resolve) => setImmediate(resolve));
+    mock.timers.tick(RENEW_TIMEOUT_MS);
+    await assert.rejects(() => connecting, /no database here/);
+    assert.deepEqual(streams, [1]);
+
+    arrive(late);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(late.close.mock.callCount(), 1);
+    assert.deepEqual(closes, [0]);
   });
 });

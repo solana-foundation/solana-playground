@@ -98,7 +98,9 @@ export const connector = {
    * @param {ReturnType<typeof import("../../../../shared/config/server-env.mjs").databaseEnv>} env
    * @returns {Promise<{ stream: () => import("node:stream").Duplex; close: () => void }>}
    * the connector's socket factory, and `close`, which stops its refresh
-   * timer and destroys the sockets it opened
+   * timer. Sockets it already opened stay up: the connector tracks sockets
+   * only for an instance reached by domain name, and ours is reached by
+   * connection name
    */
   options: async (env) => {
     const [{ Connector }, { ExternalAccountClient }, { getVercelOidcToken }] =
@@ -145,17 +147,28 @@ export const connector = {
  * one. Its client certificate lasts an hour, and the connector renews it on a
  * timer, which does not run while Vercel has the function frozen: an instance
  * woken after an hour connected with an expired certificate and the server
- * answered "bad certificate" (Sentry SOLANA-PLAYGROUND-G). Well inside the
- * hour, so a renewal that is slow or retried still lands before it ends.
+ * answered "bad certificate" (Sentry SOLANA-PLAYGROUND-G). The quarter hour
+ * left is the room for a renewal that fails and is retried.
  */
 export const RENEW_AFTER_MS = 45 * 60_000;
 
+/** How long a renewal may take before the pool gives up on it */
+export const RENEW_TIMEOUT_MS = 10_000;
+
+/** How long after a failed renewal the pool tries again */
+export const RENEW_RETRY_MS = 60_000;
+
 /**
- * A `pg` pool whose connections go through a connector younger than
+ * A `pg` pool that opens new connections through a connector younger than
  * `RENEW_AFTER_MS`. The pool itself never changes, since Better Auth keeps
  * the one it was given for the life of the instance; what changes is the
- * connector behind its `stream`. A replaced connector is closed once the
- * last socket it opened has closed, because closing it destroys them.
+ * connector behind its `stream`. Connections already open are untouched: the
+ * certificate is checked only when TLS is set up.
+ *
+ * The check runs in `connect()`. A client `pg-pool` creates for a queued
+ * request, once a busy one frees up, skips it; with `max` at 3 that needs
+ * three requests at once in the minute an instance wakes, and the connector
+ * then refreshes on the failed handshake, as it did before.
  */
 class ConnectorPool extends pg.Pool {
   /**
@@ -167,45 +180,42 @@ class ConnectorPool extends pg.Pool {
    * is the one built already
    */
   constructor({ config, renew, first }) {
-    /** @type {{ options: Awaited<ReturnType<typeof connector.options>>; since: number; sockets: number; retired: boolean }} */
-    let current = {
-      options: first,
-      since: Date.now(),
-      sockets: 0,
-      retired: false,
-    };
-    /** @param {typeof current} generation */
-    const closeIfDone = (generation) => {
-      if (generation.retired && generation.sockets === 0) {
-        generation.options.close?.();
-      }
-    };
-    super({
-      ...config,
-      stream: () => {
-        const generation = current;
-        const socket = generation.options.stream();
-        generation.sockets += 1;
-        socket.once("close", () => {
-          generation.sockets -= 1;
-          closeIfDone(generation);
-        });
-        return socket;
-      },
-    });
+    let current = first;
+    let since = Date.now();
+    /** No renewal is tried before this time */
+    let retryAt = 0;
+    super({ ...config, stream: () => current.stream() });
 
     /** @type {Promise<void> | undefined} */
     let renewing;
-    /** A connector young enough to connect through, renewed when it is not */
+    /**
+     * Swap in a fresh connector when the current one is old. A renewal that
+     * fails or times out is logged and leaves the current connector in place:
+     * its certificate still has the rest of the hour, and the next try comes
+     * after `RENEW_RETRY_MS`, so an outage costs one attempt a minute, not one
+     * per request.
+     */
     this.ready = () => {
-      if (Date.now() - current.since < RENEW_AFTER_MS) return Promise.resolve();
-      renewing ??= renew()
-        .then((options) => {
-          const old = current;
-          current = { options, since: Date.now(), sockets: 0, retired: false };
-          old.retired = true;
-          closeIfDone(old);
-        })
+      const now = Date.now();
+      if (now - since < RENEW_AFTER_MS || now < retryAt) {
+        return Promise.resolve();
+      }
+      renewing ??= withTimeout(renew(), RENEW_TIMEOUT_MS)
+        .then(
+          (fresh) => {
+            const old = current;
+            current = fresh;
+            since = Date.now();
+            old.close?.();
+          },
+          (error) => {
+            retryAt = Date.now() + RENEW_RETRY_MS;
+            // eslint-disable-next-line no-console -- server-side: Vercel's function log is where this goes
+            console.error("db: renewing the Cloud SQL connector failed", {
+              message: /** @type {Error} */ (error).message,
+            });
+          }
+        )
         .finally(() => {
           renewing = undefined;
         });
@@ -215,7 +225,7 @@ class ConnectorPool extends pg.Pool {
 
   /**
    * `pg-pool` connects through a callback inside `query()`, Kysely through the
-   * promise; both wait for a usable connector first.
+   * promise; both wait for `ready()`, which never rejects.
    *
    * @param {Parameters<import("pg").Pool["connect"]>[0]} [callback]
    */
@@ -223,13 +233,37 @@ class ConnectorPool extends pg.Pool {
   connect(callback) {
     const ready = this.ready();
     if (!callback) return ready.then(() => super.connect());
-    ready.then(
-      () => super.connect(callback),
-      (error) => callback(error, undefined, () => {})
-    );
+    ready.then(() => super.connect(callback));
     return undefined;
   }
 }
+
+/**
+ * The connector `pending` resolves to, or a rejection after `ms`. A connector
+ * that arrives after the timeout is closed, so its refresh timer does not run
+ * for the life of the instance.
+ *
+ * @param {ReturnType<typeof connector.options>} pending
+ * @param {number} ms
+ */
+const withTimeout = (pending, ms) => {
+  /** @type {NodeJS.Timeout | undefined} */
+  let timer;
+  let late = false;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      late = true;
+      reject(new Error(`timed out after ${ms} ms`));
+    }, ms);
+  });
+  return Promise.race([
+    pending.then((options) => {
+      if (late) options.close?.();
+      return options;
+    }),
+    /** @type {Promise<never>} */ (timeout),
+  ]).finally(() => clearTimeout(timer));
+};
 
 /**
  * Build the pool, unless this deployment may not open the database it names.
