@@ -321,7 +321,7 @@ when a session reads a file matching the `paths` in the frontmatter.
   `model/diagnostics.ts`, which logs each one under `persistence:diagnostics`
   with `report: true`, so the failure reaches Sentry once a DSN is configured.
   The one exception is a request whose connection dropped (`isNetworkFailure`:
-  Safari's "Load failed", Chrome's "Failed to fetch"), which is recorded and
-  warned of only; the next push, pull or reconcile asks again. In the browser
+  Safari's "Load failed", Chrome's "Failed to fetch"), which is recorded,
+  warned of and counted (`sync_request_dropped`); the next push, pull or reconcile asks again. In the browser
   console, `__pgSyncDiagnostics.failures()` lists them. A
   missing file is not a failure and is deliberately silent.

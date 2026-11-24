@@ -10,9 +10,9 @@
  * which reaches the console and error tracking in production too: this fires
  * when data the user created failed to be stored, retrieved or synced. The
  * one exception is a request whose connection dropped (`isNetworkFailure`):
- * it is recorded and warned of, never reported, since the next push, pull or
- * reconcile asks again, and each one reached Sentry as noise
- * (SOLANA-PLAYGROUND-E). An `AbortError` is still reported: here it is as
+ * it is recorded, warned of and counted (`sync_request_dropped`), never
+ * reported, since the next push, pull or reconcile asks again, and each one
+ * reached Sentry as noise (SOLANA-PLAYGROUND-E). An `AbortError` is still reported: here it is as
  * likely an aborted IndexedDB write, or a timeout of ours on an engine that
  * drops the signal's reason, as a request the browser let go.
  *
@@ -23,6 +23,15 @@
 import { isNetworkFailure } from "@/shared/lib/ai";
 import { isMissing } from "@/shared/lib/is-missing";
 import { createLogger } from "@/shared/lib/logger";
+
+import type { DroppedOpParam } from "./telemetry";
+import { DROPPED_OPS, persistenceTelemetry } from "./telemetry";
+
+/** The first word of an operation, as `sync_request_dropped` counts it */
+const opOf = (what: string): DroppedOpParam => {
+  const word = what.split(" ", 1)[0];
+  return DROPPED_OPS.find((op) => op === word) ?? "other";
+};
 
 const log = createLogger("persistence:diagnostics");
 
@@ -43,6 +52,7 @@ export const report = (what: string, error: unknown) => {
   const context = { what: `${what} failed` };
   if (isNetworkFailure(error)) {
     log.warn(`${what} failed: the connection dropped`, { context });
+    persistenceTelemetry.track("sync_request_dropped", { op: opOf(what) });
     return;
   }
   log.error(error, { report: true, context });
@@ -80,14 +90,24 @@ if (import.meta.vitest) {
       ));
     });
     let logged: ReturnType<typeof memoryProvider>;
+    let telemetry: typeof import("@/shared/lib/telemetry");
+    let events: ReturnType<typeof telemetry.memoryProvider>;
+    beforeAll(async () => {
+      telemetry = await import("@/shared/lib/telemetry");
+    });
 
     beforeEach(() => {
       clearFailures();
       logged = memoryProvider();
       initLogger({ providers: [logged] });
+      events = telemetry.memoryProvider();
+      telemetry.initTelemetry({ providers: [events] });
     });
 
-    afterEach(() => resetLogger());
+    afterEach(() => {
+      resetLogger();
+      telemetry.resetTelemetry();
+    });
 
     it("records a failure and hands back the newest one", () => {
       const error = new Error("disk full");
@@ -128,6 +148,9 @@ if (import.meta.vitest) {
         }),
       ]);
       expect(logged.entries.some((e) => e.report)).toBe(false);
+      expect(events.events.map((e) => [e.name, e.params])).toEqual([
+        ["sync_request_dropped", { op: "pull" }],
+      ]);
     });
 
     it.each([
@@ -143,6 +166,13 @@ if (import.meta.vitest) {
       expect(logged.entries).toEqual([
         expect.objectContaining({ level: "error", report: true }),
       ]);
+      expect(events.events).toEqual([]);
+    });
+
+    it("counts an operation it does not list as other", () => {
+      report("threads of p1", new TypeError("Load failed"));
+
+      expect(events.events.map((e) => e.params)).toEqual([{ op: "other" }]);
     });
 
     it("keeps the list bounded so a failing loop cannot grow it forever", () => {

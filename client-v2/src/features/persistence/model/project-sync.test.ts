@@ -2116,8 +2116,12 @@ describe("a project over a sync limit", () => {
   const markOf = () => storedFiles().get("/.config/sync/u1/p1.json");
 
   /** This slice's events; signing in and out sends the auth slice's own */
+  // The banner's events: a retry that never reaches the server also counts
+  // `sync_request_dropped`, which is diagnostics', not the banner's
   const syncEvents = () =>
-    sent.events.filter(({ name }) => name.startsWith("sync_"));
+    sent.events.filter(
+      ({ name }) => name.startsWith("sync_") && name !== "sync_request_dropped"
+    );
 
   beforeEach(async () => {
     reset();

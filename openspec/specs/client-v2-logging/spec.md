@@ -214,6 +214,31 @@ create an `Error` whose message is the value converted to a string and whose
 - **THEN** the recorded entry's error is an `Error` with message `timeout`
   and `cause` `"timeout"`
 
+### Requirement: A dropped connection is counted, not reported
+
+A request whose connection dropped (`isNetworkFailure`: a `TypeError` whose
+whole message is a browser's dropped-connection text, such as Safari's "Load
+failed" or Chrome's "Failed to fetch") SHALL be logged at `warn` without
+`report` by persistence diagnostics and by the AI status probe, and SHALL be
+counted in telemetry instead: `sync_request_dropped` with `op`, the kind of
+failed operation (`pull`, `push`, `fetch`, `list`, `merge`, `delete`, `adopt`,
+`reconcile`, else `other`; never an id), for persistence, and `assistant_default_probe_failed`
+for the probe. A timeout of ours (`TimeoutError`), an `AbortError` and any
+other error SHALL still be reported, and SHALL send no `sync_request_dropped`.
+
+#### Scenario: A sync pull loses its connection
+
+- **WHEN** persistence diagnostics records `pull <thread>` failing with
+  `TypeError("Load failed")`
+- **THEN** the logger records a `warn` entry without `report`, and telemetry
+  records `sync_request_dropped` with `op` `pull`
+
+#### Scenario: A sync request times out
+
+- **WHEN** persistence diagnostics records a failure with a `TimeoutError`
+- **THEN** the logger records an `error` entry with `report: true`, and no
+  `sync_request_dropped` is sent
+
 ### Requirement: Code in the layers logs through the logger
 
 Code under `src/{features,shared,entities,widgets}/` and `api/` SHALL NOT
