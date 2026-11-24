@@ -25,7 +25,8 @@
 //   which refuses such a value in the bundle, only sees placeholders in this
 //   build. A secret here is what public-env.mjs's isSecretEntry calls one: at
 //   least 8 characters, under a secret-sounding name or a URL with a
-//   password. A Sensitive variable is pulled empty, so neither check sees it.
+//   password. `vercel pull` writes a Sensitive variable as the literal
+//   [SENSITIVE], which is no secret to look for and is skipped.
 //
 // Lines that are not NAME=value (Vercel's header comment) are dropped.
 //
@@ -70,6 +71,9 @@ const entriesOf = (text) =>
 /** As in client-v2/scripts/public-env.mjs: shorter values ("true") match by chance */
 const MIN_SECRET_LENGTH = 8;
 
+/** What `vercel pull` writes for a Sensitive variable's value */
+const SENSITIVE_PLACEHOLDER = "[SENSITIVE]";
+
 /** As public-env.mjs's isSecretName */
 const isSecretName = (name) =>
   /SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|PRIVATE|BYPASS/i.test(name) ||
@@ -91,9 +95,14 @@ export const publicSecrets = (text) => {
     name,
     unquoted(value),
   ]);
+  // TODO(HOO-2888 follow-up, Intake): the other public-env.mjs checks (token
+  // prefixes, a key in a URL's query) run only in `build`, after this file
+  // is published as an artifact; and isSecretName is a copy of
+  // public-env.mjs's, which a test does not tie to it yet.
   const secrets = entries.filter(
     ([name, value]) =>
       !isPublic(name) &&
+      value !== SENSITIVE_PLACEHOLDER &&
       value.length >= MIN_SECRET_LENGTH &&
       (isSecretName(name) || hasUrlPassword(value))
   );

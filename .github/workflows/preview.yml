@@ -96,8 +96,8 @@ env:
   CLOUD_SQL_LOGIN_USER: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
 
 jobs:
-  # A labelled PR's preview, in a chain of jobs that keeps every credential
-  # away from the code nobody reviews line by line: `yarn install`'s
+  # A labelled PR's preview, in a chain of jobs that keeps the workflow's
+  # credentials away from the code nobody reviews line by line: `yarn install`'s
   # dependencies and what `vercel build` runs over them (HOO-2888). Those run
   # only in `keys` and `build`, which hold no credential. The jobs that do hold
   # one run the workflow's own scripts under .github/scripts, the database
@@ -106,6 +106,9 @@ jobs:
   # from the PR's head like this file does, so they are as trusted as the
   # workflow: a branch that can edit them can edit the workflow too. The
   # split guards against a harmful dependency, not against the branch's author.
+  # The deployed preview still runs the dependencies, on Vercel, with the
+  # Preview environment's secrets and the PR's database; that is what a
+  # preview is, and why only a maintainer's label starts one.
   #
   #   database  provisions and migrates the PR's database   (Google OIDC or NEON_API_KEY)
   #   keys      keys the wasm and crate caches              (no credential)
@@ -345,7 +348,8 @@ jobs:
           fetch() { # $1: key, $2: destination
             mkdir -p "$(dirname "$2")"
             # A transfer cut short exits non-zero with whatever status arrived.
-            status=$(curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" -o "$2" -w '%{http_code}' \
+            # Bounded, so a stalled download warns instead of hitting the job's timeout.
+            status=$(curl -sS --connect-timeout 20 --max-time 300 -H "Authorization: Bearer $VERCEL_TOKEN" -o "$2" -w '%{http_code}' \
               "https://api.vercel.com/v8/artifacts/$1?teamId=$VERCEL_ORG_ID") || status="curl exit $? ($status)"
             case "$status" in
               2??) echo "$1: HIT" ;;
@@ -546,6 +550,8 @@ jobs:
 
   # Whichever job of the chain failed. Not on cancel: a newer push's run or
   # the teardown writes the comment.
+  # TODO(HOO-2888 follow-up, Intake): a job that times out ends cancelled, so
+  # it gets no comment either; the single job before the split had the same gap.
   report:
     name: report a failed preview
     needs: [database, keys, prepare, build, deploy]

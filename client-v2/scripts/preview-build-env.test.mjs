@@ -100,6 +100,15 @@ test("does not take a shared flag value for a secret", () => {
   );
 });
 
+test("does not take a short or Sensitive value of a secret name for a secret", () => {
+  assert.deepEqual(
+    publicSecrets(
+      'API_KEY="short"\nREACT_APP_A="short"\nAUTH_SECRET="[SENSITIVE]"\nREACT_APP_B="[SENSITIVE]"\n'
+    ),
+    []
+  );
+});
+
 test("takes a URL with a password for a secret, whatever its name", () => {
   assert.deepEqual(
     publicSecrets(

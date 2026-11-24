@@ -118,6 +118,17 @@ test("refuses an output folder that is a link", () => {
   assert.deepEqual(outputProblems(folder), ["no .vercel/output folder"]);
 });
 
+test("refuses a .vercel folder that is a link", () => {
+  const folder = buildOutput();
+  const vercel = path.join(folder, ".vercel");
+  execFileSync("mv", [
+    vercel,
+    path.join(folder, "..", `${path.basename(folder)}-v`),
+  ]);
+  symlinkSync(path.join(folder, "..", `${path.basename(folder)}-v`), vercel);
+  assert.deepEqual(outputProblems(folder), ["no .vercel folder"]);
+});
+
 test("refuses a FIFO", () => {
   const folder = buildOutput();
   execFileSync("mkfifo", [path.join(folder, ".vercel/output/static/pipe")]);
