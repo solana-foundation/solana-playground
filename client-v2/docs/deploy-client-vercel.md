@@ -77,8 +77,10 @@ has never been run end to end as one pass ([Known gaps](#known-gaps)).
    single callback, so a preview has no app of its own. Staging's previews
    sign in through staging's Production deployment, by the
    [OAuth proxy](#sign-in-on-previews).
-4. **Build server CORS.** `PG_CLIENT_URLS` on the build server includes the
-   production origin.
+4. **Build server.** Production sets `REACT_APP_SERVER_URL=/api/build-server`,
+   `PG_BUILD_SERVER_URL` and `PG_BUILD_SERVER_API_KEY`, the build server's
+   `PG_API_KEYS` holds that key, and its `PG_CLIENT_URLS` includes the
+   production origin ([Build server](#build-server)).
 5. **Dry run on staging**, from the branch being released, with
    `client-v2/.env` naming the staging project:
 
@@ -208,7 +210,34 @@ All three paths build `client-v2`, each from its own setting:
    No token is needed. The target runs `vercel link --yes --team "$VERCEL_DEPLOY_TEAM" --project "$VERCEL_DEPLOY_PROJECT_ID"` in a temporary directory under `.vercel/`. It accepts only a `prj_` ID, because a project name could make `vercel link --yes` create a project in the team. It copies only `orgId` and `projectId` into `.vercel/project.json`, because `vercel link` also writes a `.env.local` with an OIDC token and edits `.gitignore` in the directory it links.
 9. Neon: set `NEON_API_KEY` and `NEON_PROJECT_ID` in `client-v2/.env` and on GitHub (a secret and a variable); see [Neon preview databases](neon.md#configuration).
 
-Add the Vercel deployment origin to the server's [`PG_CLIENT_URLS`](https://github.com/solana-playground/solana-playground/blob/cd5555155c61572c8c49fb351890519af9e493ef/.env.example#L3) environment variable or CORS will reject every request.
+Connect the build server as [Build server](#build-server) describes.
+
+## Build server
+
+Production does not send the browser to the build server. It sets
+`REACT_APP_SERVER_URL=/api/build-server`, its own route (`api/build-server.mjs`),
+which forwards each build to `PG_BUILD_SERVER_URL`:
+
+- **Only a signed-in GitHub user builds.** The route checks the Better Auth
+  session and `isAllowedOrigin`, as `/api/agent` does. Signed out, it answers
+  `401` and the Build stage asks the user to sign in. A deployment without
+  sign-in configured refuses every build.
+- **Every build is on record.** A `build_audit` row is written before a build
+  reaches the build server, so the table needs `yarn db-migrate`. A build
+  whose row cannot be written is refused. Each user has one build running and
+  a capped number an hour; past either, the route answers `429`.
+- **The build server takes only this route.** The route sends
+  `PG_BUILD_SERVER_API_KEY` as `x-api-key`. Set it to this deployment's entry
+  of the build server's `PG_API_KEYS`, a comma-separated list with one key per
+  client. With keys set, the server answers `401` to a request without one.
+  Set the key on Vercel before the server gets it: a key the server holds and
+  Vercel does not send refuses every build.
+- **`PG_BUILD_SERVER_URL` unset** refuses every build.
+
+The build server's `PG_CLIENT_URLS` (its CORS list) matters only to a browser
+that calls the server directly, as a user who picks it in Settings does. Keep
+the production origin in it. The production runbook lists each value and who
+sets the server's side.
 
 ## Deploy
 
@@ -281,7 +310,7 @@ Every `REACT_APP_*` variable a build sees is public: every visitor can read it i
 
 | Variable | Holds |
 | --- | --- |
-| `REACT_APP_SERVER_URL`, `REACT_APP_SERVER_UNSTABLE` | the build server, and whether to use its `/unstable` routes |
+| `REACT_APP_SERVER_URL`, `REACT_APP_SERVER_UNSTABLE` | where builds go (`/api/build-server` on a deployment with sign-in), and whether to use the build server's `/unstable` routes |
 | `REACT_APP_{DEVNET,TESTNET,MAINNET}_RPC_URL` | the platform RPC endpoints |
 | `REACT_APP_{DEVNET,TESTNET,MAINNET}_READ_BUFFER_RPC_URL` | the RPC a deploy reads its program buffer through |
 | `REACT_APP_{DEVNET,TESTNET,MAINNET}_SEND_TX_PER_SECOND` | a deploy's buffer writes per second |
@@ -968,4 +997,4 @@ database behind it, use the per-commit URL `preview.yml` posts on the PR.
 
 ## Endpoint routing
 
-- The build server is the deployment's `REACT_APP_SERVER_URL` (`src/settings/server/default-endpoint.ts`). Unset, it defaults to `http://localhost:8080` and the browser console warns. A user can override it with the `server.endpoint` setting.
+- Builds go to the deployment's `REACT_APP_SERVER_URL` (`src/settings/server/default-endpoint.ts`). Unset, it defaults to `http://localhost:8080` and the browser console warns. A user can override it with the `server.endpoint` setting. A deployment with sign-in sets it to `/api/build-server`; see [Build server](#build-server).
