@@ -720,10 +720,10 @@ export const releaseProjectsUnchangedSince = async (
   reading: MarkReading
 ): Promise<string[]> =>
   releaseWhere(async (projectId, localName) => {
+    // The mark is read last: another tab may write it while `isReleasable` reads
+    if (!(await isReleasable(projectId, localName))) return false;
     const mark = await PgSyncMark.read(projectId);
-    if (!mark || reading.get(projectId) !== fingerprintOf(mark)) return false;
-    // Last: typing during a read after `isReleasable` would not be compared
-    return isReleasable(projectId, localName);
+    return !!mark && reading.get(projectId) === fingerprintOf(mark);
   });
 
 /**

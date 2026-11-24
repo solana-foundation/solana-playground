@@ -1031,24 +1031,26 @@ describe("releasing local projects after an account deletion", () => {
     expect(remove).not.toHaveBeenCalled();
   });
 
-  it("keeps a project typed into while the release reads its mark", async () => {
-    // The release reads the mark twice: for its own comparison, and in
-    // `isReleasable`. Typing that lands during the second read is seen only
-    // when the editor's buffers are compared after it
+  it("keeps a project whose mark changes while the release checks its files", async () => {
+    // Another tab's upload reached the account before the deletion, and that
+    // tab writes its mark and files here only as `isReleasable` makes its
+    // last comparison: the server copy they match is gone with the account
     withLocal({ alpha: "p1" });
     withFiles("alpha", { "src/lib.rs": "same" });
     await agreed("p1", { files: { "src/lib.rs": "same" } }, "t1");
     const reading = await readProjectMarks();
-    let markReads = 0;
-    const read = PgSyncMark.read.bind(PgSyncMark);
-    vi.spyOn(PgSyncMark, "read").mockImplementation(async (id) => {
-      markReads += 1;
-      return await read(id);
+    const pushed = { files: { "src/lib.rs": "pushed by another tab" } };
+    const pushedMark = JSON.stringify({
+      files: await hashFiles(pushed),
+      name: "alpha",
+      updatedAt: "t2",
+      dirty: false,
     });
     vi.spyOn(PgExplorer, "editorBuffers", "get").mockReturnValue({
-      read: (at) => {
-        if (at !== "/alpha/src/lib.rs") return undefined;
-        return markReads < 2 ? "same" : "same, and typed since";
+      read: () => {
+        withFiles("alpha", pushed.files);
+        storedFiles().set("/.config/sync/u1/p1.json", pushedMark);
+        return undefined;
       },
       write: () => undefined,
       discard: () => undefined,
