@@ -10,6 +10,9 @@ import Wallet, { WalletName } from "./Wallet";
 const wallets = vi.hoisted(() => ({
   switch: vi.fn(),
   update: vi.fn(),
+  selectStandard: vi.fn(),
+  /** A deploy holds the accounts */
+  held: false,
   standard: [] as { name: string; icon: string }[],
   isPg: true,
   show: false,
@@ -39,6 +42,11 @@ vi.mock("../../utils", () => ({
       })),
     switch: wallets.switch,
     update: wallets.update,
+    selectStandard: wallets.selectStandard,
+    get isSwitchHeld() {
+      return wallets.held;
+    },
+    onDidChangeSwitchHeld: () => ({ dispose: () => undefined }),
   },
 }));
 vi.mock("../../hooks", () => ({
@@ -133,11 +141,21 @@ describe("WalletName accounts menu", () => {
       screen.getByRole("menuitem", { name: "Phantom - (key-Phantom)" })
     );
 
-    expect(wallets.update).toHaveBeenCalledWith({
-      state: "sol",
-      standardName: "Phantom",
-    });
+    expect(wallets.selectStandard).toHaveBeenCalledWith("Phantom");
     expect(wallets.switch).not.toHaveBeenCalled();
+  });
+
+  it("disables every account while a deploy holds them", async () => {
+    wallets.standard = [{ name: "Phantom", icon: "phantom.svg" }];
+    wallets.held = true;
+    try {
+      await openAccounts();
+      for (const item of screen.getAllByRole("menuitem")) {
+        expect(item.getAttribute("data-disabled")).not.toBeNull();
+      }
+    } finally {
+      wallets.held = false;
+    }
   });
 
   it("draws a standard wallet's icon at the menu's icon size", async () => {

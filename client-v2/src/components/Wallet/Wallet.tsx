@@ -129,6 +129,8 @@ const WalletTopWrapper = styled.div`
 
 export const WalletName = () => {
   const wallet = useWallet();
+  // The account items are disabled while a deploy holds the accounts
+  useRenderOnChange(PgWallet.onDidChangeSwitchHeld);
   const { darken, lighten } = useDarken();
 
   const getAccountDisplayName = useCallback((account: WalletType) => {
@@ -170,7 +172,7 @@ export const WalletName = () => {
           {PgWallet.accounts.map((acc, i) => (
             <DropdownMenuItem
               key={"pg-" + i}
-              // A running deploy holds its account (`PgWallet.holdSwitch`)
+              // A running deploy holds the accounts (`PgWallet.holdSwitch`)
               disabled={PgWallet.isSwitchHeld}
               onSelect={() => PgWallet.switch(i)}
             >
@@ -184,12 +186,7 @@ export const WalletName = () => {
             <DropdownMenuItem
               key={"standard-" + standardWallet.name}
               disabled={PgWallet.isSwitchHeld}
-              onSelect={() => {
-                PgWallet.update({
-                  state: "sol",
-                  standardName: standardWallet.name,
-                });
-              }}
+              onSelect={() => PgWallet.selectStandard(standardWallet.name)}
             >
               {/* An image, which the item does not size as it does its icons */}
               <Img

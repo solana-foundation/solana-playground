@@ -11,6 +11,7 @@ import {
   derivable,
   updatable,
 } from "../decorators";
+import type { Disposable } from "../types";
 import { PgView } from "../view";
 import { PgWeb3 } from "../web3";
 import {
@@ -641,19 +642,27 @@ const reportKeyFailure =
   };
 
 /**
- * How many deploys hold the current account. A deploy signs with the account
- * it started with, so a switch meanwhile would leave the chip and the Deploy
- * payer line naming an account that is not paying
+ * How many deploys hold the wallet's accounts. A deploy signs with the account
+ * it started with, so a change of account meanwhile would leave the chip and
+ * the Deploy payer line naming an account that is not paying
  */
 let switchHolds = 0;
+const switchHoldListeners = new Set<(isHeld: boolean) => void>();
+const tellSwitchHold = () => {
+  for (const cb of switchHoldListeners) cb(switchHolds > 0);
+};
 
-/** Refuse to change the current account while a deploy holds it */
-const refuseWhileSwitchHeld = () => {
-  if (switchHolds > 0) {
-    throw new Error(
-      "A deploy is running: the account switches once it ends, since the deploy keeps signing with the one it started with."
-    );
+/** The refusal of a change of account while a deploy runs */
+export class AccountsHeldError extends Error {
+  constructor() {
+    super("A deploy is running: accounts cannot change until it ends.");
+    this.name = "AccountsHeldError";
   }
+}
+
+/** Refuse to change the wallet's accounts while a deploy holds them */
+const refuseWhileSwitchHeld = () => {
+  if (switchHolds > 0) throw new AccountsHeldError();
 };
 
 /**
@@ -693,6 +702,7 @@ class _PgWallet {
    * @returns `false` when an account with the name or key already existed
    * and it switched to that account instead
    * @throws while the wallet is unavailable or still loading
+   * @throws {AccountsHeldError} while a deploy holds the accounts
    */
   static add(params?: {
     name?: string;
@@ -758,6 +768,7 @@ class _PgWallet {
    * switched to that account instead
    * @throws while the wallet is unavailable or still loading, or when the provider cannot make
    * the key
+   * @throws {AccountsHeldError} while a deploy holds the accounts
    */
   // eslint-disable-next-line layers/curry-order -- the name is optional as in `add`, a call of the wallet API
   static async addNew(name?: string) {
@@ -907,6 +918,7 @@ class _PgWallet {
    * user is told.
    *
    * @param index account index
+   * @throws {AccountsHeldError} while a deploy holds the accounts
    */
   static async remove(index: number = PgWallet.currentIndex) {
     refuseWhileSwitchHeld();
@@ -960,6 +972,8 @@ class _PgWallet {
    * @throws while the wallet is unavailable or still loading, or under a provider that keeps
    * the keys out of the page (the key page's own panel imports there), before
    * the file picker opens
+   * @throws {AccountsHeldError} while a deploy holds the accounts, before the
+   * file picker opens
    */
   static async import(name?: string) {
     refuseWhileSwitchHeld();
@@ -1018,29 +1032,49 @@ class _PgWallet {
   }
 
   /**
-   * Hold the current account for a deploy: until the returned release runs,
-   * `switch`, `add`, `addNew`, `import` and `remove` refuse. Releasing twice
-   * releases once.
+   * Hold the wallet's accounts for a deploy: until the returned release runs,
+   * `switch`, `selectStandard`, `add`, `addNew`, `import` and `remove` throw
+   * `AccountsHeldError`. Other writes of the wallet's state (a load, a
+   * disconnect) are not held. Releasing twice releases once.
    */
   static holdSwitch() {
     switchHolds++;
+    if (switchHolds === 1) tellSwitchHold();
     let isReleased = false;
     return () => {
       if (isReleased) return;
       isReleased = true;
       switchHolds--;
+      if (switchHolds === 0) tellSwitchHold();
     };
   }
 
-  /** Whether a deploy holds the current account */
+  /** Whether a deploy holds the wallet's accounts */
   static get isSwitchHeld() {
     return switchHolds > 0;
+  }
+
+  /** Called when a deploy takes or lets go of the wallet's accounts */
+  static onDidChangeSwitchHeld(cb: (isHeld?: boolean) => void): Disposable {
+    switchHoldListeners.add(cb);
+    return { dispose: () => void switchHoldListeners.delete(cb) };
+  }
+
+  /**
+   * Make a connected Wallet Standard wallet the current one.
+   *
+   * @throws {AccountsHeldError} while a deploy holds the accounts
+   */
+  static selectStandard(name: string) {
+    refuseWhileSwitchHeld();
+    PgWallet.update({ state: "sol", standardName: name });
   }
 
   /**
    * Switch to the given account index.
    *
    * @param index account index to switch to
+   * @throws {AccountsHeldError} while a deploy holds the accounts
    */
   static switch(index: number) {
     refuseWhileSwitchHeld();

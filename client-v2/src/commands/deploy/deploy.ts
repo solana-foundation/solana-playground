@@ -109,8 +109,8 @@ export const deploy = createCmd({
     );
 
     PgDeployRun.begin();
-    // The deploy signs with the account it started with: hold it, so the
-    // chip and the payer line cannot name another one meanwhile
+    // The deploy signs with the account it started with: hold the wallet's
+    // accounts, so the Wallet window and the chip cannot change them meanwhile
     const releaseAccount = PgWallet.holdSwitch();
     try {
       const startTime = performance.now();

@@ -27,7 +27,7 @@ import {
 import { toggleWallet } from "../../commands/connect/connect-wallet";
 import { isSignInFailure } from "../../features/auth";
 import { FaucetRefusedToast } from "../../features/fund-wallet";
-import { useCopy } from "../../hooks";
+import { useCopy, useRenderOnChange } from "../../hooks";
 import { NETWORK_UNREACHABLE } from "../../shared/lib/faucet-limit";
 import { Fn, PgConnection, PgView, PgWallet } from "../../utils";
 import { KeypairFileError } from "../../utils/wallet/keypair-file";
@@ -92,6 +92,8 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
 }) => {
   const { airdrop, faucet } = useAirdrop("wallet");
   const { darken, lighten } = useDarken();
+  // Add, Remove and Import are disabled while a deploy holds the accounts
+  useRenderOnChange(PgWallet.onDidChangeSwitchHeld);
 
   const wallet = PgWallet.current!;
   const isPg = wallet.isPg;
@@ -205,6 +207,7 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
             </DropdownMenuItem>
           )}
           <DropdownMenuItem
+            disabled={PgWallet.isSwitchHeld}
             onSelect={() =>
               openModal("add", async () => {
                 const { Add } = await import("./Modals/Add");
@@ -223,6 +226,7 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
           )}
           {isPg && (
             <DropdownMenuItem
+              disabled={PgWallet.isSwitchHeld}
               variant="destructive"
               onSelect={() =>
                 openModal("remove", async () => {
@@ -236,6 +240,7 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
             </DropdownMenuItem>
           )}
           <DropdownMenuItem
+            disabled={PgWallet.isSwitchHeld}
             onSelect={
               PgWallet.hasKeysInPage()
                 ? importWallet

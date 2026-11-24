@@ -169,6 +169,12 @@ const runChecks = async () => {
   for (const check of checks.slice(1)) await check();
 };
 
+// Every run, whether it deployed, failed or stopped, lets go of the accounts
+afterEach(() => {
+  expect(accountHold.held).toBe(0);
+  accountHold.taken = 0;
+});
+
 beforeEach(() => {
   for (const sub of subscriptions.splice(0)) sub.dispose();
   vi.clearAllMocks();
@@ -208,12 +214,11 @@ describe("deploy run", () => {
       .mockResolvedValueOnce(10_000_000_000) // before the run spends
       .mockResolvedValueOnce(9_000_000_000); // after it
 
-    const taken = accountHold.taken;
     const result = await handleDeploy();
 
     expect(steps).toEqual(["buffer", "write", "deploy"]);
-    // The account was held for the run, and is free again after it
-    expect(accountHold.taken).toBe(taken + 1);
+    // The accounts were held for the run; afterEach checks the release
+    expect(accountHold.taken).toBe(1);
     expect(accountHold.held).toBe(0);
     expect(result).toEqual({
       signature: "sig-deploy",

@@ -20,7 +20,13 @@ import type {
   WalletAccount,
   WalletState,
 } from "./types";
-import { loadingWith, PgWallet, readWith, refuseKeylessRecord } from "./wallet";
+import {
+  AccountsHeldError,
+  loadingWith,
+  PgWallet,
+  readWith,
+  refuseKeylessRecord,
+} from "./wallet";
 import { WALLET_LOCAL_KEY, type WalletRead } from "./wallet-storage";
 
 // The connection module reads build-time globals the unit runner does not
@@ -139,7 +145,10 @@ describe("utils/wallet/wallet", () => {
       const release = PgWallet.holdSwitch();
       try {
         expect(PgWallet.isSwitchHeld).toBe(true);
-        expect(() => PgWallet.switch(0)).toThrow("A deploy is running");
+        expect(() => PgWallet.switch(0)).toThrow(AccountsHeldError);
+        expect(() => PgWallet.selectStandard("Phantom")).toThrow(
+          AccountsHeldError
+        );
         expect(() => PgWallet.add()).toThrow("A deploy is running");
         await expect(PgWallet.addNew()).rejects.toThrow("A deploy is running");
         await expect(PgWallet.import()).rejects.toThrow("A deploy is running");
@@ -160,6 +169,20 @@ describe("utils/wallet/wallet", () => {
       expect(PgWallet.isSwitchHeld).toBe(true);
       second();
       expect(PgWallet.isSwitchHeld).toBe(false);
+    });
+
+    it("tells its listeners when the accounts become held and free, once each", () => {
+      const seen: (boolean | undefined)[] = [];
+      const { dispose } = PgWallet.onDidChangeSwitchHeld((isHeld) =>
+        seen.push(isHeld)
+      );
+      const first = PgWallet.holdSwitch();
+      const second = PgWallet.holdSwitch();
+      first();
+      second();
+      dispose();
+      PgWallet.holdSwitch()();
+      expect(seen).toStrictEqual([true, false]);
     });
   });
 

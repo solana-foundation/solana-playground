@@ -37,6 +37,8 @@ vi.mock("../../utils", () => ({
     import: vi.fn(),
     export: vi.fn(),
     hasKeysInPage: vi.fn(() => true),
+    isSwitchHeld: false,
+    onDidChangeSwitchHeld: () => ({ dispose: () => undefined }),
   },
   PgConnection: { cluster: "devnet", getAirdropAmount: () => 5 },
 }));
@@ -47,7 +49,10 @@ vi.mock("./Modals/KeyFile", () => ({
   ExportKey: () => undefined,
 }));
 
-vi.mock("../../hooks", () => ({ useCopy: () => [false, vi.fn()] }));
+vi.mock("../../hooks", () => ({
+  useCopy: () => [false, vi.fn()],
+  useRenderOnChange: () => undefined,
+}));
 const airdropHook = vi.hoisted(() => ({
   airdrop: vi.fn(),
   faucet: "none" as Faucet,
@@ -150,6 +155,27 @@ const openMenu = async () => {
 };
 
 describe("wallet Settings menu", () => {
+  it("disables Add, Remove and Import while a deploy holds the accounts", async () => {
+    const wallet = PgWallet as unknown as { isSwitchHeld: boolean };
+    wallet.isSwitchHeld = true;
+    try {
+      render(<Host />);
+      await openMenu();
+      for (const name of [/^Add$/, /Remove/, /Import/]) {
+        expect(
+          screen.getByRole("menuitem", { name }).getAttribute("data-disabled")
+        ).not.toBeNull();
+      }
+      expect(
+        screen
+          .getByRole("menuitem", { name: /Rename/ })
+          .getAttribute("data-disabled")
+      ).toBeNull();
+    } finally {
+      wallet.isSwitchHeld = false;
+    }
+  });
+
   it("focuses the rename input after Rename, not the trigger", async () => {
     render(<Host />);
     await openMenu();
