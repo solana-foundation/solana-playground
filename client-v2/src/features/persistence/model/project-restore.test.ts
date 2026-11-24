@@ -1030,6 +1030,34 @@ describe("releasing local projects after an account deletion", () => {
     expect(await releaseProjectsUnchangedSince(reading)).toEqual([]);
     expect(remove).not.toHaveBeenCalled();
   });
+
+  it("keeps a project typed into while the release reads its mark", async () => {
+    // The release reads the mark twice: for its own comparison, and in
+    // `isReleasable`. Typing that lands during the second read is seen only
+    // when the editor's buffers are compared after it
+    withLocal({ alpha: "p1" });
+    withFiles("alpha", { "src/lib.rs": "same" });
+    await agreed("p1", { files: { "src/lib.rs": "same" } }, "t1");
+    const reading = await readProjectMarks();
+    let markReads = 0;
+    const read = PgSyncMark.read.bind(PgSyncMark);
+    vi.spyOn(PgSyncMark, "read").mockImplementation(async (id) => {
+      markReads += 1;
+      return await read(id);
+    });
+    vi.spyOn(PgExplorer, "editorBuffers", "get").mockReturnValue({
+      read: (at) => {
+        if (at !== "/alpha/src/lib.rs") return undefined;
+        return markReads < 2 ? "same" : "same, and typed since";
+      },
+      write: () => undefined,
+      discard: () => undefined,
+    });
+    const remove = stubDelete();
+
+    expect(await releaseProjectsUnchangedSince(reading)).toEqual([]);
+    expect(remove).not.toHaveBeenCalled();
+  });
 });
 
 describe("a project the account cap refused", () => {
