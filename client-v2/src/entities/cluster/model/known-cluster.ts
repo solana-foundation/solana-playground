@@ -1,7 +1,7 @@
 import { createLogger } from "@/shared/lib/logger";
 
 import type { Cluster } from "./clusters";
-import { CLUSTERS, Endpoint, findClusterWith } from "./clusters";
+import { CLUSTERS, findClusterWith } from "./clusters";
 
 const log = createLogger("connection:cluster");
 
@@ -24,8 +24,6 @@ const findCluster = findClusterWith(CLUSTERS);
 
 /** The cluster of `endpoint` when it is known without a request; a custom endpoint gives `undefined` */
 export const getKnownCluster = (endpoint: string): Cluster | undefined => {
-  if (endpoint.startsWith(Endpoint.PLAYNET)) return "playnet";
-
   // Local: Localnet and Surfpool, on any port. The host is compared, not
   // the URL text, since a local endpoint opens the airdrop's sign-in gate
   // (`isAirdropSignInGated`) and `https://localhost.example.com` is remote

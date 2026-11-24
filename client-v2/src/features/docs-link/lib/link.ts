@@ -6,18 +6,18 @@ export interface DocsLink {
   name: string;
   /** The file's text */
   code: string;
-  /** Shown above the code, as "From {host}: {title}" */
+  /** Shown above the code, as "Opened from a link: {title}" */
   title: string;
   /** The `https:` page on `solana.com` the link came from */
   from?: string;
-  /** Devnet SOL the script needs before it can run */
+  /** Devnet SOL the script needs before it can run, at most `MAX_LINK_SOL` */
   sol?: number;
 }
 
 /**
  * Why a link did not open: a required key absent, another format version,
  * code that does not decode, a file empty or over the cap, a bad file name, or
- * a `sol` that is not a positive number
+ * a `sol` that is not a positive number up to `MAX_LINK_SOL`
  */
 export type DocsLinkFailure =
   | "missing"
@@ -36,6 +36,13 @@ const VERSION = "1";
 
 /** Largest file a link may carry, inflated */
 export const MAX_DOCS_LINK_BYTES = 100 * 1024;
+
+/**
+ * The most SOL a link may ask the user to fund the wallet with. A link is
+ * anyone's to write, and the funding card would otherwise ask for whatever
+ * it names; the Quickstart asks for 0.02.
+ */
+export const MAX_LINK_SOL = 1;
 
 /** A file name a link may give: no folders, a script's extension */
 const NAME_REGEX = /^[A-Za-z0-9._-]+\.(ts|js)$/;
@@ -178,7 +185,7 @@ export const decodeDocsLink = (fragment: string): DecodedDocsLink => {
   if (!NAME_REGEX.test(name)) return fail("name");
 
   const sol = params.has("sol") ? Number(params.get("sol")) : undefined;
-  if (sol !== undefined && !(Number.isFinite(sol) && sol > 0)) {
+  if (sol !== undefined && !(sol > 0 && sol <= MAX_LINK_SOL)) {
     return fail("sol");
   }
 
@@ -232,7 +239,7 @@ export const backToDocsHref = (from: string | undefined, referrer: string) => {
 };
 
 if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
+  const { describe, it, expect, vi } = import.meta.vitest;
 
   describe("features/docs-link/lib/link", () => {
     const SCRIPT = [
@@ -286,6 +293,10 @@ if (import.meta.vitest) {
       expect(reasonOf(withParam("sol", "lots"))).toBe("sol");
       expect(reasonOf(withParam("sol", "0"))).toBe("sol");
       expect(reasonOf(withParam("sol", "Infinity"))).toBe("sol");
+      // A link may not ask for more than the cap, which a docs page never needs
+      expect(reasonOf(withParam("sol", "2"))).toBe("sol");
+      expect(reasonOf(withParam("sol", "1.000001"))).toBe("sol");
+      expect(reasonOf(withParam("sol", String(MAX_LINK_SOL)))).toBe("ok");
 
       const tooBig = encodeDocsLink({
         name: "a.ts",
@@ -332,13 +343,33 @@ if (import.meta.vitest) {
     });
 
     it("stops inflating a stream that grows past the cap", () => {
-      // 50 MB of one byte deflates to about 50 KB; only the cap stops it
+      // Ten times the cap deflates to a few kilobytes; a check after inflating would still return "size"
       const bomb = encodeDocsLink({
         name: "a.ts",
-        code: "a".repeat(50 * 1024 * 1024),
+        code: "a".repeat(MAX_DOCS_LINK_BYTES * 10),
       });
-      const decoded = decodeDocsLink(bomb);
-      expect(decoded.ok || decoded.reason).toBe("size");
+      const push = Inflate.prototype.push;
+      let inflated = 0;
+      const spy = vi
+        .spyOn(Inflate.prototype, "push")
+        .mockImplementation(function (this: Inflate, ...args) {
+          const onData = this.onData.bind(this);
+          this.onData = (chunk) => {
+            inflated += (chunk as Uint8Array).length;
+            onData(chunk);
+          };
+          return push.apply(this, args);
+        });
+
+      try {
+        const decoded = decodeDocsLink(bomb);
+
+        expect(decoded.ok || decoded.reason).toBe("size");
+        expect(inflated).toBeGreaterThan(MAX_DOCS_LINK_BYTES);
+        expect(inflated).toBeLessThanOrEqual(MAX_DOCS_LINK_BYTES + 16 * 1024);
+      } finally {
+        spy.mockRestore();
+      }
     });
 
     it("never uses a source that is not an https Solana page", () => {
@@ -348,6 +379,7 @@ if (import.meta.vitest) {
       };
       const fromOf = (from: string) => fromOfEncoded(encodeURIComponent(from));
       expect(fromOfEncoded("javascript%3Aalert(1)")).toBeUndefined();
+      // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- the insecure scheme is the input under test
       expect(fromOf("http://solana.com/docs")).toBeUndefined();
       expect(fromOf("https://evil.example/docs")).toBeUndefined();
       expect(fromOf("https://notsolana.com/docs")).toBeUndefined();
@@ -372,6 +404,7 @@ if (import.meta.vitest) {
       expect(backToDocsHref(undefined, "https://notsolana.com/docs")).toBe(
         DOCS_HOME
       );
+      // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- the insecure scheme is the input under test
       expect(backToDocsHref(undefined, "http://solana.com/docs")).toBe(
         DOCS_HOME
       );

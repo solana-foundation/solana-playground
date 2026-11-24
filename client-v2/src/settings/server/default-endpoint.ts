@@ -3,6 +3,15 @@ import { BUILD_SERVER_URL } from "../../shared/config/client-env";
 /** A build server on this machine, and the default when `REACT_APP_SERVER_URL` is empty */
 export const LOCAL_ENDPOINT = "http://localhost:8080";
 
+/**
+ * This deployment's own way to the build server (`api/build-server.mjs`),
+ * which asks for a GitHub sign-in and records every build. Production sets
+ * `REACT_APP_SERVER_URL` to it; the route forwards to `PG_BUILD_SERVER_URL`.
+ * A path, not an address: it resolves against whichever origin serves the
+ * client, a preview's included.
+ */
+export const BUILD_SERVER_ROUTE = "/api/build-server";
+
 type EndpointOption = { name: string; value: string };
 
 /**

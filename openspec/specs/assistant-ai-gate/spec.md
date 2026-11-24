@@ -88,7 +88,7 @@ The assistant widget SHALL report, through its tracker:
 
 ### Requirement: The head names the off state
 
-While the assistant is off for one of the reasons `#assistant-ai-off` names, the assistant's head SHALL show a status `#assistant-status`, a status dot beside a word, after the model label: "Off" when there is no hosted model or nobody is signed in, and "Not responding" when the hosted model's availability is unknown. The head SHALL show it in Sources and tools too, where the composer and its row are not on screen. It SHALL NOT show while a model can answer or while the deployment's answer is still being read.
+While the assistant is off for one of the reasons `#assistant-ai-off` names, the assistant's head SHALL show a status `#assistant-status`, a status dot beside a word, after the head's title: "Off" when there is no hosted model or nobody is signed in, and "Not responding" when the hosted model's availability is unknown. The head SHALL show it in Sources and tools too, where the composer and its row are not on screen. It SHALL NOT show while a model can answer or while the deployment's answer is still being read.
 
 #### Scenario: The head says the assistant is off
 

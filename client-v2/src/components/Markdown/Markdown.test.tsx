@@ -11,14 +11,22 @@ vi.mock("../CodeBlock", () => ({
 // so it is replaced with the few members Markdown touches
 vi.mock("../../utils", () => ({
   PgCommon: {
-    joinPaths: vi.fn(),
+    // Mirrors the real join for two parts: one slash between them
+    joinPaths: (root: string, path: string) =>
+      (root.endsWith("/") ? root : `${root}/`) +
+      (path.startsWith("/") ? path.slice(1) : path),
     toKebabFromTitle: (s: string) => s.toLowerCase(),
   },
   PgRouter: { location: {}, onDidChangeHash: () => ({ dispose: () => {} }) },
   PgTheme: { convertToCSS: () => "", alpha: (color: string) => color },
 }));
 vi.mock("../Link", () => ({ __esModule: true, default: () => null }));
-vi.mock("../Img", () => ({ __esModule: true, default: () => null }));
+vi.mock("../Img", () => ({
+  __esModule: true,
+  default: ({ src, alt }: { src?: string; alt?: string }) => (
+    <img data-testid="img" src={src} alt={alt} />
+  ),
+}));
 vi.mock("../Icons", () => ({ HyperLink: () => null }));
 
 import { act } from "react";
@@ -121,5 +129,57 @@ describe("Markdown", () => {
     });
 
     expect(container.querySelector("h2")?.id).toBe("mdgetting");
+  });
+
+  // Markdown here is often text the page does not control (an assistant
+  // reply, an imported tutorial): an image from another host would be
+  // fetched with no click, so it is shown as text
+  describe("images", () => {
+    const render = (markdown: string) =>
+      act(async () => {
+        root.render(<Markdown rootSrc="/tutorials/hello">{markdown}</Markdown>);
+      });
+
+    it("renders an image at a local path", async () => {
+      await render("![diagram](/tutorials/hello/diagram.png)");
+
+      const img = container.querySelector('[data-testid="img"]');
+      expect(img?.getAttribute("src")).toBe("/tutorials/hello/diagram.png");
+      expect(img?.getAttribute("alt")).toBe("diagram");
+    });
+
+    it("renders a relative image under the root it is given", async () => {
+      await render("![diagram](diagram.png)");
+
+      const img = container.querySelector('[data-testid="img"]');
+      expect(img?.getAttribute("src")).toBe("/tutorials/hello/diagram.png");
+    });
+
+    it.each([
+      ["with no scheme", "//example.com/pixel.png"],
+      ["over https", "https://example.com/pixel.png"],
+    ])(
+      "shows an image from another host %s as its alt text and address",
+      async (_, address) => {
+        await render(`![Account layout](${address})`);
+
+        expect(container.querySelector('[data-testid="img"]')).toBeNull();
+        expect(container.textContent).toBe(`Account layout (${address})`);
+      }
+    );
+
+    it("shows an image from another host with no alt text as its address alone", async () => {
+      await render("![](//example.com/pixel.png)");
+
+      expect(container.querySelector('[data-testid="img"]')).toBeNull();
+      expect(container.textContent).toBe("//example.com/pixel.png");
+    });
+
+    it("shows an image whose address react-markdown cleared as its alt text", async () => {
+      await render("![Logo](data:image/png;base64,AAAA)");
+
+      expect(container.querySelector('[data-testid="img"]')).toBeNull();
+      expect(container.textContent).toBe("Logo");
+    });
   });
 });

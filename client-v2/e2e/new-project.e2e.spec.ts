@@ -14,7 +14,18 @@ import {
   test,
 } from "./fixtures";
 import { lineOf, linesOn, linesRead } from "./telemetry";
-import { DESK, openPhoneMenu, PHONE, waitForPhonePage } from "./viewports";
+import {
+  DESK,
+  DOCK_DESK,
+  openPhoneMenu,
+  PHONE,
+  waitForPhonePage,
+} from "./viewports";
+
+// These tests drive the project tree as its docked column, which needs a code
+// area of 1100 px or more; the default window is too narrow and shows the
+// dropdown instead
+test.use({ viewport: DOCK_DESK });
 
 /** One of the two lists, by its name (its count follows the name) */
 const list = (page: Page, name: "Tutorials" | "Programs") =>

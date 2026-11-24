@@ -4,13 +4,10 @@ import { PgTerminal } from "./terminal";
 
 /** Mapped import results */
 interface ImportResult {
-  "anchor-cli": typeof import("@solana-playground/anchor-cli");
-  playnet: typeof import("@solana-playground/playnet");
   rustfmt: typeof import("@solana-playground/rustfmt");
   "seahorse-compile": typeof import("@solana-playground/seahorse-compile");
   "solana-cli": typeof import("@solana-playground/solana-cli");
   "spl-token-cli": typeof import("@solana-playground/spl-token-cli");
-  "sugar-cli": typeof import("@solana-playground/sugar-cli");
 }
 
 /** All package names */
@@ -54,10 +51,6 @@ If the problem continues, consider filing a bug report in ${PgTerminal.underline
    */
   private static async _import(name: PackageName) {
     switch (name) {
-      case "anchor-cli":
-        return await import("@solana-playground/anchor-cli");
-      case "playnet":
-        return await import("@solana-playground/playnet");
       case "rustfmt":
         return await import("@solana-playground/rustfmt");
       case "seahorse-compile":
@@ -66,8 +59,6 @@ If the problem continues, consider filing a bug report in ${PgTerminal.underline
         return await import("@solana-playground/solana-cli");
       case "spl-token-cli":
         return await import("@solana-playground/spl-token-cli");
-      case "sugar-cli":
-        return await import("@solana-playground/sugar-cli");
       default:
         throw new Error(`Unknown package \`${name}\``);
     }

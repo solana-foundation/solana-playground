@@ -105,7 +105,22 @@ export interface CommandApproval {
   question?: string;
 }
 
-export type ApprovalRequest = PatchApproval | CommandApproval;
+/** A tool call on an MCP server the user added, waiting on the user */
+export interface ToolApproval {
+  type: "tool";
+  /** The server's name, as the user named it */
+  server: string;
+  tool: string;
+  /** Where the call goes: the host of the server's URL */
+  host: string;
+  /** The call's arguments, as pretty-printed JSON, shown in full */
+  input: string;
+  /** Plain-language description of what allowing it does */
+  effect: string;
+  question: string;
+}
+
+export type ApprovalRequest = PatchApproval | CommandApproval | ToolApproval;
 
 /** How an approval was answered, and which card it was asked on */
 export interface ApprovalAnswer {
@@ -783,6 +798,14 @@ export class PgAssistant {
         ? { ...server, enabled: false }
         : server
     );
+  }
+
+  /**
+   * Whether the deployment's gateway serves this server, and so its operator
+   * answers for it; the user's own servers are asked about call by call
+   */
+  static isGatewayMcpServer(id: string): boolean {
+    return PgAssistant._gatewayServers.some((server) => server.id === id);
   }
 
   /** Only the entries the user added, which is what the editor edits */

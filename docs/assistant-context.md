@@ -110,6 +110,9 @@ the browser, behind the same approval gates.
   clicks, which holds the agent loop open. That is how "propose automatically,
   apply explicitly" is enforced in the loop itself, identically for every
   provider, rather than by the transport inspecting a call before it runs.
+  A tool of an MCP server the user added waits on the same card, which names
+  the tool, the server's host and the arguments; a declined call reaches no
+  server. The gateway's own documentation servers run without a card.
 - Project context comes from what the client already holds: `PgExplorer` for
   files and the open tabs, `PgProgramInfo` for the IDL and program ID,
   `PgGlobal` for build and deploy state. Every turn carries the
@@ -132,6 +135,33 @@ the browser, behind the same approval gates.
 anywhere — the raw `stderr` was printed to the terminal and discarded, leaving
 only a `lastBuildFailed` boolean. Explaining a real error needs the compiler's
 real words, so the build command now stores it.
+
+**Project code runs in a sandbox.** `run` and `test` execute scripts and tests
+in a sandboxed frame with an opaque origin, so a shared project's code cannot
+reach the page, its storage or the built-in wallet's secret key. Every signature
+comes from the page over a private message channel.
+
+- `pg.wallet.keypair` is still a `Keypair` for signing: `tx.sign(pg.wallet.keypair)`,
+  `sendAndConfirmTransaction(connection, tx, [pg.wallet.keypair])`, v0
+  transactions, and Anchor's `provider.wallet.payer` and `.signers([payer])` all
+  work. So do Metaplex's `keypairIdentity(pg.wallet.keypair)` and passing
+  `pg.wallet.keypair` as a signer of a Metaplex operation, and Kit's
+  `signerFromFile(...)`, which is the Playground wallet whatever path it names
+  (with another wallet connected, it says to switch to the Playground wallet).
+- Reading `pg.wallet.keypair.secretKey` throws an error that names
+  `pg.wallet.signTransaction` and `pg.wallet.signMessage`. So does anything built
+  on the bytes, such as `Keypair.fromSecretKey(pg.wallet.keypair.secretKey)` or
+  `nacl.sign.detached(message, keypair.secretKey)`. Asked about that error, rewrite
+  the code to use those two methods; a key the script generates itself keeps its
+  bytes.
+- `tx.sign(...)` returns a promise in the sandbox. Until it resolves, the
+  transaction holds a placeholder for the wallet's signature, which is replaced
+  when the transaction is sent or simulated through a `Connection`. Code that
+  reads `tx.signature`, calls `tx.verifySignatures()`, or sends the bytes by any
+  other route must `await tx.sign(...)` first.
+- Websocket subscriptions are not carried through the page, so
+  `onAccountChange` and its kin do not work on Playnet from project code;
+  `confirmTransaction` polls instead.
 
 ## Status
 
@@ -180,15 +210,25 @@ Done:
   keeps the three status dots and an Account button that opens the same
   menu; on a phone the three fold into one status chip in the top bar that
   opens a sheet), the
-  assistant, then the work area. Across the top of the work area runs the
-  stage bar (the project's name, whether or not the assistant shows, the
-  assistant's toggle, Docs); under it the stepper (Write → Build → Deploy →
-  Interact, state derived from real build/deploy events); under that the
-  editor head, with the open files' tabs on the left and two toggles on the
-  right, Files and Terminal; under the head sit the Files column (closed on
-  a first visit; Files in the head opens and closes it and always works,
-  Cmd+E too, on a Mac not while the editor has focus, where the editor takes
-  the key) and the stage, with the terminal in a console
+  assistant, then the work area. The assistant's head names the open
+  project (beside a tutorial not yet started, its name; with neither, the
+  model; the composer's model button
+  always shows the model) and its Collapse hides the assistant. Across the
+  top of the work area runs the stepper (Write → Build → Deploy → Interact,
+  state derived from real build/deploy events); under it the editor head,
+  the work's one bar, with the open files' tabs on the left and, on the
+  right, Files, Terminal, Share, "Expand assistant" (only while the
+  assistant is hidden) and More (Solana documentation). Home keeps a bar of
+  its own. The project tree works as in a tutorial: docked, as a column left
+  of the stage with an unpin at its top, or as a dropdown under the head
+  with a pin that docks it. A first visit docks it, and it takes a column
+  only while the code area (the files column and the stage together) is
+  1100 px or wider; narrower, Files opens the dropdown, which then has no
+  pin. Files undocks a docked tree, and otherwise opens or closes the
+  dropdown; opening a file from the dropdown closes it. Cmd+E does what
+  Files does, on a Mac not while the editor has focus, where the editor
+  takes the key. Under the head sit the docked tree and the stage, with the
+  terminal in a console
   drawer under the stage (Cmd+J). The assistant is a resizable panel on
   screens 1024 px and wider and a side Sheet from 768 to 1023 px, where the
   navigation starts as a rail. Below 768 px the app is three swiped
@@ -311,8 +351,8 @@ Honesty rule for the demo — never present a mocked step as working.
   through the same gateway and is listed for everyone, signed in or not. Each
   server and each skill has a checkbox in the Sources tab; one switched off
   offers nothing to the next turn, and the choice survives a reload.
-- **Real, stubbed only on request:** Rust intellisense and the `solana`,
-  `anchor`, `spl-token`, `sugar` terminal commands. A deployment always ships
+- **Real, stubbed only on request:** Rust intellisense and the `solana` and
+  `spl-token` terminal commands. A deployment always ships
   the real packages. Local UI work may stub them with `USE_WASM_STUBS=true` to
   skip the WASM build; a stub throws a message pointing at
   `yarn --cwd client-v2 setup`.
@@ -336,10 +376,18 @@ wallet. When someone has none, or shows you an airdrop error, tell them the
 ways below. You explain them; you have no tool that airdrops or sends SOL, so
 never say you did.
 
+The project state names the Playground wallet's public key, the address of
+any wallet connected through the wallet chip, and which of them signs. Use the
+signing wallet's address for `<address>` below and in commands for the user's
+own wallet, unless the user names another. You never get a secret key or the
+address of the user's RPC, so never ask for either. `Cluster: custom` means an
+RPC whose network the Playground does not know, or has not read yet: do not
+assume a network, a faucet or an airdrop for it; ask the user.
+
 - **Airdrop.** The `airdrop` terminal command, or Get SOL on the wallet chip
   in the console bar, asks the network's faucet: 5 SOL at once on devnet, 1 on
   testnet. Automatic airdrop is off by default. Every network but a local
-  validator (localnet, playnet) asks for a GitHub sign-in first.
+  validator (localnet) asks for a GitHub sign-in first.
 - **The web faucet, when the airdrop is refused.** Once the faucet was asked
   and sent nothing, for a 429, its daily limit or any other failure, the
   terminal, the wallet chip, the wallet menu and the "Not enough SOL" cards

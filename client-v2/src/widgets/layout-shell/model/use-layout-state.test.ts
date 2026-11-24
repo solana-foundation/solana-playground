@@ -60,21 +60,21 @@ it("should write and send nothing for a toggle to the value it already has", () 
   expect(stored()).toEqual(DRAGGED);
 });
 
-it("should open a first visit with the files column closed", () => {
+it("should open a first visit with the tree docked", () => {
   const { result } = renderHook(() => useLayoutState());
-  expect(result.current.state.open.files).toBe(false);
+  expect(result.current.state.open.files).toBe(true);
 });
 
-it("should keep a saved open files column open", () => {
+it("should keep a saved undocked tree undocked", () => {
   localStorage.setItem(
     LAYOUT_STORAGE_KEY,
     JSON.stringify({
       v: 2,
-      open: { nav: true, files: true, assistant: true, console: false },
+      open: { nav: true, files: false, assistant: true, console: false },
     })
   );
   const { result } = renderHook(() => useLayoutState());
-  expect(result.current.state.open.files).toBe(true);
+  expect(result.current.state.open.files).toBe(false);
 });
 
 it("should keep a saved closed files column closed", () => {

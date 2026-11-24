@@ -4,6 +4,8 @@ import Ajv from "ajv";
 
 // Relative on purpose: `yarn tutorial:check` runs this module through tsx,
 // with no `@/` alias, and the schema sits beside the definitions it checks
+// eslint-disable-next-line layers/alias-across-modules -- tsx resolves no `@/` alias
+import { escapeRegExp } from "../../../../shared/lib/escape-reg-exp";
 import schema from "../../../../tutorials/tutorial.schema.json";
 import type {
   Beat,
@@ -333,16 +335,16 @@ const timesHeld = (file: string, block: string) => {
 /** Whether `file` holds `block`'s lines in a row, indentation and blank lines aside */
 const holds = (file: string, block: string) => timesHeld(file, block) > 0;
 
-const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
 /** Whether any of the files defines `fn <name>` */
 const defines = (files: string[], name: string) => {
+  // eslint-disable-next-line security/detect-non-literal-regexp -- the name is escaped
   const fn = new RegExp(`\\bfn\\s+${escapeRegExp(name)}\\s*[(<]`);
   return files.some((f) => fn.test(f));
 };
 
 const compiles = (pattern: string) => {
   try {
+    // eslint-disable-next-line security/detect-non-literal-regexp -- compiles a shipped tutorial's pattern to report it if broken
     new RegExp(pattern, "i");
     return true;
   } catch {
@@ -1661,6 +1663,7 @@ if (import.meta.vitest) {
     it("refuses a doc address that is not https", () => {
       const d = minimal();
       d.docs = [
+        // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- the insecure scheme is the input under test
         { title: "IDL", url: "http://anchor-lang.com", file: "idl.md" },
       ];
       expect(lines(d)).toEqual([

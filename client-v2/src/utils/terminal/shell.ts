@@ -17,6 +17,7 @@ import {
   closestRightBoundary,
   isIncompleteInput,
   parse,
+  parseArgs,
 } from "./utils";
 
 /**
@@ -157,8 +158,8 @@ export class PgShell {
     if (this._waitingForInput) {
       PgCommon.createAndDispatchCustomEvent(PgShell._TERMINAL_WAIT_FOR_INPUT);
     } else {
-      const parsedInput = parse(input).flatMap((token) =>
-        token === "!!" ? parse(this._history.getPrevious() ?? "") : [token]
+      const parsedInput = parseArgs(input).flatMap((token) =>
+        token === "!!" ? parseArgs(this._history.getPrevious() ?? "") : [token]
       );
       return await this._cmdManager.execute(parsedInput);
     }

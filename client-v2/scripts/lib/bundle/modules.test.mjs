@@ -78,6 +78,8 @@ const NAMES = [
   ["./node_modules/foo/node_modules/vitest/dist/index.js", true],
   ["./node_modules/foo/src/test-utils/x.js", false],
   ["./node_modules/vitest-environment-x/index.js", false],
+  ["./node_modules/fake-indexeddb/build/esm/index.js", true],
+  ["./node_modules/fake-indexeddb-x/index.js", false],
 ];
 
 for (const [name, offending] of NAMES) {

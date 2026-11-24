@@ -294,7 +294,7 @@ describe("features/fund-wallet/ui/BaseFundDialog", () => {
   });
 
   it("says where the SOL arrives", () => {
-    renderDialog({ payer: PAYER, cluster: "mainnet-beta" });
+    renderDialog({ payer: PAYER, cluster: "mainnet" });
 
     expect(screen.getByText("Arrives in Wallet 1 on mainnet.")).toBeTruthy();
   });
@@ -310,7 +310,7 @@ describe("features/fund-wallet/ui/BaseFundDialog", () => {
   });
 
   it("warns above Send on mainnet only", () => {
-    renderDialog({ payer: PAYER, cluster: "mainnet-beta" });
+    renderDialog({ payer: PAYER, cluster: "mainnet" });
     expect(screen.getByText("Mainnet uses real SOL")).toBeTruthy();
 
     cleanup();

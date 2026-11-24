@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 
+import { Endpoint } from "../src/entities/cluster/model/endpoint";
 import { expect, json, LONG, test } from "./fixtures";
 
 /**
@@ -69,7 +70,7 @@ const DEPLOYED_ACCOUNT = {
 
 /** Builds with `idl` as the build server's IDL, then opens Interact */
 const buildThenInteract = async (page: Page, idl: object) => {
-  await page.route("https://api.devnet.solana.com/**", async (route) => {
+  await page.route(`${Endpoint.DEVNET}/**`, async (route) => {
     const body = route.request().postDataJSON() as {
       id?: unknown;
       method?: string;

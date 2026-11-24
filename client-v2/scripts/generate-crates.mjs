@@ -92,7 +92,7 @@ skipWithoutTool("rustup", "the supported crates");
 /** Cargo home the registry and the tool live in */
 const cargoHome = process.env.CARGO_HOME ?? path.join(homedir(), ".cargo");
 
-// `+channel` on every cargo call: the default toolchain, where one exists, may be the wasm packages' older one
+// `+channel` on every cargo call: the default toolchain, where one exists, comes from another file and can differ
 run("rustup", [
   "toolchain",
   "install",

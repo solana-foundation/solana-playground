@@ -8,11 +8,11 @@ on:
     inputs:
       # The `build` job: `yarn setup` (the WASM compile), then type check,
       # unit tests and production build of upstream's `client/`, 20+ minutes.
-      # ci.yml turns the `build` job off, so PRs and untagged pushes to master
-      # never check `client/`, which this fork does not edit. cicd.yml runs the
-      # `build` job on a tagged push to master and on a manual dispatch. The
-      # WASM still compiles for a preview, in vercel-install.sh, when the wasm
-      # packages miss both the Build Cache and the Remote Cache.
+      # No caller runs it: ci.yml and cicd.yml pass `build: false`, because
+      # `client/`, which this fork does not edit, cannot install without
+      # `wasm/anchor-cli`. The job and this input stay until `client/` is
+      # removed. The WASM still compiles for a preview, in vercel-install.sh,
+      # when the wasm packages miss both the Build Cache and the Remote Cache.
       build:
         type: boolean
         default: true
@@ -31,8 +31,10 @@ jobs:
         working-directory: client
 
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version-file: client/.nvmrc
           cache: "yarn"
@@ -56,7 +58,9 @@ jobs:
         working-directory: server
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
 
       # Server fmt needs nightly (rustfmt.toml uses nightly-only options); the
       # rest of the toolchain is pinned by the workspace rust-toolchain.toml.
@@ -76,7 +80,9 @@ jobs:
         working-directory: wasm
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
 
       # Toolchain + rustfmt come from wasm/rust-toolchain.toml.
       - name: Check format
@@ -93,13 +99,78 @@ jobs:
         working-directory: server
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
 
       - name: Add clippy
         run: rustup component add clippy
 
       - name: Check clippy warnings
         run: cargo clippy --all-targets -- -D warnings
+
+  test_server:
+    name: Test server
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: format_server
+
+    defaults:
+      run:
+        working-directory: server
+
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Run tests
+        run: cargo test --locked
+
+  # Builds the image App Engine deploys, so a download whose pinned checksum
+  # no longer matches fails here before it fails a deploy. The last step
+  # proves the check bites: each of server/Dockerfile's checksums, set wrong,
+  # must stop the build.
+  image_server:
+    name: Image server
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Build image
+        run: docker build --tag solpg-server server
+
+      # The per-template images the server builds under its `unstable`
+      # feature: the stage that installs rustup, Solana, the platform tools and
+      # Criterion, for each Solana version a template pins.
+      - name: Build the template images' tool stage
+        run: |
+          for version in 1.17.25 3.1.10; do
+            docker build --file server/images/Dockerfile.program --target solana \
+              --build-arg "SOLANA_VERSION=$version" server
+          done
+
+      - name: Refuse a download whose checksum differs
+        run: |
+          zero=0000000000000000000000000000000000000000000000000000000000000000
+          for check in rust:RUSTUP_SHA256:rustup-init tools:SOLANA_SHA256:solana-release.tar.bz2 \
+            tools:PLATFORM_TOOLS_SHA256:platform-tools.tar.bz2 tools:CRITERION_SHA256:criterion.tar.bz2; do
+            IFS=: read -r target arg file <<<"$check"
+            if out=$(docker build --progress=plain --target "$target" \
+              --build-arg "$arg=$zero" server 2>&1); then
+              echo "::error::the image built with a wrong $arg"
+              exit 1
+            fi
+            if ! grep -q "/tmp/$file: FAILED" <<<"$out"; then
+              echo "$out"
+              echo "::error::the build with a wrong $arg failed, but not on the checksum"
+              exit 1
+            fi
+          done
 
   clippy_wasm:
     name: Clippy WASM
@@ -112,7 +183,9 @@ jobs:
         working-directory: wasm
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
 
       # clippy isn't in wasm/rust-toolchain.toml's components; add it to the
       # pinned toolchain, which cargo selects via the toml.
@@ -135,8 +208,10 @@ jobs:
         working-directory: client
 
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version-file: client/.nvmrc
           cache: "yarn"
@@ -146,7 +221,7 @@ jobs:
         run: rustc --version
 
       # `wasm/rust-analyzer` and `wasm/rustfmt` sit outside the wasm workspace with their own target dirs; list them so rust-cache picks each up.
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: |
             wasm

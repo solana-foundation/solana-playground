@@ -33,6 +33,7 @@ const update = async (code: string) => {
       const pkg = cachedTypes[packageName];
       if (pkg === true) return;
 
+      // eslint-disable-next-line security/detect-non-literal-regexp -- a package name from PACKAGES
       if (new RegExp(`("|')${packageName}("|')`, "gm").test(code)) {
         await declarePackage(packageName);
 

@@ -41,7 +41,7 @@ describe("block explorers", () => {
     expect(solscan.getTxUrl("sig", "devnet")).toBe(
       "https://solscan.io/tx/sig?cluster=devnet"
     );
-    expect(solscan.getAddressUrl(ID, "mainnet-beta")).toBe(
+    expect(solscan.getAddressUrl(ID, "mainnet")).toBe(
       `https://solscan.io/address/${ID}`
     );
   });
@@ -49,12 +49,10 @@ describe("block explorers", () => {
   it("open Orb on the network they are given", () => {
     // Orb's scheme, checked on orbmarkets.io on 13 Nov 2026: mainnet takes no
     // parameter; devnet and testnet take `?cluster=`
-    expect(orb.getAddressUrl(ID, "mainnet-beta")).toBe(
+    expect(orb.getAddressUrl(ID, "mainnet")).toBe(
       `https://orbmarkets.io/address/${ID}`
     );
-    expect(orb.getTxUrl("sig", "mainnet-beta")).toBe(
-      "https://orbmarkets.io/tx/sig"
-    );
+    expect(orb.getTxUrl("sig", "mainnet")).toBe("https://orbmarkets.io/tx/sig");
     expect(orb.getAddressUrl(ID, "devnet")).toBe(
       `https://orbmarkets.io/address/${ID}?cluster=devnet`
     );
@@ -84,24 +82,23 @@ describe("block explorers", () => {
     expect(solanaExplorer.getIdlUrl(ID, "devnet")).toBe(
       `https://explorer.solana.com/address/${ID}/idl?cluster=devnet`
     );
-    expect(solanaExplorer.getIdlUrl(ID, "mainnet-beta")).toBe(
+    expect(solanaExplorer.getIdlUrl(ID, "mainnet")).toBe(
       `https://explorer.solana.com/address/${ID}/idl`
     );
     // Orb names its IDL tab `anchor-idl`
     expect(orb.getIdlUrl(ID, "devnet")).toBe(
       `https://orbmarkets.io/address/${ID}/anchor-idl?cluster=devnet`
     );
-    expect(orb.getIdlUrl(ID, "mainnet-beta")).toBe(
+    expect(orb.getIdlUrl(ID, "mainnet")).toBe(
       `https://orbmarkets.io/address/${ID}/anchor-idl`
     );
   });
 
   it("say Orb cannot open a local validator or a custom RPC", () => {
-    expect(orb.opens("mainnet-beta")).toBe(true);
+    expect(orb.opens("mainnet")).toBe(true);
     expect(orb.opens("devnet")).toBe(true);
     expect(orb.opens("testnet")).toBe(true);
     expect(orb.opens("localnet")).toBe(false);
-    expect(orb.opens("playnet")).toBe(false);
     // `null` is a network with no cluster (a custom RPC), not the selected one
     // eslint-disable-next-line unicorn/no-null -- the explorer API's own value for it
     expect(orb.opens(null)).toBe(false);
@@ -111,9 +108,8 @@ describe("block explorers", () => {
 
   it("say which networks they can open", () => {
     expect(solanaExplorer.opens("devnet")).toBe(true);
-    expect(solanaExplorer.opens("mainnet-beta")).toBe(true);
+    expect(solanaExplorer.opens("mainnet")).toBe(true);
     expect(solscan.opens("localnet")).toBe(false);
-    expect(solanaExplorer.opens("playnet")).toBe(false);
   });
 
   it("fall back to Solana Explorer when the stored one is no longer offered", () => {

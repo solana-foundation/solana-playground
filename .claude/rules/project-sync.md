@@ -20,7 +20,7 @@ when a session reads a file matching the `paths` in the frontmatter.
 
 - **Chat threads share the code's IndexedDB volume**, as files under
   `/.config/chats/<threadId>.json` via `PgFs`, not in `localStorage`, which is
-  already near its origin budget with `settings`, `wallet`, `theme` and
+  already near its origin budget with `settings`, `theme` and
   `flow.deploys`. A thread has an id of its own. `/.config/chats/index.json`
   (`PgThreadIndex`) maps the stable workspace id to the thread open on that
   workspace, so a rename keeps the conversation. Anything that acts on a
@@ -241,6 +241,16 @@ when a session reads a file matching the `paths` in the frontmatter.
   stays local through reconcile and sign-out, and the outstanding question
   stops its pushes until "Try again". The client never counts and the
   explorer never refuses a project for the cap.
+- **Conversations have account caps too, and never create a project.**
+  `appendMessages` measures the account's live threads, messages and
+  `messages.bytes` (a stored generated column) before and after each push,
+  under a per-account `pg_advisory_xact_lock` taken first, and rolls back a
+  push that grows a measure past `CHAT_LIMITS` (`model/chat-limits.mjs`): a
+  413 naming the cap, which `PgChatSync.limit()` holds for the panel's row
+  until a push is taken again. A push for a project id with no row of the
+  account is a 409 `no-project` and creates nothing (HOO-2882): the sign-in
+  dump uploads threads before their projects, so the thread stays owed and
+  `PgProjectSync.onDidAccept` pushes it again (`effects/chat-thread`).
 - **`/api/projects` still takes the pre-hoodieshq/solana-playground#40 client's body.** A tab open
   across that deploy sends `{snapshot: {files}, baseUpdatedAt, force: false}`
   and drops every status but 409 and 413 silently, so `describeWrite` reads
@@ -275,6 +285,36 @@ when a session reads a file matching the `paths` in the frontmatter.
   reconcile off; `PgSyncBase` and `PgSyncClaim` read the signed-in id only, and
   `settleLocalDeletes` stands down: a delete made meanwhile cannot reach the account,
   so the project comes back on the next sign-in with its mark and chat. The chat effect leaves the thread open: closing it would cut a running turn.
+- **Chat threads have an owner on the device, and another account's are
+  fenced.** `/.config/chats-owner.json` (`model/thread-fence.ts`) names the
+  account whose threads `/.config/chats` holds. A sign-in by anyone else first
+  stops the turn and closes the open thread, then `PgThreadFence.settle` moves
+  every thread and its workspace into `/.config/chats-fenced/<userId>/` and
+  empties the index, before the dump (HOO-2757: an ended session's threads
+  uploaded into the next account). Out of the folder, because `threadIds`,
+  `pushAll` and the index migration all read it. `push` refuses a thread a
+  fence names, since a lagging tab can write it back; the next `settle` fences
+  it again. `PgThreadIndex._adoptable` skips such a file too (`readFencedIds`), and
+  adopts nothing while the records cannot be read: adopted under a fresh id, no
+  fence would know it and the next sign-in would upload it. The fenced account's next sign-in puts its threads back, merged
+  into a thread that took the workspace meanwhile. The owner is cleared by a whole hand-over
+  (`forget`'s wholesale branch), and by a `settle` that emptied the folder but
+  could not write the new owner, so no name stays over nobody's threads. `push` uploads only when
+  the owner is the signed-in account (`claimUnowned` records it over a folder
+  nobody owns, which retries a failed owner write), and holds the sync lock
+  from that check to its last POST, so another tab's `settle` cannot fence
+  the thread in between. A sign-in whose `settle` fails or throws skips the
+  chat adoption and dump. The chat effect opens no thread for a signed-in
+  account until this tab's `settle` for it has succeeded (`isSettledFor`):
+  from the sign-in or the page load until the settle finishes, and after one
+  that failed or threw, retrying on the next switch, since a thread opened or
+  minted meanwhile would be fenced as the old owner's. A tab runs one
+  `settle` at a time. Every doubt about the owner, a record or the index
+  fails closed: the fence reads the index with `reloadOrFail`, never `all`,
+  which reads a failure as an empty map. A record whose bytes do not parse
+  is rebuilt from the thread files in its folder, without their workspaces.
+  Never drop the owner gate from `push` as redundant with `settle`: it is
+  what holds when `settle` could not write.
 - **Persistence failures are reported, not swallowed.** `chat-storage`,
   `chat-sync`, `project-sync` and `project-restore` all catch, because a lost
   write must not take the panel down. Every failure still goes through

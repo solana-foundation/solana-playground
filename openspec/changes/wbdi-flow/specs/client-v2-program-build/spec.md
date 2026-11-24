@@ -2,9 +2,9 @@
 
 ## Purpose
 
-Turns a Solana program's Rust source into the two outputs a deploy needs, the
-program binary and the IDL, and keeps both with the project until the next
-build replaces them.
+Turns a Solana program's Rust source into the program binary a deploy needs,
+keeps the IDL when the build server returns one, and stores both with the
+project until a later build replaces them.
 
 ```mermaid
 flowchart TD
@@ -13,26 +13,37 @@ flowchart TD
   kp -- yes --> declare["Write its public key into declare_id!"]
   declare --> server["Send the source to the build server"]
   server --> ok{"Compiled?"}
-  ok -- yes --> keep["Keep the binary reference and the IDL<br/>with the project (build_succeeded)"]
+  ok -- yes --> keep["Keep the binary reference, and the IDL<br/>when the server returns one (build_succeeded)"]
   ok -- no --> prev["Keep the previous binary and IDL,<br/>warn before deploying them (build_failed)"]
   keep --> dl["Download IDL (build_idl_downloaded)"]
 ```
 
 ## ADDED Requirements
 
-### Requirement: A build produces the program binary and the IDL
+### Requirement: A build produces the program binary and keeps the IDL the build server returns
 
 A build of an Anchor, Native or Seahorse project SHALL send the project's
 source to the build server and, on success, SHALL keep a reference to the
-program binary for the next deploy. For an Anchor or Seahorse project it SHALL
-also keep the IDL the server generated from the same source. A Native project
-produces no IDL.
+program binary for the next deploy. When the build server returns an IDL with
+the binary, the build SHALL keep that IDL with the project, in place of the
+one the project held. When the build server returns none, the build SHALL
+change nothing about the project's IDL: the project keeps the IDL it held,
+the one the user uploaded to the project or the one an earlier build kept, if
+any. The build of a Native project returns no IDL.
 
-#### Scenario: An Anchor project builds
+#### Scenario: The build server returns an IDL
 
-- **WHEN** the user builds an Anchor project that compiles
+- **WHEN** the user builds an Anchor project that compiles, and the build
+  server returns an IDL
 - **THEN** the project holds a program binary ready to deploy
-- **AND** the project holds the IDL generated from the same source
+- **AND** the project holds the IDL the build server returned
+
+#### Scenario: The build server returns no IDL
+
+- **WHEN** the user uploads an IDL to the project, then builds an Anchor
+  project that compiles, and the build server returns no IDL
+- **THEN** the project holds a program binary ready to deploy
+- **AND** the project still holds the uploaded IDL
 
 #### Scenario: A Native project builds
 

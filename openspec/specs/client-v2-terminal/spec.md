@@ -99,12 +99,13 @@ the command with "Run `connect` to connect a wallet, then try again." and no
 
 While the browser is offline, a command that needs the server or a cluster
 (`build`, `deploy`, `airdrop`, `run`, `test`, `anchor`, `solana`,
-`spl-token`, `sugar`) SHALL end at once with "You're offline. This command
+`spl-token`) SHALL end at once with "You're offline. This command
 needs a connection." in the terminal's error colour, with no "Process
 error:" prefix, before it asks any
 question or does any work. `help`, `clear`, `setting`, `connect`, `prettier`
 and `rustfmt` SHALL run as they do online, and so SHALL any command asked for
-its help (`--help`, `-h`). Anything else that starts such a command, such as
+its help (`--help`, `-h`) and `anchor` asked for its version (`--version`,
+`-V`). Anything else that starts such a command, such as
 the assistant or the wallet's airdrop, SHALL end the same way.
 
 #### Scenario: Build offline
@@ -206,3 +207,29 @@ colour codes.
 
 - **WHEN** a build prints the compiler's output
 - **THEN** the terminal adds no variant to it
+
+### Requirement: Spaces separate a command's arguments
+
+The terminal SHALL split a typed line into a command's arguments at spaces outside quotes, with a run of spaces
+separating as one space does, and with no argument for spaces at the start or the end of the line. A quoted empty
+string (`""` or `''`) SHALL be an empty argument. `!!` SHALL expand to the previous line split the same way. Every
+command SHALL receive its arguments by this rule.
+
+#### Scenario: Two spaces before an option (manual)
+
+- **WHEN** the person types `anchor idl init <PROGRAM_ID>  --filepath idl.json` with two spaces before the option
+- **THEN** the command runs as it does with one space, with no "Unexpected argument" error
+
+### Requirement: The terminal offers no sugar command
+
+The terminal SHALL NOT offer Metaplex's `sugar` (Candy Machine) command until
+its subcommands are validated on Devnet. `help` SHALL NOT list it, and typing
+`sugar`, with or without arguments, SHALL end with the unknown-command line,
+"`sugar` is not a command. Type `help` to see commands.", sending no
+transaction.
+
+#### Scenario: Typing sugar
+
+- **WHEN** the person types `sugar --help`
+- **THEN** the terminal prints "`sugar` is not a command. Type `help` to see
+  commands." in `error`, and runs nothing

@@ -35,6 +35,7 @@ const blocks = (selector: string) =>
     .map((part) => part.slice(0, part.indexOf("\n}")));
 
 const find = (block: string, token: string) =>
+  // eslint-disable-next-line security/detect-non-literal-regexp -- a pattern this test builds from its own constants
   block.match(new RegExp(`${token}:\\s*(#[0-9a-f]{6})`, "i"))?.[1];
 
 const value = (block: string, token: string) => {

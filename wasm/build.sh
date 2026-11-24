@@ -53,12 +53,10 @@ fi
 
 # All package names
 all_packages=(
-    "anchor-cli"
     "rust-analyzer"
     "seahorse-compile"
     "solana-cli"
     "spl-token-cli"
-    "sugar-cli"
 )
 
 # Get script directory (which is wasm/), and root directory (which is one level higher).

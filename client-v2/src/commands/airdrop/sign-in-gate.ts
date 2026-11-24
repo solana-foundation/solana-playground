@@ -1,10 +1,10 @@
 /**
  * Clusters whose faucet is the user's own validator: any `localhost` or
  * `127.0.0.1` endpoint reads as `localnet` (Localnet and Surfpool, on any
- * port), and Playnet runs in the browser. Nothing public is spent there, and
- * upstream's `client/` asks for no sign-in before any airdrop.
+ * port). Nothing public is spent there, and upstream's `client/` asks for no
+ * sign-in before any airdrop.
  */
-const LOCAL_FAUCETS = new Set(["localnet", "playnet"]);
+const LOCAL_FAUCETS = new Set(["localnet"]);
 
 /**
  * Whether an airdrop on `cluster` asks for a sign-in first. The gate guards

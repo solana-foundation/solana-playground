@@ -45,7 +45,7 @@ test("a prompt asked for before connecting leaves no notice behind", async ({
   await expect(page.getByText(HINT)).toBeVisible(LONG);
 
   await page.getByRole("radio", { name: "OpenAI-compatible" }).click();
-  await page.locator("#assistant-base-url").fill("http://mock-llm.test/v1");
+  await page.locator("#assistant-base-url").fill("https://mock-llm.test/v1");
   await page.locator("#assistant-model").fill("mock-model");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
 

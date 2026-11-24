@@ -439,8 +439,8 @@ class _PgView {
 
   /**
    * Set the progress bar along the Flow console's strip
-   * (`views/flow/console/ConsoleDrawer`), which the deploy and sugar
-   * commands report to. The name is the classic layout's secondary view's.
+   * (`views/flow/console/ConsoleDrawer`), which the deploy command
+   * reports to. The name is the classic layout's secondary view's.
    *
    * Progress bar will be hidden if `progress` is set to 0.
    *

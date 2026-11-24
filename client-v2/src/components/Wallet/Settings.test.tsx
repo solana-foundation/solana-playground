@@ -36,8 +36,15 @@ vi.mock("../../utils", () => ({
     currentIndex: -1,
     import: vi.fn(),
     export: vi.fn(),
+    hasKeysInPage: vi.fn(() => true),
   },
   PgConnection: { cluster: "devnet", getAirdropAmount: () => 5 },
+}));
+
+// Settings' import and export dialogs under the key-origin provider
+vi.mock("./Modals/KeyFile", () => ({
+  ImportKey: () => undefined,
+  ExportKey: () => undefined,
 }));
 
 vi.mock("../../hooks", () => ({ useCopy: () => [false, vi.fn()] }));
@@ -97,6 +104,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.clearAllMocks();
+  // Back to the local provider, even after a test that failed under the key-origin one
+  vi.mocked(PgWallet.hasKeysInPage).mockReturnValue(true);
   resetLogger();
   told.length = 0;
   airdropHook.faucet = "none";
@@ -321,6 +330,26 @@ describe("wallet Settings menu", () => {
     await openMenu();
 
     expect(screen.getByRole("menuitem", { name: label })).toBeTruthy();
+  });
+
+  it("opens the key page's panels for Import and Export under the key-origin provider", async () => {
+    vi.mocked(PgWallet.hasKeysInPage).mockReturnValue(false);
+    const { ImportKey, ExportKey } = await import("./Modals/KeyFile");
+    render(<Host />);
+
+    await openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: /Import/ }));
+    await waitFor(() =>
+      expect(PgView.setModal).toHaveBeenCalledWith(ImportKey)
+    );
+    await openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: /Export/ }));
+    await waitFor(() =>
+      expect(PgView.setModal).toHaveBeenCalledWith(ExportKey)
+    );
+
+    expect(PgWallet.import).not.toHaveBeenCalled();
+    expect(PgWallet.export).not.toHaveBeenCalled();
   });
 
   it("draws every wallet extension's icon at one size", async () => {

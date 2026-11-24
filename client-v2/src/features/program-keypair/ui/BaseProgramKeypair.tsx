@@ -75,6 +75,9 @@ const FIELD_NOTES = {
 const REFUSED =
   "That file is not a program keypair: expected the 64-number JSON the Solana CLI writes.";
 
+const SYNC_NOTE =
+  "When you are signed in, your account stores this keypair, so the program id is the same on every device.";
+
 const MISMATCH =
   "This program id does not match the program keypair. A first deploy needs the keypair for this id: import it, remove the custom id, or create a new keypair.";
 
@@ -149,6 +152,9 @@ const BaseProgramKeypair = (p: BaseProgramKeypairProps) => {
             <p className="text-caption text-muted-foreground">
               Only the upgrade authority can upgrade the program.
             </p>
+            {/* HOO-2881: sync stores the keypair unencrypted on purpose, and
+                says so; it can claim the address only until the first deploy */}
+            <p className="text-caption text-muted-foreground">{SYNC_NOTE}</p>
             {fieldNote && (
               <p
                 role="status"

@@ -18,7 +18,6 @@ import {
   derivable,
   initable,
 } from "./decorators";
-import { OverridableConnection, PgPlaynet } from "./playnet";
 import { PgSettings } from "./settings";
 import type { Disposable } from "./types";
 import { PgWeb3 } from "./web3";
@@ -28,32 +27,13 @@ export type { Cluster } from "@/entities/cluster";
 const derive = () => ({
   /** Globally sycned connection instance */
   current: createDerivable({
-    // It's important that this method returns immediately because connection
-    // instance is used throughout the app. For this reason, the connection for
-    // Playnet will be returned without awaiting the initialization. After the
-    // initialization, `PgPlaynet.onDidInit` will be triggered and this method
-    // will run again to return the overridden connection instance.
-    derive: () => {
-      // Check whether the endpoint is Playnet
-      if (PgPlaynet.isUrlPlaynet()) {
-        // Return the connection instance if it has been overridden
-        if (PgPlaynet.connection?.overridden) return PgPlaynet.connection;
-
-        // Initialize Playnet
-        PgPlaynet.init();
-      } else {
-        // Destroy Playnet
-        PgPlaynet.destroy();
-      }
-
-      return getConnectionFor(PgSettings.connection.commitment)(
+    derive: () =>
+      getConnectionFor(PgSettings.connection.commitment)(
         PgSettings.connection.endpoint
-      );
-    },
+      ),
     onChange: [
       PgSettings.onDidChangeConnectionEndpoint,
       PgSettings.onDidChangeConnectionCommitment,
-      PgPlaynet.onDidInit,
     ],
     infallible: true,
   }),
@@ -64,9 +44,9 @@ const derive = () => ({
     onChange: [
       onAskAgain,
       (cb) => {
-        // Asked again when the connection is replaced, which is when Playnet's
-        // becomes ready. Kept apart from `disposables`, whose entries after the
-        // first are replaced on every cluster change.
+        // Asked again when the connection is replaced. Kept apart from
+        // `disposables`, whose entries after the first are replaced on every
+        // cluster change.
         const currentChange = PgConnection.onDidChangeCurrent(() => cb());
 
         const disposables: Disposable[] = [];
@@ -223,37 +203,11 @@ class _PgConnection {
   }
 
   /**
-   * Get whether the connection is ready to be used.
-   *
-   * If the endpoint is `Endpoint.PLAYNET` this will return `false` until the
-   * connection gets overridden. This helps avoid sending unnecessary RPC requests
-   * at start before the `connection` and `fetch` is overridden.
-   *
-   * This will always return `true` if the endpoint is not `Endpoint.PLAYNET`.
-   *
-   * @param conn overridable web3.js `Connection`
-   * @returns whether the connection is ready to be used
-   */
-  static isReady(conn: OverridableConnection) {
-    if (PgPlaynet.isUrlPlaynet(conn.rpcEndpoint)) {
-      return conn.overridden;
-    }
-
-    return true;
-  }
-
-  /**
    * Get whether there is a successful connection to the current endpoint.
    *
-   * Playnet's connection answers only once Playnet has started in the page
-   * (`isReady`); asking before that would read as not connected.
-   *
-   * @returns whether there is a successful connection, or `null` while the
-   * connection is not ready to be asked
+   * @returns whether there is a successful connection
    */
-  static async getIsConnected(): Promise<boolean | null> {
-    if (!_PgConnection.isReady(PgConnection.current)) return null;
-
+  static async getIsConnected(): Promise<boolean> {
     try {
       await PgConnection.current.getSlot();
       return true;
@@ -399,8 +353,6 @@ class _PgConnection {
   /** {@link getAirdropAmount} on `cluster`, read by the caller */
   static getAirdropAmountOn(cluster: Cluster | null) {
     switch (cluster) {
-      case "playnet":
-        return 1000;
       case "localnet":
         return 100;
       case "devnet":

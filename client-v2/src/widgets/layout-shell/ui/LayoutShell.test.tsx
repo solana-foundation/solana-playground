@@ -211,6 +211,9 @@ const tap = (element: Element) => {
 
 const sheetOverlay = () => slot("sheet-overlay");
 
+/** How many times the shell has rendered: it calls `stage` on every render */
+let shellRenders = 0;
+
 // Only what the shell reads: the font a portaled Sheet is set in
 const theme = {
   font: {
@@ -249,16 +252,25 @@ const shellTree = (
         files={({ collapsed, toggle, phone }) => (
           // Stands for a control inside the column; the editor head carries
           // "Files"
-          <button
-            type="button"
-            aria-expanded={!collapsed}
-            data-phone={phone}
-            onClick={toggle}
-          >
-            Files column control
-          </button>
+          <>
+            <button
+              type="button"
+              aria-expanded={!collapsed}
+              data-phone={phone}
+              onClick={toggle}
+            >
+              Files column control
+            </button>
+            {/* Stands for a file's row in the explorer's tree */}
+            <div className={PgView.classNames.FILE}>
+              <span>lib.rs</span>
+            </div>
+          </>
         )}
-        stage={() => work.stage ?? <main>stage</main>}
+        stage={() => {
+          shellRenders += 1;
+          return work.stage ?? <main>stage</main>;
+        }}
         console={({ open, toggle }) => (
           <button
             type="button"
@@ -298,8 +310,8 @@ const shell = (
 ) => render(shellTree(home, work, cover));
 
 /**
- * A visitor who left the files column open: a first visit opens it closed
- * (DES-205), and these cases start from an open column
+ * A visitor who left the tree docked, as a first visit has it too; these
+ * cases say so rather than lean on the default
  */
 const savedFilesOpen = () =>
   localStorage.setItem(
@@ -419,20 +431,34 @@ it("should tell the files column it is not in the phone's Sheet", () => {
   ).toBe("false");
 });
 
-it("should toggle the files column by Cmd+E and by its button, and say which", () => {
+it("should undock the tree by Cmd+E, then open its dropdown by its button, and say which", () => {
   savedFilesOpen();
   shell();
   press({ key: "e", metaKey: true });
   expect(filesPressed()).toBe("false");
   fireEvent.click(filesToggle());
   expect(filesPressed()).toBe("true");
-  expect(toggled()).toEqual([
-    { panel: "files", open: false, via: "key" },
-    { panel: "files", open: true, via: "button" },
-  ]);
+  expect(toggled()).toEqual([{ panel: "files", open: false, via: "key" }]);
+  expect(
+    sent.events
+      .filter((event) => event.name === "layout_files_dropdown_opened")
+      .map((event) => event.params)
+  ).toEqual([{ via: "button" }]);
 });
 
-it("should toggle the files column by Cmd+E from the editor, which stops the key", () => {
+it("should close the dropdown on a file's pick, the open file's too", () => {
+  savedFilesOpen();
+  shell();
+  press({ key: "e", metaKey: true });
+  fireEvent.click(filesToggle());
+  const dropdown = screen.getByRole("dialog", { name: "Files" });
+  // The open file sends no open event, so the pick itself closes it
+  fireEvent.click(within(dropdown).getByText("lib.rs"));
+  expect(screen.queryByRole("dialog", { name: "Files" })).toBeNull();
+  expect(filesPressed()).toBe("false");
+});
+
+it("should undock the tree by Cmd+E from the editor, which stops the key, then open its dropdown", () => {
   savedFilesOpen();
   shell();
   // Monaco binds Cmd+E (find with the selection) and stops the event where
@@ -447,13 +473,15 @@ it("should toggle the files column by Cmd+E from the editor, which stops the key
   try {
     fireEvent.keyDown(editor, { key: "e", metaKey: true });
     expect(filesPressed()).toBe("false");
-    // And back: the handler renewed with the state still hears it
+    expect(toggled()).toEqual([{ panel: "files", open: false, via: "key" }]);
+    // And again: the handler renewed with the state still hears it
     fireEvent.keyDown(editor, { key: "e", metaKey: true });
     expect(filesPressed()).toBe("true");
-    expect(toggled()).toEqual([
-      { panel: "files", open: false, via: "key" },
-      { panel: "files", open: true, via: "key" },
-    ]);
+    expect(
+      sent.events
+        .filter((event) => event.name === "layout_files_dropdown_opened")
+        .map((event) => event.params)
+    ).toEqual([{ via: "key" }]);
     // Taken, so the editor does not open its find bar as well
     expect(editorHeard).not.toHaveBeenCalled();
   } finally {
@@ -461,16 +489,14 @@ it("should toggle the files column by Cmd+E from the editor, which stops the key
   }
 });
 
-it("should open a folded files column when the editor asks to show files", () => {
+it("should open an undocked tree's dropdown when the editor asks to show files", () => {
   savedFilesOpen();
   shell();
   press({ key: "e", metaKey: true });
   act(() => PgView.showFiles());
   expect(filesPressed()).toBe("true");
-  expect(toggled()).toEqual([
-    { panel: "files", open: false, via: "key" },
-    { panel: "files", open: true, via: "button" },
-  ]);
+  expect(screen.getByRole("dialog", { name: "Files" })).toBeTruthy();
+  expect(toggled()).toEqual([{ panel: "files", open: false, via: "key" }]);
 });
 
 it("should leave an open files column open when the editor asks to show files", () => {
@@ -838,7 +864,8 @@ it("should save the open state and read it back", () => {
 it("should fall back on a corrupt saved layout and report it", () => {
   localStorage.setItem(LAYOUT_STORAGE_KEY, "{");
   shell();
-  expect(filesPressed()).toBe("false");
+  // The defaults: the tree docked
+  expect(filesPressed()).toBe("true");
   expect(
     sent.events.filter((event) => event.name === "layout_restore_failed")
   ).toEqual([expect.objectContaining({ params: { reason: "corrupt" } })]);
@@ -1707,28 +1734,39 @@ describe("a tutorial below the frame's width", () => {
 });
 
 describe("the stage bar", () => {
-  it("hides the assistant from its toggle and names the project either way", () => {
+  it("is not drawn over an open project: the editor head is the one bar", () => {
     explorer.name = "Counter";
     shell();
-    const bar = () => slot<HTMLElement>("stage-bar");
-    // The assistant's head names the model, not the project, so the bar
-    // keeps the name while the assistant shows
-    expect(within(bar()).getByText("Counter")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Hide the assistant" }));
-    expect(toggled()).toEqual([
-      { panel: "assistant", open: false, via: "button" },
-    ]);
-    expect(within(bar()).getByText("Counter")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Expand assistant" }));
-    expect(within(bar()).getByText("Counter")).toBeTruthy();
+    expect(document.querySelector('[data-slot="stage-bar"]')).toBeNull();
+    expect(screen.queryByText("Counter")).toBeNull();
   });
 
-  it("opens the assistant Sheet from the bar between 768 and 1023 px", () => {
+  it("offers the assistant in the editor head only while it is folded", () => {
+    shell();
+    const head = () => slot<HTMLElement>("editor-head");
+    expect(
+      within(head()).queryByRole("button", { name: /assistant/i })
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Collapse assistant" }));
+    fireEvent.click(
+      within(head()).getByRole("button", { name: "Expand assistant" })
+    );
+    expect(toggled()).toEqual([
+      { panel: "assistant", open: false, via: "button" },
+      { panel: "assistant", open: true, via: "button" },
+    ]);
+    expect(
+      within(head()).queryByRole("button", { name: /assistant/i })
+    ).toBeNull();
+  });
+
+  it("opens the assistant Sheet from the editor head between 768 and 1023 px", () => {
     resizeTo(900);
     shell();
-    const bar = slot<HTMLElement>("stage-bar");
     fireEvent.click(
-      within(bar).getByRole("button", { name: "Expand assistant" })
+      within(slot<HTMLElement>("editor-head")).getByRole("button", {
+        name: "Expand assistant",
+      })
     );
     expect(toggled()).toEqual([
       { panel: "assistant", open: true, via: "button" },
@@ -1736,27 +1774,6 @@ describe("the stage bar", () => {
     expect(
       document.querySelector('[data-slot="sheet-content"]')
     ).not.toBeNull();
-  });
-
-  it("names the project again after a rename", () => {
-    explorer.name = "Counter";
-    shell();
-    fireEvent.click(screen.getByRole("button", { name: "Hide the assistant" }));
-    explorer.name = "Counter v2";
-    act(() => explorer.renames.forEach((cb) => cb()));
-    expect(screen.getByText("Counter v2")).toBeTruthy();
-  });
-
-  it("names the project between 768 and 1023 px, the assistant's Sheet open or closed", () => {
-    explorer.name = "Counter";
-    resizeTo(900);
-    shell();
-    const bar = () => slot<HTMLElement>("stage-bar");
-    expect(within(bar()).getByText("Counter")).toBeTruthy();
-    fireEvent.click(
-      within(bar()).getByRole("button", { name: "Expand assistant" })
-    );
-    expect(within(bar()).getByText("Counter")).toBeTruthy();
   });
 
   it("leaves one Expand assistant between 768 and 1023 px", () => {
@@ -1808,7 +1825,7 @@ describe("layout_assistant_widened", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Widen the assistant" })
     );
-    fireEvent.click(screen.getByRole("button", { name: "Hide the assistant" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse assistant" }));
     expect(widened()).toEqual([{ wide: true }]);
   });
 
@@ -2145,5 +2162,249 @@ describe("with a page over the work", () => {
     expect(
       sent.events.filter((e) => e.name === "layout_page_shown").at(-1)?.params
     ).toEqual({ page: "work", via: "auto" });
+  });
+});
+
+describe("the project tree, docked or as the dropdown", () => {
+  /** ResizeObserver callbacks by the element they watch */
+  let observed: Array<{
+    el: Element;
+    cb: (entries: Array<{ contentRect: { width: number } }>) => void;
+  }>;
+  beforeEach(() => {
+    observed = [];
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(
+          private cb: (
+            entries: Array<{ contentRect: { width: number } }>
+          ) => void
+        ) {}
+        observe(el: Element) {
+          observed.push({ el, cb: this.cb });
+        }
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+  });
+  /**
+   * The code area measured at `px`: every observer of the work group hears
+   * it, the library's own too, so the entry carries what that one reads
+   */
+  const codeAreaAt = (px: number) => {
+    const work = observed.filter(({ el }) => el.id === "layout-work");
+    if (work.length === 0) throw new Error("the code area is not measured");
+    act(() =>
+      work.forEach(({ el, cb }) =>
+        cb([
+          {
+            target: el,
+            contentRect: { width: px, height: 800 },
+            borderBoxSize: [{ inlineSize: px, blockSize: 800 }],
+          } as never,
+        ])
+      )
+    );
+  };
+  const column = () =>
+    screen.queryByRole("button", { name: "Files column control" });
+  const dropdown = () => screen.queryByRole("dialog", { name: "Files" });
+  const pin = () =>
+    screen.queryByRole("button", { name: "Dock beside the editor" });
+  const opened = () =>
+    sent.events
+      .filter((event) => event.name === "layout_files_dropdown_opened")
+      .map((event) => event.params);
+
+  it("docks the tree on a first visit", () => {
+    shell();
+    expect(column()).not.toBeNull();
+    expect(dropdown()).toBeNull();
+    expect(filesPressed()).toBe("true");
+  });
+
+  it("undocks by Files, then drops the tree under the head with the pin, which docks it again", () => {
+    shell();
+    fireEvent.click(filesToggle());
+    expect(column()).toBeNull();
+    expect(dropdown()).toBeNull();
+    expect(filesPressed()).toBe("false");
+    expect(JSON.parse(storedLayout()).open.files).toBe(false);
+
+    fireEvent.click(filesToggle());
+    const sheet = requireFor("the dropdown")(dropdown());
+    expect(
+      within(sheet).getByRole("button", { name: "Files column control" })
+    ).toBeTruthy();
+    expect(
+      within(sheet).getByRole("button", { name: "Dock beside the editor" })
+    ).toBeTruthy();
+    expect(filesPressed()).toBe("true");
+    expect(opened()).toEqual([{ via: "button" }]);
+
+    fireEvent.click(requireFor("the pin")(pin()));
+    expect(dropdown()).toBeNull();
+    expect(column()).not.toBeNull();
+    expect(filesPressed()).toBe("true");
+    expect(toggled()).toEqual([
+      { panel: "files", open: false, via: "button" },
+      { panel: "files", open: true, via: "button" },
+    ]);
+    expect(JSON.parse(storedLayout()).open.files).toBe(true);
+  });
+
+  it("closes the dropdown by Files again", () => {
+    shell();
+    fireEvent.click(filesToggle());
+    fireEvent.click(filesToggle());
+    expect(dropdown()).not.toBeNull();
+    fireEvent.click(filesToggle());
+    expect(dropdown()).toBeNull();
+    expect(filesPressed()).toBe("false");
+    expect(opened()).toEqual([{ via: "button" }]);
+  });
+
+  it("undocks by the column's unpin, and the tree stays undocked after a reload", () => {
+    const first = shell();
+    fireEvent.click(screen.getByRole("button", { name: "Undock the files" }));
+    expect(column()).toBeNull();
+    expect(toggled()).toEqual([{ panel: "files", open: false, via: "button" }]);
+    first.unmount();
+    shell();
+    expect(column()).toBeNull();
+    expect(filesPressed()).toBe("false");
+  });
+
+  it("shows a docked tree as the dropdown, with no pin, when the code area is 1000 px", () => {
+    shell();
+    codeAreaAt(1000);
+    expect(column()).toBeNull();
+    expect(filesPressed()).toBe("false");
+    fireEvent.click(filesToggle());
+    expect(dropdown()).not.toBeNull();
+    expect(pin()).toBeNull();
+    expect(filesPressed()).toBe("true");
+    // Still docked: back at a wide code area the column returns
+    expect(toggled()).toEqual([]);
+    expect(opened()).toEqual([{ via: "button" }]);
+    codeAreaAt(1300);
+    expect(dropdown()).toBeNull();
+    expect(column()).not.toBeNull();
+  });
+
+  it("opens the dropdown by Cmd+E once undocked, via key", () => {
+    shell();
+    press({ key: "e", metaKey: true });
+    expect(column()).toBeNull();
+    press({ key: "e", metaKey: true });
+    expect(dropdown()).not.toBeNull();
+    expect(filesPressed()).toBe("true");
+    expect(toggled()).toEqual([{ panel: "files", open: false, via: "key" }]);
+    expect(opened()).toEqual([{ via: "key" }]);
+  });
+
+  it("opens the dropdown when the editor asks to show an undocked tree", () => {
+    shell();
+    fireEvent.click(filesToggle());
+    act(() => PgView.showFiles());
+    expect(dropdown()).not.toBeNull();
+    expect(opened()).toEqual([{ via: "button" }]);
+  });
+
+  it("does not render the shell for a resize that stays on one side of 1100 px", () => {
+    shell();
+    codeAreaAt(1300);
+    const wide = shellRenders;
+    codeAreaAt(1400);
+    codeAreaAt(1100);
+    expect(shellRenders).toBe(wide);
+    codeAreaAt(1000);
+    const narrow = shellRenders;
+    expect(narrow).toBeGreaterThan(wide);
+    codeAreaAt(900);
+    codeAreaAt(1099);
+    expect(shellRenders).toBe(narrow);
+  });
+
+  /** An undocked tree with its dropdown up, from one press of Files */
+  const undockedAndOpen = () => {
+    fireEvent.click(filesToggle());
+    fireEvent.click(filesToggle());
+    expect(dropdown()).not.toBeNull();
+  };
+
+  it.each([
+    ["Home", { home: () => <div>home</div> }],
+    [
+      "a page",
+      {
+        cover: {
+          title: "Tutorials",
+          content: <div>page slot</div>,
+          onClose: () => {},
+        },
+      },
+    ],
+  ] as const)(
+    "closes the dropdown under %s, and one press of Files opens it on return",
+    (_, over) => {
+      const { rerender } = shell();
+      undockedAndOpen();
+      rerender(
+        shellTree(
+          "home" in over ? over.home : undefined,
+          {},
+          "cover" in over ? over.cover : undefined
+        )
+      );
+      expect(dropdown()).toBeNull();
+      rerender(shellTree());
+      // Nobody asked for it back
+      expect(dropdown()).toBeNull();
+      expect(filesPressed()).toBe("false");
+      fireEvent.click(filesToggle());
+      expect(dropdown()).not.toBeNull();
+      expect(opened()).toEqual([{ via: "button" }, { via: "button" }]);
+    }
+  );
+
+  it("closes the dropdown at a phone's width, and one press of Files opens it back at a wide one", () => {
+    shell();
+    undockedAndOpen();
+    act(() => resizeTo(390));
+    act(() => resizeTo(1440));
+    expect(dropdown()).toBeNull();
+    expect(filesPressed()).toBe("false");
+    fireEvent.click(filesToggle());
+    expect(dropdown()).not.toBeNull();
+    expect(opened()).toEqual([{ via: "button" }, { via: "button" }]);
+  });
+
+  it("closes the dropdown by Escape, and one press of Files opens it again", () => {
+    shell();
+    undockedAndOpen();
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: "Escape",
+    });
+    expect(dropdown()).toBeNull();
+    expect(filesPressed()).toBe("false");
+    fireEvent.click(filesToggle());
+    expect(dropdown()).not.toBeNull();
+    expect(opened()).toEqual([{ via: "button" }, { via: "button" }]);
+  });
+
+  it("closes the dropdown by a press outside it, and one press of Files opens it again", async () => {
+    shell();
+    undockedAndOpen();
+    // Radix listens for a press outside only from the next tick on
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    fireEvent.pointerDown(screen.getByText("stage"));
+    expect(dropdown()).toBeNull();
+    expect(filesPressed()).toBe("false");
+    fireEvent.click(filesToggle());
+    expect(dropdown()).not.toBeNull();
+    expect(opened()).toEqual([{ via: "button" }, { via: "button" }]);
   });
 });

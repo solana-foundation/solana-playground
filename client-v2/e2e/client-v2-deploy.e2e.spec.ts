@@ -1,4 +1,11 @@
+import { Endpoint } from "../src/entities/cluster/model/endpoint";
 import { expect, LONG, test } from "./fixtures";
+import { DOCK_DESK } from "./viewports";
+
+// These tests drive the project tree as its docked column, which needs a code
+// area of 1100 px or more; the default window is too narrow and shows the
+// dropdown instead
+test.use({ viewport: DOCK_DESK });
 
 /**
  * The browser scenarios of `client-v2-deploy`. The rest of its scenarios
@@ -12,7 +19,7 @@ test("client-v2-deploy: A devnet record viewed on testnet", async ({
 }) => {
   // Testnet is the selected network; its requests are refused, so CI never reaches
   // it: the cluster is read from the endpoint's URL, not from an answer
-  await page.route("https://api.testnet.solana.com/**", (route) =>
+  await page.route(`${Endpoint.TESTNET}/**`, (route) =>
     route.abort("connectionrefused")
   );
   await page.evaluate(

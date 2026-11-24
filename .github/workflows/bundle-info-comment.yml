@@ -3,7 +3,7 @@ name: "Client v2: bundle info comment"
 # Posts the client-v2 build job's bundle change report as one sticky comment; ported from the Solana Explorer's build-info-comment.yaml.
 # Not in client-v2.yml: a fork's pull request runs CI with a read-only token, and this runs in the base repository without the pull request's code.
 on:
-  workflow_run:
+  workflow_run: # zizmor: ignore[dangerous-triggers] checks out only the default branch's locate-pr.mjs and reads the fork's artifact as data, outside the workspace
     workflows: [Client v2]
     types: [completed]
 

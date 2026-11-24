@@ -34,6 +34,7 @@ if (import.meta.vitest) {
   describe("shared/lib/focus", () => {
     const mount = (html: string) => {
       const host = document.createElement("div");
+      // eslint-disable-next-line no-unsanitized/property -- the test's own markup literals, never user input
       host.innerHTML = html;
       document.body.appendChild(host);
       return host;

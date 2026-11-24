@@ -9,6 +9,12 @@ import {
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
+import { DOCK_DESK } from "./viewports";
+
+// These tests drive the project tree as its docked column, which needs a code
+// area of 1100 px or more; the default window is too narrow and shows the
+// dropdown instead
+test.use({ viewport: DOCK_DESK });
 
 const ID = "0123abcd";
 
@@ -285,6 +291,9 @@ test("gist-sharing: A hand-made gist of TypeScript behind a link", async ({
   await page.goto(`/gist/${ID}`);
 
   await expect(page.locator("#root-dir")).toContainText("client.ts", LONG);
-  await expect(page.locator("#flow-stage-tab-write")).toBeVisible();
-  await expect(page.locator("#flow-stage-tab-build")).toHaveCount(0);
+  // A project with no program: its row names it, with no stepper
+  await expect(page.locator("#flow-client-project")).toBeVisible();
+  await expect(
+    page.getByRole("tablist", { name: "Development loop" })
+  ).toHaveCount(0);
 });

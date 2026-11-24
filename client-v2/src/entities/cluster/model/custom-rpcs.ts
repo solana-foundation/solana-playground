@@ -119,6 +119,21 @@ export const maskRpcUrl = (url: string): MaskedUrl => {
   };
 };
 
+/**
+ * Any http(s) URL inside free text, such as an RPC's error message. It never
+ * ends on punctuation: a `,` or `.` after it belongs to the sentence, and left
+ * on the last path segment it would stop that segment reading as a key
+ */
+const URL_IN_TEXT = /https?:\/\/[^\s"'<>`)\]]*[^\s"'<>`)\].,;:!?]/g;
+
+/**
+ * `text` with every URL in it masked by {@link maskRpcUrl}. An RPC's error can
+ * quote its URL, key included, and error text can reach the assistant's model
+ * and its stored chat (HOO-2878)
+ */
+export const maskUrlsIn = (text: string) =>
+  text.replace(URL_IN_TEXT, (url) => maskRpcUrl(url).text);
+
 /** `new URL(value).href`, or the value itself when it is not a URL */
 const normalised = (value: string) => {
   try {
@@ -479,7 +494,8 @@ if (import.meta.vitest) {
     describe("checkRpcUrl", () => {
       it.each([
         "devnet",
-        "http://api.devnet.solana.com",
+        Endpoint.DEVNET.replace("https:", "http:"),
+        // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- the insecure scheme is the input under test
         "ftp://rpc.test",
         "",
         "https://",
@@ -505,6 +521,35 @@ if (import.meta.vitest) {
         "rpc.example.com"
       );
       expect(hostOf("http://localhost:8899/")).toBe("localhost:8899");
+    });
+
+    describe("maskUrlsIn", () => {
+      it("masks the key of every URL an error quotes, and leaves the rest", () => {
+        expect(
+          maskUrlsIn(
+            "failed to get recent blockhash: 401 from https://devnet.helius-rpc.com/?api-key=abc (https://r.test/?apiKey=x)"
+          )
+        ).toBe(
+          "failed to get recent blockhash: 401 from https://devnet.helius-rpc.com/?api-key=•••• (https://r.test/?apiKey=••••)"
+        );
+      });
+
+      it.each([",", ".", ";", ":", "!", "?", ".,"])(
+        "masks a path key the sentence follows with %s, and keeps the punctuation",
+        (punctuation) => {
+          expect(
+            maskUrlsIn(
+              `failed at https://solana-mainnet.g.alchemy.com/v2/abc123def456ghi789${punctuation} retry later`
+            )
+          ).toBe(
+            `failed at https://solana-mainnet.g.alchemy.com/v2/••••${punctuation} retry later`
+          );
+        }
+      );
+
+      it("leaves text without a URL as it is", () => {
+        expect(maskUrlsIn("insufficient funds")).toBe("insufficient funds");
+      });
     });
 
     describe("maskRpcUrl", () => {
@@ -567,7 +612,7 @@ if (import.meta.vitest) {
       });
 
       it.each([
-        "https://api.devnet.solana.com/",
+        `${Endpoint.DEVNET}/`,
         "http://localhost:8899/",
         "https://r.test/solana-mainnet-endpoint/?cluster=devnet",
         // One short of the token floor, and long words with no digit
@@ -621,7 +666,7 @@ if (import.meta.vitest) {
     });
 
     it("refuses a URL that fails the rule, and saves nothing", () => {
-      expect(add("", "http://api.devnet.solana.com")).toEqual({
+      expect(add("", Endpoint.DEVNET.replace("https:", "http:"))).toEqual({
         ok: false,
         reason: "format",
       });
@@ -740,8 +785,8 @@ if (import.meta.vitest) {
         expect(
           PgCustomRpcs.check(
             {
-              name: offered("mainnet-beta").name,
-              url: offered("mainnet-beta").value,
+              name: offered("mainnet").name,
+              url: offered("mainnet").value,
             },
             undefined
           )
@@ -830,7 +875,7 @@ if (import.meta.vitest) {
 
       it.each([
         { name: "Surfpool", chip: "http://127.0.0.1:8899" },
-        { name: "the public Testnet", chip: "https://api.testnet.solana.com" },
+        { name: "the public Testnet", chip: Endpoint.TESTNET },
       ])(
         "moves a profile on $name's address, re-spelled, onto its chip",
         ({ chip }) => {
@@ -880,11 +925,10 @@ if (import.meta.vitest) {
 
       it.each([
         ["the offered Devnet", () => offered("devnet").value],
-        ["the offered Mainnet", () => offered("mainnet-beta").value],
+        ["the offered Mainnet", () => offered("mainnet").value],
         ["the offered Testnet", () => offered("testnet").value],
         ["Localnet", () => "http://localhost:8899"],
         ["Surfpool", () => "http://127.0.0.1:8899"],
-        ["Playnet", () => "http://playnet"],
         ["a value that is not an RPC", () => "devnet"],
       ])("leaves %s out", (_, endpoint) => {
         expect(PgCustomRpcs.adopt(endpoint())).toBeUndefined();
@@ -894,13 +938,11 @@ if (import.meta.vitest) {
 
     it("saves a chip's address under a name of its own, and the public Devnet beside Devnet", () => {
       expect(add("My Devnet", offered("devnet").value).ok).toBe(true);
-      expect(add("", offered("mainnet-beta").value).ok).toBe(true);
-      expect(add("Public Devnet", "https://api.devnet.solana.com").ok).toBe(
-        true
-      );
+      expect(add("", offered("mainnet").value).ok).toBe(true);
+      expect(add("Public Devnet", Endpoint.DEVNET).ok).toBe(true);
       expect(PgCustomRpcs.list().map((r) => r.name)).toEqual([
         "My Devnet",
-        hostOf(offered("mainnet-beta").value),
+        hostOf(offered("mainnet").value),
         "Public Devnet",
       ]);
     });

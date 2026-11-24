@@ -29,8 +29,8 @@ const LAYER_RULES = new Set([
 ]);
 
 /**
- * The layer rule's messages for `code` linted with `package.json`
- * `eslintConfig`, which `yarn lint` and `yarn lint:layers` both read, as if
+ * The layer rule's messages for `code` linted with `eslint.config.mjs`,
+ * which `yarn lint` and `yarn lint:layers` both read, as if
  * it lived at `file`. The file does not exist, but it sits in a real slice,
  * so its imports resolve to real files the way they would in the code; an
  * import that resolves to nothing is not checked, so a broken resolver shows
@@ -212,19 +212,19 @@ const ALLOWED = [
   },
 ];
 
-// Editors and `npx eslint client-v2/...` lint from the repository root. The
-// plugin and the resolver read `process.cwd()`, not ESLint's `cwd`, so the
+// The git hooks run `lint-changed.mjs` from the repository root with ESLint's
+// cwd in client-v2; the plugin and the resolver read `process.cwd()`, so the
 // test moves the process there
-describe("eslint-layers.js run from the repository root", () => {
+describe("eslint-layers.js linted from a process in the repository root", () => {
   it("still places files in their layers", async () => {
     const root = path.dirname(cwd);
     const before = process.cwd();
     process.chdir(root);
     try {
-      const eslint = untypedEslintAt(root);
+      const eslint = untypedEslintAt(cwd);
       const [result] = await eslint.lintText(
         'import { ModalHost } from "../../overlays";\nModalHost;\n',
-        { filePath: "client-v2/src/widgets/assistant/ui/Probe.tsx" }
+        { filePath: path.join(cwd, "src/widgets/assistant/ui/Probe.tsx") }
       );
       const errors = result.messages.filter(
         (m) => m.ruleId === "boundaries/dependencies"
@@ -257,8 +257,8 @@ describe("eslint-layers.js", () => {
 // listed file that stopped importing across, fails here
 describe("the recorded exception", () => {
   it("warns on exactly the known imports and fails none", async () => {
-    const files = layersConfig.overrides.find(
-      (o) => "layers/recorded-exception" in o.rules
+    const files = layersConfig.find(
+      (o) => o.rules !== undefined && "layers/recorded-exception" in o.rules
     ).files;
     const results = await untypedEslintAt(cwd).lintFiles(files);
     const found = results.flatMap((result) =>

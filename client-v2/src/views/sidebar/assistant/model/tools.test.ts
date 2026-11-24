@@ -331,6 +331,7 @@ describe("build and deploy", () => {
     ({
       build: over.build ?? vi.fn(async () => {}),
       deploy: over.deploy ?? vi.fn(async () => null),
+      watchConnection: () => () => false,
       quoteDeploy: vi.fn(async () => ({
         network: "devnet",
         cost: null,
@@ -397,6 +398,21 @@ describe("build and deploy", () => {
       outcome: "deploy failed: insufficient funds",
     });
   });
+
+  it("masks the key of an RPC URL a failed deploy's error quotes", async () => {
+    const { result, card } = await allowed(
+      commandBridge({
+        deploy: vi.fn(async () => {
+          throw new Error(
+            "failed to get recent blockhash: 401 from https://devnet.helius-rpc.com/?api-key=k3y-0f-the-rpc"
+          );
+        }),
+      }),
+      "deploy"
+    );
+    expect(JSON.stringify({ result, card })).not.toContain("k3y-0f-the-rpc");
+    expect(result).toContain("https://devnet.helius-rpc.com/?api-key=••••");
+  });
 });
 
 describe("build and deploy approvals", () => {
@@ -434,10 +450,11 @@ describe("build and deploy approvals", () => {
     ({
       getProjectContext: () => ({
         workspaceName: "hello_anchor",
-        cluster: "https://api.devnet.solana.com",
+        cluster: "devnet",
         // eslint-disable-next-line unicorn/no-null -- `ProjectContext.buildError` is `string | null`
         buildError: null,
       }),
+      watchConnection: () => () => false,
       quoteDeploy: async () => quote,
       build: vi.fn(async () => {}),
       // eslint-disable-next-line unicorn/no-null -- `deploy()` answers `null` without a program id
@@ -489,15 +506,16 @@ describe("build and deploy approvals", () => {
   });
 
   it("deploys nothing when the network changed while the approval waited", async () => {
-    let cluster = "https://api.devnet.solana.com";
+    let hasConnectionChanged = false;
     const deploy = vi.fn(async () => {});
     const b = {
       getProjectContext: () => ({
         workspaceName: "hello_anchor",
-        cluster,
+        cluster: "devnet",
         // eslint-disable-next-line unicorn/no-null -- `ProjectContext.buildError` is `string | null`
         buildError: null,
       }),
+      watchConnection: () => () => hasConnectionChanged,
       quoteDeploy: async () => PRICED,
       deploy,
     } as unknown as PlaygroundBridge;
@@ -505,7 +523,7 @@ describe("build and deploy approvals", () => {
     if (!found) throw new Error("createTools has no tool named deploy");
     const run = found.run({});
     await vi.waitFor(() => expect(PgAssistant.items).toHaveLength(1));
-    cluster = "https://api.mainnet-beta.solana.com";
+    hasConnectionChanged = true;
     PgAssistant.resolveApproval(PgAssistant.items[0].id, true);
 
     expect(await run).toContain("nothing was deployed");
@@ -632,6 +650,7 @@ describe("deploy", () => {
     const tool = requireFor("the deploy tool")(
       createTools({
         getProjectContext: () => ({ cluster: "devnet" }),
+        watchConnection: () => () => false,
         quoteDeploy: async () => ({
           network: "devnet",
           cost: 1_420_000_000,

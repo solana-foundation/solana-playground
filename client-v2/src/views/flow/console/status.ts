@@ -5,6 +5,11 @@ import type { statusDotVariants } from "@/shared/ui/status-dot";
 import { PgBuildOutput } from "../../sidebar/assistant/bridge/build-output";
 import { parseBuildReport } from "../stages/build-report";
 import { msLabel } from "../stages/build-view";
+import {
+  busySecondsLeft,
+  isBusyRefusal,
+  isSignInRefusal,
+} from "../state/sign-in-refusal";
 import type { FlowState, RunKind } from "../state/stage";
 
 type StatusDotVariant = NonNullable<
@@ -57,7 +62,8 @@ const running = (what: string, elapsedMs: number | null): ConsoleStatus => ({
  * system's ("Built in 11.8 s"), derived from `PgFlow.state` plus (only on a
  * failed build) the first diagnostic code out of `PgBuildOutput.latest` via
  * `parseBuildReport`. `elapsedMs` is how long the run in flight has taken,
- * which only the drawer's clock knows.
+ * or, after a busy refusal, how long ago the refusal was answered, which only
+ * the drawer's clock knows.
  *
  * Pure and framework-free so it is unit-testable without rendering
  * `ConsoleDrawer`; the component only has to call it on every `PgFlow`
@@ -87,6 +93,19 @@ export const describeConsoleStatus = (
   if (flow.stopped === "deploy") {
     return { text: "Deploy stopped", tone: "idle" };
   }
+  if (isSignInRefusal(flow.buildFailure)) {
+    return { text: "Sign in to build", tone: "idle" };
+  }
+  if (isBusyRefusal(flow.buildFailure)) {
+    const left = busySecondsLeft(flow.buildFailure, elapsedMs ?? 0);
+    return {
+      text:
+        left > 0
+          ? `Build busy \u00b7 retry in ${left} s`
+          : "Build busy \u00b7 try again now",
+      tone: "idle",
+    };
+  }
   if (flow.deploy === "failed") {
     return { text: "Deploy failed", tone: "error" };
   }
@@ -107,6 +126,36 @@ export const describeConsoleStatus = (
   }
   if (!flow.hasProgram) return { text: CLIENT_RUN_HINT, tone: "idle" };
   return IDLE;
+};
+
+/**
+ * Whether the drawer's clock ticks, and from when. `startedAt` is
+ * `undefined` for a run that carries no start time, which the drawer counts
+ * from when it first saw the run.
+ */
+export type ConsoleClock =
+  | { isTicking: false }
+  | { isTicking: true; startedAt: number | undefined };
+
+/**
+ * The clock `describeConsoleStatus` needs for what it shows. A build counts
+ * from its own `startedAt`, as the Build stage's slow line does, so the two
+ * agree after a remount. A busy refusal counts its wait from `refusedAt`, but
+ * only while the strip shows it: the refusal stays in the flow while a deploy
+ * or an airdrop runs, and those count from their own start.
+ */
+export const consoleClockOf = (flow: FlowState): ConsoleClock => {
+  if (flow.build === "running") {
+    return { isTicking: true, startedAt: flow.buildStartedAt ?? undefined };
+  }
+  if (describeConsoleStatus(flow).tone === "running") {
+    return { isTicking: true, startedAt: undefined };
+  }
+  // A stop is shown over a busy refusal, as `describeConsoleStatus` orders it
+  if (flow.stopped === null && isBusyRefusal(flow.buildFailure)) {
+    return { isTicking: true, startedAt: flow.buildFailure.refusedAt };
+  }
+  return { isTicking: false };
 };
 
 /**

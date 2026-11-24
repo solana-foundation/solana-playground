@@ -316,6 +316,7 @@ it.each([
       vi.fn(() => panel.focus())
     );
     await userEvent.click(
+      // eslint-disable-next-line security/detect-non-literal-regexp -- a pattern this test builds from its own constants
       screen.getByRole("menuitem", { name: new RegExp(name) })
     );
     expect(document.activeElement).toBe(panel);

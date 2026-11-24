@@ -8,8 +8,7 @@ export interface SelectedConnectionState {
   connection: Connection | undefined;
   /** `null` when the endpoint's cluster could not be read */
   cluster: Cluster | null | undefined;
-  /** `null` while the connection cannot be asked yet, as Playnet before it starts */
-  isConnected: boolean | null | undefined;
+  isConnected: boolean | undefined;
   /** Whether the slot stopped moving; `null` when it could not be read */
   isClusterDown: boolean | null | undefined;
 }

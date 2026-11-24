@@ -215,6 +215,7 @@ describe("withObservability against the real SDK", { timeout: 30_000 }, () => {
       // `node:http`, which the SDK instruments as it does `fetch`: the test
       // setup replaces the global `fetch` with one that throws
       await new Promise<void>((resolve, reject) =>
+        // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- the loopback server this test starts; the exception cannot see an interpolated port
         get(`http://127.0.0.1:${port}/mcp?token=${token}`, (response) => {
           response.resume();
           response.on("end", resolve);
@@ -225,6 +226,7 @@ describe("withObservability against the real SDK", { timeout: 30_000 }, () => {
     const span = sentSpans().get("GET 127.0.0.1");
     expect(span?.attributes["sentry.op"].value).toBe("http.client");
     expect(span?.attributes["url.full"].value).toBe(
+      // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- the loopback server this test starts; the exception cannot see an interpolated port
       `http://127.0.0.1:${port}/mcp`
     );
     expect(JSON.stringify(sent.envelopes)).not.toContain(token);

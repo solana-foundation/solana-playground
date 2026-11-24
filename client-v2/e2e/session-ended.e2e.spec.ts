@@ -7,6 +7,7 @@ import {
   projectRow,
   seedWorkspace,
   settled,
+  stubAiStatus,
   stubSignedIn,
   test,
   TEST_USER,
@@ -162,4 +163,80 @@ test("client-v2-account: A sign-out in another tab", async ({
     LONG
   );
   await expect(account(other)).toContainText("Saved in this browser");
+});
+
+test("client-v2-account: Another account after a session ended", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const other = { id: "u2", name: "Other", image: TEST_USER.image, login: "o" };
+  /** Who the session read answers with once a sign-in completes */
+  let next = TEST_USER;
+  let expired = false;
+  await stubSignedIn(page.context());
+  await page.route("**/api/auth/get-session", (r) =>
+    // eslint-disable-next-line unicorn/no-null -- the auth route's wire JSON answers `null` for nobody
+    json(r, { user: expired ? null : next })
+  );
+  const refuseOnceExpired = (r: Route) =>
+    expired ? r.fulfill({ status: 401, body: "" }) : r.fallback();
+  await page.route("**/api/projects*", refuseOnceExpired);
+  await page.route("**/api/conversations*", refuseOnceExpired);
+  await page.route("**/api/auth/sign-in/social", (r) => {
+    expired = false;
+    return json(r, { url: r.request().postDataJSON().callbackURL });
+  });
+  await stubAiStatus(page, "z-ai/glm-5.3-flash:US");
+  await page.route("**/api/agent", (r) =>
+    r.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: 'data: {"choices":[{"delta":{"content":"An answer for t"}}]}\n\ndata: [DONE]\n\n',
+    })
+  );
+
+  /** The thread id of every conversation upload, with who was signed in */
+  const posts: { threadId: string; as: string }[] = [];
+  page.on("request", (request) => {
+    if (
+      request.method() === "POST" &&
+      request.url().includes("/api/conversations")
+    ) {
+      posts.push({
+        threadId: request.postDataJSON()?.threadId,
+        as: expired ? "nobody" : next.id,
+      });
+    }
+  });
+
+  await seedWorkspace(page, PROJECT);
+  await expect(account(page)).toHaveAccessibleName("Account: t", LONG);
+
+  // The first account asks something, and its thread reaches its account
+  const input = page.getByRole("textbox", { name: "Message the assistant" });
+  await input.fill("A question only t should see");
+  await input.press("Enter");
+  await expect(page.getByText("An answer for t")).toBeVisible(LONG);
+  await expect.poll(() => posts.length, LONG).toBeGreaterThanOrEqual(1);
+  const firstAccountThreads = new Set(posts.map(({ threadId }) => threadId));
+
+  // Its session ends without a sign-out, and another account signs in
+  expired = true;
+  await typeAnEdit(page);
+  await expect(account(page)).toContainText("Your session ended", LONG);
+  next = other;
+  posts.length = 0;
+  await account(page).click();
+  await page.getByRole("menuitem", { name: "Sign in again" }).click();
+  await expect(account(page)).toHaveAccessibleName("Account: o", LONG);
+
+  // The panel moved off the first account's conversation
+  await expect(page.getByText("A question only t should see")).toHaveCount(
+    0,
+    LONG
+  );
+  await settled(page, posts);
+  expect(
+    posts.filter(({ threadId }) => firstAccountThreads.has(threadId))
+  ).toEqual([]);
 });

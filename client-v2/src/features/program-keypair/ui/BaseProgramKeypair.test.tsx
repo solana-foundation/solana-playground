@@ -110,6 +110,16 @@ describe("features/program-keypair/ui/BaseProgramKeypair", () => {
     ).toBeTruthy();
   });
 
+  it("says that a signed-in account stores the keypair", () => {
+    draw(props({}));
+
+    expect(
+      screen.getByText(
+        "When you are signed in, your account stores this keypair, so the program id is the same on every device."
+      )
+    ).toBeTruthy();
+  });
+
   it("asks for a new keypair through onNew", () => {
     const p = props({});
     draw(p);

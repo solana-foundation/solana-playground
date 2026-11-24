@@ -17,6 +17,8 @@ import {
 import {
   getAuth,
   isAllowedOrigin,
+  NoGithubGrant,
+  readGithubTokenWith,
   readSession,
   SIGNED_OUT_REASON,
 } from "../src/features/auth/server.mjs";
@@ -76,56 +78,7 @@ const parseGist = (body) => {
   return { description, files, public: visibility };
 };
 
-/** Thrown when the user has no GitHub grant we can use: signing in again mends it */
-export class NoGithubGrant extends Error {
-  constructor(message) {
-    super(message);
-    this.name = "NoGithubGrant";
-  }
-}
-
-/** Better Auth's codes for "this user has no usable GitHub token" */
-const NO_GRANT_CODES = new Set([
-  "ACCOUNT_NOT_FOUND",
-  "FAILED_TO_GET_ACCESS_TOKEN",
-]);
-
-/**
- * The user's GitHub access token, refreshed by Better Auth if it must be.
- *
- * Better Auth 1.7 selects the account by its row id (`accountId`), not by
- * provider: a `providerId` body fails its schema and throws before any token
- * is read. So the GitHub row is found first.
- *
- * @param {{$context: Promise<any>, api: {getAccessToken: Function}}} auth
- * @param {string} userId
- * @returns {Promise<string>} throws {@link NoGithubGrant} when the user has
- * no usable GitHub account; anything else it throws is ours (the database,
- * the configuration), not the user's to mend by signing in
- */
-export const readGithubToken = async (auth, userId) => {
-  const { internalAdapter } = await auth.$context;
-  const accounts = await internalAdapter.findAccounts(userId);
-  const github = accounts.find((a) => a.providerId === "github");
-  if (!github) throw new NoGithubGrant("ACCOUNT_NOT_FOUND");
-  let accessToken;
-  try {
-    ({ accessToken } = await auth.api.getAccessToken({
-      body: { accountId: github.id, userId },
-    }));
-  } catch (e) {
-    if (NO_GRANT_CODES.has(e?.body?.code)) throw new NoGithubGrant(e.body.code);
-    throw e;
-  }
-  if (!accessToken) throw new NoGithubGrant("No GitHub access token stored");
-  return accessToken;
-};
-
-const getAccessToken = async (userId) => {
-  const auth = getAuth();
-  if (!auth) throw new Error("Sign-in is not configured");
-  return readGithubToken(auth, userId);
-};
+const getAccessToken = readGithubTokenWith(getAuth);
 
 /**
  * The route, with what it calls passed in, so `api/gists.test.mjs` can drive
@@ -177,9 +130,13 @@ export const createHandler =
       token = await deps.getAccessToken(session.user.id);
     } catch (e) {
       if (e instanceof NoGithubGrant) {
-        // Signed in to us, but GitHub's grant is gone: signing in again
-        // stores a fresh token
-        log.warn("no usable GitHub token", { context: { reason: e.message } });
+        // Signed in to us, but no token we can use: signing in again stores a
+        // fresh one. A token that no longer decrypts is ours to hear about
+        // too: a changed AUTH_SECRET makes every encrypted token unreadable
+        if (e.reason === "unreadable")
+          log.error(e, { report: true, context: { reason: e.reason } });
+        else
+          log.warn("no usable GitHub token", { context: { reason: e.reason } });
         return sendJson(res, 401, {
           error: "GitHub authorization is missing",
           reason: GITHUB_UNAUTHORIZED,

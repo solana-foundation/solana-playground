@@ -2325,14 +2325,8 @@ pub async fn process_show_stake_account(
                 //         }
                 //     }
                 // });
-                let epoch_rewards = if with_rewards.is_some() {
-                    match fetch_epoch_rewards(
-                        rpc_client,
-                        stake_account_address,
-                        with_rewards.unwrap(),
-                    )
-                    .await
-                    {
+                let epoch_rewards = if let Some(num_epochs) = with_rewards {
+                    match fetch_epoch_rewards(rpc_client, stake_account_address, num_epochs).await {
                         Ok(rewards) => Some(rewards),
                         Err(error) => {
                             PgTerminal::log_wasm(&format!(

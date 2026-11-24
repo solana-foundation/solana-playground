@@ -2,6 +2,7 @@ import type * as monaco from "monaco-editor";
 
 /** The declarations the build rewrites, so the buffer and the build agree */
 const DECLARATION = {
+  // eslint-disable-next-line security/detect-unsafe-regex -- linear: `::` ends each `\w+` repetition and `\w` matches no `:`
   rust: /^(?:\w+::)*declare_id!\("(?<id>\w*)"\)/m,
   python: /^declare_id\((?<quote>["'])(?<id>\w*)\k<quote>\)/m,
 };

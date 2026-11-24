@@ -25,7 +25,7 @@ transaction link `https://orbmarkets.io/tx/<signature>`, with no parameter on
 mainnet, `?cluster=devnet` on devnet and `?cluster=testnet` on testnet. A
 program's IDL link SHALL be `https://orbmarkets.io/address/<id>/anchor-idl`,
 with the same parameter. Orb reads only those three networks, so it SHALL
-report that it cannot open a local validator, playnet or a custom RPC URL; the
+report that it cannot open a local validator or a custom RPC URL; the
 places that ask (the fund dialog's receiver address, the Deploy stage's links)
 then show no Orb link.
 

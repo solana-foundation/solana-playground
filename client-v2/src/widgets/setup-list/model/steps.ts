@@ -22,7 +22,9 @@ export type TodoStep = Exclude<SetupStep, "network">;
 export type StepView =
   | { step: SetupStep; done: true; value?: string }
   | { step: TodoStep; done: false }
-  | { step: "network"; done: false; warn: string; value?: string };
+  | { step: "network"; done: false; warn: string; value?: string }
+  /** The wallet may be stored but could not be read: not a step to do over */
+  | { step: "wallet"; done: false; problem: "unavailable" };
 
 /**
  * Whether a step counts towards "n of total": a done one, and the network

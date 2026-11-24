@@ -51,15 +51,15 @@ export const DEFAULT_KEYPAIR_PATH = "~/.config/solana/id.json";
 const PUBLIC_ENDPOINTS: Record<string, string> = {
   devnet: Endpoint.DEVNET,
   testnet: Endpoint.TESTNET,
-  "mainnet-beta": Endpoint.MAINNET_BETA,
+  mainnet: Endpoint.MAINNET,
 };
 
 /**
  * The endpoint an export writes as the cluster's fallback: the public one of
  * the cluster Playground is on, never the URL it uses. A platform or custom RPC
  * URL can carry an API key, and a zip gets shared. A local validator keeps its
- * URL; playnet runs only in the browser and an unknown cluster has no public
- * URL, so both fall back to devnet, Playground's default.
+ * URL; an unknown cluster has no public URL, so it falls back to devnet,
+ * Playground's default.
  *
  * @param cluster the cluster Playground is on, as `PgConnection.cluster` names
  * it; `null` before it is known
@@ -97,14 +97,17 @@ const PREFERRED_CLIENTS = [
  * statement)
  */
 const hasDeclarationFor = (name: string) => (content: string) =>
+  // eslint-disable-next-line security/detect-non-literal-regexp -- `name` is a `\w+` identifier: a Playground global or one `importedNameOf` read
   new RegExp(
     `^(export\\s+)?(const|let|var|function|class)\\s+${name}\\b`,
     "m"
   ).test(content) ||
+  // eslint-disable-next-line security/detect-non-literal-regexp -- `name` is a `\w+` identifier: a Playground global or one `importedNameOf` read
   new RegExp(
     `^(export\\s+)?(const|let|var)\\s*[{[](?:[^}\\]=]*?[,:])?\\s*${name}\\b(?!\\s*:)[^}\\]=]*[}\\]]\\s*=`,
     "m"
   ).test(content) ||
+  // eslint-disable-next-line security/detect-non-literal-regexp -- `name` is a `\w+` identifier: a Playground global or one `importedNameOf` read
   new RegExp(
     `^\\s*import\\s+[^;'"]*?\\b${name}\\b[^;'"]*?\\s+from\\s+["']`,
     "m"
@@ -115,6 +118,7 @@ const hasDeclarationFor = (name: string) => (content: string) =>
  * property (`a.pg`) or part of a longer one (`mypg`)
  */
 const isGlobalUsedFor = (name: string) => (content: string) =>
+  // eslint-disable-next-line security/detect-non-literal-regexp -- `name` is a `\w+` identifier: a Playground global or one `importedNameOf` read
   new RegExp(`(^|[^\\w$.])${name}\\b`, "m").test(content);
 
 /**
@@ -611,8 +615,6 @@ if (import.meta.vitest) {
       ts = await import("typescript");
     });
 
-    const DEVNET = "https://api.devnet.solana.com";
-
     /** Every package the files import, at version 1.0.0 */
     const importedPackages = async (files: TupleFiles) => {
       const names = new Set<string>();
@@ -635,8 +637,9 @@ if (import.meta.vitest) {
         .filter(Boolean)
         .join("") + content;
 
-    const profileAs =
-      toNodeProjectWith(importedPackages)(importGlobals)(DEVNET);
+    const profileAs = toNodeProjectWith(importedPackages)(importGlobals)(
+      Endpoint.DEVNET
+    );
 
     const profileOf = profileAs("My Project");
 
@@ -846,7 +849,9 @@ console.log(await pg.connection.getSlot());
         await exportOf([["client/a.ts", CLIENT]]),
         "playground.ts"
       );
-      expect(shimText).toContain(`process.env.SOLANA_RPC_URL || "${DEVNET}"`);
+      expect(shimText).toContain(
+        `process.env.SOLANA_RPC_URL || "${Endpoint.DEVNET}"`
+      );
       expect(shimText).toContain(
         `process.env.SOLANA_KEYPAIR || "${DEFAULT_KEYPAIR_PATH}"`
       );
@@ -864,7 +869,7 @@ console.log(await pg.connection.getSlot());
         "README.md"
       );
       expect(text).toContain("SOLANA_RPC_URL");
-      expect(text).toContain(DEVNET);
+      expect(text).toContain(Endpoint.DEVNET);
       expect(text).toContain("SOLANA_KEYPAIR");
       expect(text).toContain(DEFAULT_KEYPAIR_PATH);
     });
@@ -952,9 +957,9 @@ console.log(await pg.connection.getSlot());
         expected: Endpoint.DEVNET,
       },
       {
-        cluster: "mainnet-beta",
+        cluster: "mainnet",
         endpoint: "https://rpc.example/key",
-        expected: Endpoint.MAINNET_BETA,
+        expected: Endpoint.MAINNET,
       },
       {
         cluster: "testnet",
@@ -965,11 +970,6 @@ console.log(await pg.connection.getSlot());
         cluster: "localnet",
         endpoint: "http://localhost:8900",
         expected: "http://localhost:8900",
-      },
-      {
-        cluster: "playnet",
-        endpoint: "http://playnet",
-        expected: Endpoint.DEVNET,
       },
       {
         // eslint-disable-next-line unicorn/no-null -- `PgConnection.cluster` is null until it is known

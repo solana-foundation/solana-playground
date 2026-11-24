@@ -9,15 +9,34 @@ ARG DEBIAN_FRONTEND="noninteractive"
 
 # Install build deps
 RUN apt-get update -qq && apt-get upgrade -qq && apt-get install -qq \
-    build-essential curl pkg-config libssl-dev libudev-dev
+    build-essential bzip2 curl pkg-config libssl-dev libudev-dev
 
 # Create a non-root user
 RUN useradd -m -u 1001 -s /bin/bash ${USER}
 USER ${USER}
 ENV HOME="/home/${USER}"
 
+# The tools this image fetches by URL (rustup-init, the Agave release, and the
+# platform tools and Criterion the Solana SDK needs) are pinned to a version
+# and checked against a SHA-256 before use; a mismatch fails the build. To bump
+# one, change its version and take the new checksum from the publisher (rustup
+# publishes rustup-init.sha256 next to the binary; GitHub lists most release
+# assets' sha256 digest; Criterion's, which has none, was taken from the
+# download). Not
+# covered here: the apt packages and the toolchains rustup installs, which
+# their own tools verify against their indexes. The image is x86_64 only:
+# Agave publishes no other Linux build.
+ARG RUSTUP_VERSION="1.29.3"
+ARG RUSTUP_SHA256="b1c8cb14e30889e7e2999e6b69e62d9e9b9ffc0f4df8180564d306d9680e6c55"
+
 # Install Rust
-RUN sh -c "$(curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs)" -- -y
+RUN test "$(uname -m)" = x86_64 || { echo "server image is x86_64 only, got $(uname -m)" >&2; exit 1; }
+RUN curl --proto '=https' --tlsv1.2 -sSfLo /tmp/rustup-init \
+      "https://static.rust-lang.org/rustup/archive/${RUSTUP_VERSION}/x86_64-unknown-linux-gnu/rustup-init" \
+    && echo "${RUSTUP_SHA256}  /tmp/rustup-init" | sha256sum -c - \
+    && chmod +x /tmp/rustup-init \
+    && /tmp/rustup-init -y \
+    && rm /tmp/rustup-init
 ENV PATH="${HOME}/.cargo/bin:${PATH}"
 
 ############################## BUILD SERVER BINARY #############################
@@ -48,15 +67,52 @@ COPY src src
 RUN rm -rf target/release/.fingerprint/solpg-server-*
 RUN cargo build --release --locked
 
-################################# START SERVER #################################
-FROM rust
+########################## SOLANA AND PLATFORM TOOLS ##########################
+FROM rust AS tools
 
 ARG USER=solpg
 ARG SOLANA_VERSION="3.1.10"
+ARG SOLANA_SHA256="a7205ff29bcf0f7199740225ecae2b85a28ea9668892d5ec21bd9749882984a1"
+# The SDK's first build would otherwise download these two unchecked. It takes
+# each from ~/.cache/solana/<version>/<name> when present, so they are placed
+# there. The versions must be the ones that Solana version's SDK names
+# (platform-tools-sdk/sbf/scripts/install.sh): bump them together. The final
+# stage fails the build if the SDK fetched anything else.
+ARG PLATFORM_TOOLS_VERSION="v1.52"
+ARG PLATFORM_TOOLS_SHA256="8b3861e93daf085ec12b65c4fac374d9bec4587a3de16871da6b08ab0c1d907e"
+ARG CRITERION_VERSION="v2.3.3"
+ARG CRITERION_SHA256="ee7f92d7268563848aa3ae90bbf5df86604b8d0fb0e4942b0ecfbf6201596550"
 
-# Install Solana
-RUN sh -c "$(curl -sSfL https://release.anza.xyz/v${SOLANA_VERSION}/install)"
+# Install Solana, in the layout of Agave's installer
+RUN curl --proto '=https' --tlsv1.2 -sSfLo /tmp/solana-release.tar.bz2 \
+      "https://github.com/anza-xyz/agave/releases/download/v${SOLANA_VERSION}/solana-release-x86_64-unknown-linux-gnu.tar.bz2" \
+    && echo "${SOLANA_SHA256}  /tmp/solana-release.tar.bz2" | sha256sum -c - \
+    && mkdir -p "${HOME}/.local/share/solana/install/releases/${SOLANA_VERSION}" \
+    && tar -xjf /tmp/solana-release.tar.bz2 -C "${HOME}/.local/share/solana/install/releases/${SOLANA_VERSION}" \
+    && ln -s "${HOME}/.local/share/solana/install/releases/${SOLANA_VERSION}/solana-release" \
+      "${HOME}/.local/share/solana/install/active_release" \
+    && rm /tmp/solana-release.tar.bz2
 ENV PATH="${HOME}/.local/share/solana/install/active_release/bin:${PATH}"
+
+# Install the platform tools and Criterion where the SDK looks before downloading
+RUN curl --proto '=https' --tlsv1.2 -sSfLo /tmp/platform-tools.tar.bz2 \
+      "https://github.com/anza-xyz/platform-tools/releases/download/${PLATFORM_TOOLS_VERSION}/platform-tools-linux-x86_64.tar.bz2" \
+    && echo "${PLATFORM_TOOLS_SHA256}  /tmp/platform-tools.tar.bz2" | sha256sum -c - \
+    && mkdir -p "${HOME}/.cache/solana/${PLATFORM_TOOLS_VERSION}/platform-tools" \
+    && tar -xjf /tmp/platform-tools.tar.bz2 -C "${HOME}/.cache/solana/${PLATFORM_TOOLS_VERSION}/platform-tools" \
+    && rm /tmp/platform-tools.tar.bz2
+RUN curl --proto '=https' --tlsv1.2 -sSfLo /tmp/criterion.tar.bz2 \
+      "https://github.com/Snaipe/Criterion/releases/download/${CRITERION_VERSION}/criterion-${CRITERION_VERSION}-linux-x86_64.tar.bz2" \
+    && echo "${CRITERION_SHA256}  /tmp/criterion.tar.bz2" | sha256sum -c - \
+    && mkdir -p "${HOME}/.cache/solana/${CRITERION_VERSION}/criterion" \
+    && tar --strip-components 1 -xjf /tmp/criterion.tar.bz2 -C "${HOME}/.cache/solana/${CRITERION_VERSION}/criterion" \
+    && rm /tmp/criterion.tar.bz2
+ENV PLATFORM_TOOLS_VERSION="${PLATFORM_TOOLS_VERSION}" CRITERION_VERSION="${CRITERION_VERSION}"
+
+################################# START SERVER #################################
+FROM tools
+
+ARG USER=solpg
 
 # Set the workdir
 WORKDIR /home/${USER}
@@ -66,6 +122,23 @@ COPY --chown=${USER}:${USER} programs programs
 # Cloud Build's legacy builder strips the owner write bit from context files; the server rewrites programs/<id>/Cargo.toml at runtime
 RUN chmod -R u+w programs
 RUN cargo-build-sbf --manifest-path programs/Cargo.toml -- --locked
+RUN test "$(ls "${HOME}/.cache/solana")" = "$(printf '%s\n' "${PLATFORM_TOOLS_VERSION}" "${CRITERION_VERSION}" | sort)" \
+    || { echo "the Solana SDK fetched tools other than the pinned ones:" >&2; ls "${HOME}/.cache/solana" >&2; exit 1; }
+
+# Warm every build slot, so a fresh instance's first builds do not compile all dependencies.
+# A slot `programs/<id>` builds into its own `target`; `program::build` skips setting up a slot
+# that has `ready`. The manifest points at `../default` as `program::build` points it at `../<uuid>`.
+# Match BUILD_SLOTS to `PG_BUILD_CONCURRENCY` in `app.yaml`.
+ARG BUILD_SLOTS=10
+RUN for id in $(seq 0 $((BUILD_SLOTS - 1))); do \
+      mkdir -p programs/$id \
+      && cp programs/Cargo.lock programs/$id/ \
+      && sed 's|"default/|"../default/|' programs/Cargo.toml > programs/$id/Cargo.toml \
+      && cp -a programs/target programs/$id/target \
+      && cargo-build-sbf --manifest-path programs/$id/Cargo.toml --offline -- --locked \
+      && touch programs/$id/ready \
+      || exit 1; \
+    done
 
 # Start server
 COPY --from=build /build/target/release/solpg-server .
