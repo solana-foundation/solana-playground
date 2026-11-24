@@ -140,10 +140,14 @@ The Production Branch row was confirmed on 2026-10-19.
 
 ## How long a function may run
 
-`vercel.json` sets `functions."api/agent.mjs".maxDuration = 300`. That
-route streams a model's answer, so it is the only one that can outlive a
-default; every other `api/*.mjs` handler answers in one round trip and
-keeps the platform default.
+`vercel.json` sets `maxDuration = 300` for two functions, and every other
+`api/*.mjs` handler answers in one round trip and keeps the platform default:
+
+- `api/agent.mjs` streams a model's answer.
+- `api/build-server.mjs` waits for a build. The build server bounds each
+  `/build` request to 280 s, queue wait included (`REQUEST_TIME_LIMIT` in
+  `server/src/routes/build.rs`), sized to fit inside the function's 300:
+  change the two together.
 
 **Why 300.** A value in `vercel.json` replaces the platform default, up or
 down, and the default depends on the project's compute mode:
@@ -479,8 +483,8 @@ turns stay in the US with no routing field.
    added, and `/api/agent` reports it to Sentry as the `api:agent` error
    `upstream credit balance is empty`. Nous has no API for the balance or a
    key's limit; read both in the dashboard.
-3. Set the variables of the "Value on Nous" table in Vercel, for Production
-   and Preview. `PG_AI_BASE_URL` and `PG_AI_MODEL` stay unset, on the Nous defaults.
+3. Set the variables of the "Value on Nous" table for Production (in Doppler,
+   whose sync writes Vercel) and Preview (in Vercel). `PG_AI_BASE_URL` and `PG_AI_MODEL` stay unset, on the Nous defaults.
 
 | Variable | Value on Nous |
 | --- | --- |
@@ -536,8 +540,8 @@ worst-case turn. Every request to the Gateway is restricted to
    Budget Manager sees the setting.
 4. Set the team's monthly budget at $1,500 (both keys at their daily budget for
    25 days). It needs sign-off before it is set.
-5. Set the variables of the "Value on the Gateway" table in Vercel, for
-   Production and Preview.
+5. Set the variables of the "Value on the Gateway" table for Production (in
+   Doppler, whose sync writes Vercel) and Preview (in Vercel).
 
 | Variable | Value on the Gateway |
 | --- | --- |
@@ -546,8 +550,9 @@ worst-case turn. Every request to the Gateway is restricted to
 | `PG_AI_API_KEY` | The `established` key. Secret |
 | `PG_AI_NEWCOMER_API_KEY` | The `newcomer` key. Secret. Optional: without it newcomers spend through `PG_AI_API_KEY`, still held to the newcomer cap, and the pools are shared |
 
-**The switch** to the Gateway is a change of variables, not of code. In
-Vercel, for Production (and Preview, to try it there first):
+**The switch** to the Gateway is a change of variables, not of code, for
+Production in Doppler, whose sync writes Vercel (and Preview in Vercel, to
+try it there first):
 
 1. **Set** `PG_AI_BASE_URL` to `https://ai-gateway.vercel.sh/v1` and
    `PG_AI_MODEL` to `zai/glm-5.3-flash`. Setting the base URL is the switch:
@@ -566,7 +571,8 @@ nothing can spend outside the budgets.
 sets any `AGENT_*` twin, change or delete it alongside: an unset `PG_AI_*`
 falls back to it): restore the Nous `PG_AI_API_KEY` and
 `PG_AI_NEWCOMER_API_KEY` (a Gateway key sent to Nous gets `502`), and unset
-`PG_AI_BASE_URL` and `PG_AI_MODEL`, then redeploy. Unset, `PG_AI_PROVIDERS`
+`PG_AI_BASE_URL` and `PG_AI_MODEL`, Production's in Doppler and Preview's in
+Vercel, then redeploy. Unset, `PG_AI_PROVIDERS`
 follows the base URL and sends no restriction to Nous; if it was set by hand,
 unset it too, since Nous refuses the restriction. The ledger works against any
 upstream that reports usage on the stream. After the Nous keys are revoked,
