@@ -81,11 +81,11 @@ The schema describes every field. The parts that need judgement:
 - `categories` is optional: up to three from the schema's list, left out
   when none fits.
 - `thumbnail` is always `"thumbnail.jpg"`, the name of a 4:3 image next to
-  `tutorial.json`, under 1 MB. client-v2 shows the brand cover drawn from the
-  tutorial's name and framework, not this image, which only upstream's client
-  shows. The image itself is optional for a draft: the check does not look for
-  the file. Ask the person whether they have one; never
-  hold the draft for it.
+  `tutorial.json`, under 1 MB. No screen shows the image today: client-v2
+  draws the brand cover from the tutorial's name and framework instead, and
+  the field stays because the schema requires it. The image itself is
+  optional for a draft: the check does not look for the file. Ask the person
+  whether they have one; never hold the draft for it.
 - `intro.promise` says what the learner ends with. `intro.log` is the log
   line from question 2, as the log shows it: `Program log: Echo: gm`. `intro.files` is the finished program, shown read
   only before Start, usually the last step's `target`.
