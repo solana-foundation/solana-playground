@@ -648,7 +648,8 @@ failed Start SHALL be reported.
 A page load on `/` with no project SHALL show Home in place of the
 assistant and the work, with the navigation beside it (on a phone, its menu
 page), and SHALL NOT open the gallery. Home SHALL hold the question "Where
-should we begin?" and a composer that opens the assistant. From 768 px it
+should we begin?" and a composer that takes a question and hands it to the
+assistant. From 768 px it
 SHALL hold three tiles, New project, Follow a tutorial and Open a program,
 and four tutorial cards; New project SHALL unfold the start-from-scratch
 row under the tiles, and the other two SHALL open the Tutorials and
@@ -693,8 +694,17 @@ shows with no project open.
 
 #### Scenario: The composer on Home
 
-- **WHEN** a user on Home on a 1280 px wide window clicks the composer
-- **THEN** the assistant opens
+- **WHEN** a user on Home on a 1280 px wide window types a question and
+  presses Send
+- **THEN** the assistant opens with the question: sent at once when a model
+  can answer, else left in its composer under the off row
+
+#### Scenario: Home says what a send needs
+
+- **WHEN** no model can answer the user on Home, because they are signed out
+  or the deployment offers no hosted model
+- **THEN** a line beside Send says what a send needs ("Sign in or add a key
+  to send", or "Add a key to send"), and the box stays usable
 
 ### Requirement: Home is reachable from an open project
 
@@ -782,7 +792,7 @@ Home SHALL send `home_shown` with `via` (`start`, `nav`, `last-deleted` or
 `home_tutorial_opened` when a user opens a tutorial card;
 `home_quickstart_opened` with `id` (`continue`, `new` or `tutorial`) when a
 user picks a quick start on a phone; and `home_composer_opened` when a user
-opens the assistant from its composer.
+sends a question from its composer.
 
 #### Scenario: Opening a tile
 

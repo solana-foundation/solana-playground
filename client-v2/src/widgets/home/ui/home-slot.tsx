@@ -27,6 +27,8 @@ export type HomeSlot = (panel: { openAssistant: () => void }) => ReactNode;
  * not mount before the explorer has answered; `useStartView` gives up after
  * `START_TIMEOUT_MS`), then the phone's or the desktop's Home. `openPage`
  * opens the New project, Tutorials or Programs page, which another widget owns.
+ * `ask` decides whether the ask box's question is sent at once and what its
+ * hint line says.
  */
 export const homeSlot = (
   view: StartView,

@@ -62,7 +62,7 @@ it.each(["wide", "compact", "phone"] as const)(
   }
 );
 
-it("draws the phone's Home on a phone, opening the assistant from its composer", () => {
+it("draws the phone's Home on a phone, handing the ask box's question to the assistant", () => {
   const home = drawn(homeSlot("home", "phone", onContinue, openPage, ask));
   expect(home.type).toBe(PhoneHome);
   expect(home.props.onContinue).toBe(onContinue);
