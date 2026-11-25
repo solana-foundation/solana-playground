@@ -9,6 +9,7 @@ import {
   reserve,
   secondsToReset,
   settle,
+  settleStaleTurns,
   toMicro,
   utcDay,
 } from "./ledger.mjs";
@@ -514,5 +515,54 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
 
   it("throws for a user with no row, so the route fails closed", async () => {
     await assert.rejects(take("test-user-ledger-missing", 1), /no user row/);
+  });
+
+  /** Moves the reserve of the turn `turnId` names `age` into the past */
+  const backdate = (turnId, age) =>
+    query(
+      `update agent_turn set at = now() - $2::interval where id = $1::bigint`,
+      [turnId, age]
+    );
+
+  it("ends turns started over an hour ago as unfinished at their reservation", async () => {
+    // HOO-2996: a settle that could not connect left the turn started and its
+    // reservation held. Two on one day, since one update cannot apply two
+    // turns to one `agent_spend` row
+    const first = await take(NEW, 300);
+    const second = await take(NEW, 200);
+    await take(NEW, 50);
+    await backdate(first.turnId, "61 minutes");
+    await backdate(second.turnId, "2 hours");
+
+    assert.equal(await settleStaleTurns(query), 2);
+    assert.deepEqual(
+      (await turns(NEW)).map(({ outcome, charged, settled }) => ({
+        outcome,
+        charged,
+        settled,
+      })),
+      [
+        { outcome: "unfinished", charged: 300, settled: true },
+        { outcome: "unfinished", charged: 200, settled: true },
+        { outcome: "started", charged: 50, settled: false },
+      ]
+    );
+    assert.deepEqual(await row(NEW), { reserved: 50, spent: 500 });
+  });
+
+  it("leaves a turn started within the hour to its route", async () => {
+    const { turnId } = await take(NEW, 300);
+    await backdate(turnId, "59 minutes");
+    assert.equal(await settleStaleTurns(query), 0);
+    assert.deepEqual(await row(NEW), { reserved: 300, spent: 0 });
+  });
+
+  it("charges a swept turn once, whatever settles it after", async () => {
+    const { turnId } = await take(NEW, 300);
+    await backdate(turnId, "2 hours");
+    await settleStaleTurns(query);
+    assert.equal(await close({ turnId, charge: 10 }), false);
+    assert.equal(await settleStaleTurns(query), 0);
+    assert.deepEqual(await row(NEW), { reserved: 0, spent: 300 });
   });
 });

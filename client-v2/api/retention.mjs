@@ -6,6 +6,7 @@
  */
 import { timingSafeEqual } from "node:crypto";
 
+import { settleStaleTurns } from "../src/features/agent/server.mjs";
 import {
   warnAboutMissingObservabilityIds,
   withObservability,
@@ -43,14 +44,15 @@ const isBearer = (header, secret) => {
 };
 
 /**
- * The route, with the three steps passed in; the default export wires the
- * real ones, the tests their own.
+ * The route, with its steps passed in; the default export wires the real
+ * ones, the tests their own.
  *
  * @param {{
  *   steps: {
  *     sessions: () => Promise<number>;
  *     buildAudit: () => Promise<number>;
  *     projectNames: () => Promise<number>;
+ *     staleTurns: () => Promise<number>;
  *   };
  * }} deps
  */
@@ -100,6 +102,7 @@ export default withObservability("retention", (req, res) => {
       sessions: () => deleteExpiredSessions(query),
       buildAudit: () => deleteExpiredAudit(query),
       projectNames: clearDeletedProjectNames,
+      staleTurns: () => settleStaleTurns(query),
     },
   })(req, res);
 });

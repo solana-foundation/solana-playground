@@ -306,6 +306,61 @@ export const settle = async (query, turn) => {
 };
 
 /**
+ * How long after its reserve a `started` turn is taken to have never settled:
+ * well past the `maxDuration` of `api/agent.mjs` in `vercel.json`, so no
+ * route can still be relaying it.
+ */
+export const STALE_TURN_AGE = "1 hour";
+
+/**
+ * End every turn still `started` {@link STALE_TURN_AGE} after its reserve as
+ * `unfinished`, charged its reservation, and move that reservation into the
+ * day's spend. Run by the retention job.
+ *
+ * Such a turn's route was killed at `maxDuration` or failed its
+ * {@link settle} (HOO-2996), and what the turn cost died with it. Its
+ * reservation is the only charge that never undercharges, as
+ * {@link chargeFor} gives a turn that reported no usage, so the day's
+ * `spent + reserved`, which the cap reads, does not change: this is
+ * bookkeeping, and gives no budget back. `unfinished`, not `abandoned`, which
+ * is a turn that sent nothing and is charged nothing.
+ *
+ * The reservations are summed per day first: an `update ... from` that
+ * matches one `agent_spend` row to several turns applies only one of them. A
+ * {@link settle} that runs at the same moment waits on the turn's row lock
+ * and then finds it no longer `started`, so a turn is charged once.
+ *
+ * @param {Query} query
+ * @returns {Promise<number>} how many turns were ended
+ */
+export const settleStaleTurns = async (query) => {
+  const { rows } = await query(
+    `with ended as (
+       update agent_turn
+          set outcome = 'unfinished',
+              settled_at = now()
+        where outcome = 'started' and at < now() - $1::interval
+       returning user_id, day, charged
+     ),
+     held as (
+       select user_id, day, sum(charged)::bigint as reserved
+         from ended
+        group by user_id, day
+     ),
+     settled as (
+       update agent_spend s
+          set reserved = s.reserved - held.reserved,
+              spent = s.spent + held.reserved
+         from held
+        where s.user_id = held.user_id and s.day = held.day
+     )
+     select count(*)::int as ended from ended`,
+    [STALE_TURN_AGE]
+  );
+  return rows[0].ended;
+};
+
+/**
  * Count a turn the daily cap refused on the day's row. It reserved nothing,
  * so there is nothing to settle; the count is what lets the quota's shape see
  * refusals. A turn larger than the whole cap is refused on a day with no row
