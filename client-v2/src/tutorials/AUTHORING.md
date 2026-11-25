@@ -81,9 +81,10 @@ The schema describes every field. The parts that need judgement:
 - `categories` is optional: up to three from the schema's list, left out
   when none fits.
 - `thumbnail` is always `"thumbnail.jpg"`, the name of a 4:3 image next to
-  `tutorial.json`, under 1 MB. The image itself is optional for a draft: the
-  check does not look for the file, and without it the card shows a broken
-  image until someone adds one. Ask the person whether they have one; never
+  `tutorial.json`, under 1 MB. client-v2 shows the brand cover drawn from the
+  tutorial's name and framework, not this image, which only upstream's client
+  shows. The image itself is optional for a draft: the check does not look for
+  the file. Ask the person whether they have one; never
   hold the draft for it.
 - `intro.promise` says what the learner ends with. `intro.log` is the log
   line from question 2, as the log shows it: `Program log: Echo: gm`. `intro.files` is the finished program, shown read
@@ -941,7 +942,7 @@ plain `yarn dev` refuses to start on them, so use `yarn dev:with-stubs`
 (it runs `yarn generate-fast` first, which picks up a new folder).
 
 Open `http://localhost:3000/tutorials`: the card shows under its level with
-its thumbnail and its level and framework. Opening it starts the
+its cover and its level and framework. Opening it starts the
 conversation on its intro card. The deploy, call and Call panel cards are
 not all built yet, so a run may stop there; until they land, the check and the pull request's review are the gate.
 

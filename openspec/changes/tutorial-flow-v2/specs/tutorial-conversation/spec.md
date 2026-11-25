@@ -16,7 +16,7 @@ Opening a conversation tutorial SHALL show its chat column with one intro
 card, and the workspace SHALL show the finished program, read only. The intro
 card SHALL show:
 
-- the thumbnail, the name and the meta line with the minutes and the step
+- the cover, the name and the meta line with the minutes and the step
   count;
 - the intro note, the wallet copy of `tutorial-runs`;
 - "What you'll build": the definition's promise line, with the log line the

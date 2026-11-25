@@ -1581,6 +1581,17 @@ describe("TutorialConversation on the phone", () => {
         Array.from(group.querySelectorAll("button")).map((b) => b.textContent)
       );
 
+  it("opens on an intro card wearing the tutorial's cover, not upstream's thumbnail", () => {
+    play([]);
+    drawAt(1440);
+
+    const card = screen.getByRole("region", { name: definition.name });
+    expect(card.querySelector("img")).toBeNull();
+    // Hello Anchor's cover draws the anchor, 40 square
+    const icon = card.querySelector("svg.lucide-anchor");
+    expect(icon?.parentElement?.classList.contains("size-10")).toBe(true);
+  });
+
   it("draws the same turns and the same question from one save at 390 and 1440 px", () => {
     play(toStep3);
     const desk = drawAt(1440);

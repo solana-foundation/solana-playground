@@ -20,9 +20,9 @@ export const HOW_IT_GOES =
 
 export interface BaseIntroCardProps {
   name: string;
-  /** The tutorial's cover, 40 square, as Home and the catalog wear it. The
-   * connected feed passes it in, so this card stays clear of the entity's
-   * entry, which reaches the store */
+  /** The tutorial's cover, sized by the caller: the conversation passes it
+   * 40 square, as phone Home shows it. It comes in from outside so this card
+   * stays clear of the tutorial entity's entry, which loads the store */
   cover?: ReactNode;
   minutes: number;
   stepCount: number;
