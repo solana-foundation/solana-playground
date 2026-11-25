@@ -9,6 +9,7 @@ import {
   projectRow,
   startProject,
   stubAiStatus,
+  stubSignedOut,
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
@@ -113,7 +114,6 @@ test.describe("on a desktop window", () => {
     await expect(home(page)).toBeVisible();
 
     const region = homeRegion(page);
-    await expect(region.getByText("Add a key to send")).toBeVisible();
     await region
       .getByRole("textbox", { name: "Ask the assistant" })
       .fill("What is a PDA?");
@@ -125,6 +125,27 @@ test.describe("on a desktop window", () => {
     await expect(
       page.getByRole("textbox", { name: "Message the assistant" })
     ).toHaveValue("What is a PDA?");
+  });
+
+  test("client-v2-layout: Home says what a send needs", async ({ page }) => {
+    // A deployment with a hosted model, to a signed-out user
+    await stubAiStatus(page, "m");
+    await stubSignedOut(page);
+    await page.goto("/");
+    await expect(home(page)).toBeVisible();
+
+    const region = homeRegion(page);
+    await expect(
+      region.getByText("Sign in or add a key to send")
+    ).toBeVisible();
+    await expect(
+      region.getByRole("textbox", { name: "Ask the assistant" })
+    ).toBeEditable();
+
+    // A deployment with no hosted model: the newer route answers first
+    await stubAiStatus(page, "own");
+    await page.reload();
+    await expect(region.getByText("Add a key to send")).toBeVisible();
   });
 
   test("client-v2-layout: Opening a tile", async ({ page }) => {

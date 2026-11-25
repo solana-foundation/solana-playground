@@ -37,7 +37,7 @@ import {
   useTurn,
 } from "@/widgets/assistant";
 import { catalogPage, catalogSlot, useCatalogPage } from "@/widgets/catalog";
-import { homeSlot, useStartView } from "@/widgets/home";
+import { homeSlotWith, useStartView } from "@/widgets/home";
 import { CONSOLE_KEY, keyLabel, LayoutShell } from "@/widgets/layout-shell";
 import { AnalyticsSwitch } from "@/widgets/observability";
 import { ModalHost, ToastHost } from "@/widgets/overlays";
@@ -94,7 +94,7 @@ const retryHostedModel = async () =>
  * stage bar (`BaseStageBar`) and then the `StageBar` stage tabs across the
  * last two (a tutorial's frame draws neither the tabs nor the files column).
  * The sync banner sits above all four, full width. On `/` with no project,
- * `useStartView` hands the shell `homeSlot`, and Home stands where the
+ * `useStartView` hands the shell `homeSlotWith`'s slot, and Home stands where the
  * assistant and the work go.
  *
  * The feedback form and its state sit in `FeedbackHost`, above the frame, not
@@ -536,16 +536,16 @@ const FlowFrame = () => {
               onRetryAi={retryHostedModel}
             />
           }
-          home={homeSlot(
-            page.view,
+          home={homeSlotWith(() => page.leaveHome("continue"))((p) =>
+            catalogPage.open(p, "home")
+          )({
+            view: page.view,
             viewport,
-            () => page.leaveHome("continue"),
-            (p) => catalogPage.open(p, "home"),
-            {
+            ask: {
               hint: aiOff && AI_OFF_SEND_HINT[aiOff],
-              sends: aiOff === undefined,
-            }
-          )}
+              canSend: aiOff === undefined,
+            },
+          })}
           keepWork={page.workKept}
           cover={catalogSlot(catalog)}
           stageBarActions={<ShareButton />}
