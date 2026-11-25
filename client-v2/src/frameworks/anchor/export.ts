@@ -323,22 +323,8 @@ const convertJS = (
     (_, quote: string) => quote + ANCHOR_CLIENT + quote
   );
   // The 1.x client types `accounts` without the accounts it resolves itself (the system program, PDAs), which the
-  // 0.29 client took. `accountsPartial` takes them all, as the test `anchor init` 1.1.2 writes calls it. Only a call
-  // in a statement that builds an instruction through `.methods` is Anchor's. A statement starts after a `;` or,
-  // in code without semicolons, after a blank line
-  content = content.replace(/\.accounts\(/g, (call, offset: number) =>
-    /\.methods\s*\./.test(
-      content.slice(
-        Math.max(
-          content.lastIndexOf(";", offset) + 1,
-          content.lastIndexOf("\n\n", offset)
-        ),
-        offset
-      )
-    )
-      ? ".accountsPartial("
-      : call
-  );
+  // 0.29 client took. `accountsPartial` takes them all, as the test `anchor init` 1.1.2 writes calls it
+  content = toAccountsPartial(content);
 
   // Top-level `await` doesn't compile with the exported `tsconfig.json`
   // (CommonJS) and Playground runs client code inside an async function anyway
@@ -378,4 +364,51 @@ const program = anchor.workspace.${pascalCaseProgramName} as anchor.Program<${pa
     .replaceAll("pg.wallet.keypair", "program.provider.wallet.payer");
 
   return content;
+};
+
+/** Where an instruction builder starts: `program.methods.name(` or `program.methods["name"](` */
+const METHODS = /\.methods\s*[.[]/;
+
+/**
+ * Rename each `.accounts(` call of an Anchor instruction builder to `.accountsPartial(`. A call is the builder's when
+ * its statement goes through `.methods`, or names a variable an earlier statement set to one. A statement starts
+ * after a `;` or, in code without semicolons, after a blank line. Any other `.accounts(` is not Anchor's and stays.
+ *
+ * @param content JS/TS code
+ * @returns the code with the builders' calls renamed
+ */
+const toAccountsPartial = (content: string) => {
+  const statementStart = (offset: number) =>
+    Math.max(
+      content.lastIndexOf(";", offset) + 1,
+      content.lastIndexOf("\n\n", offset)
+    );
+  const statementEnd = (offset: number) => {
+    const ends = [
+      content.indexOf(";", offset),
+      content.indexOf("\n\n", offset),
+    ];
+    return Math.min(...ends.map((end) => (end === -1 ? content.length : end)));
+  };
+
+  const builders = new Set<string>();
+  for (const { 1: name, index = 0 } of content.matchAll(
+    /([\w$]+)\s*=(?![=>])/g
+  )) {
+    if (METHODS.test(content.slice(index, statementEnd(index))))
+      builders.add(name);
+  }
+
+  return content.replace(/\.accounts\(/g, (call, offset: number) => {
+    const statement = content.slice(statementStart(offset), offset);
+    const isBuilder =
+      METHODS.test(statement) ||
+      [...builders].some((name) =>
+        // eslint-disable-next-line security/detect-non-literal-regexp -- `\w` and `$` characters only, `$` escaped
+        new RegExp(
+          `(?:^|[^\\w$.])${name.replaceAll("$", "\\$")}(?![\\w$])`
+        ).test(statement)
+      );
+    return isBuilder ? ".accountsPartial(" : call;
+  });
 };

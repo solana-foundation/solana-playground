@@ -315,6 +315,19 @@ await pg.program.methods.hello(name).rpc();
       );
     });
 
+    it.each([
+      ['await pg.program.methods["hello"]().accounts({}).rpc();'],
+      ["const ix = pg.program.methods.hello();\nawait ix.accounts({}).rpc();"],
+      [
+        "let builder = pg.program.methods\n  .hello();\n\nbuilder = builder.accounts({});",
+      ],
+    ])("passes accountsPartial for the builder in %j", async (code) => {
+      const files = await exported(LIB, ["client/client.ts", code + "\n"]);
+
+      expect(files.get("client/client.ts")).toContain(".accountsPartial({})");
+      expect(files.get("client/client.ts")).not.toContain(".accounts(");
+    });
+
     it("keeps an accounts call outside an Anchor methods chain", async () => {
       const files = await exported(LIB, [
         "client/client.ts",

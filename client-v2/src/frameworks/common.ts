@@ -463,25 +463,38 @@ export const addImports = (content: string) => {
 };
 
 /**
- * The given code with the text of its comments and strings blanked: each
- * character but a line break becomes a space, and a string keeps its quotes.
- * The length and the line breaks stay, so a match found in the result sits at
- * the same place in the code. Comments and strings are read together, so
- * "http://" in a string is not taken for a comment.
+ * The given code with the text of its comments, strings and regular expression
+ * literals blanked: each character but a line break becomes a space, and a
+ * string keeps its quotes, a regular expression its slashes. The length and the
+ * line breaks stay, so a match found in the result sits at the same place in
+ * the code. Comments and strings are read together, so "http://" in a string is
+ * not taken for a comment.
  *
  * @param content JS/TS code
  * @returns the code with only its own tokens readable
  */
 const maskCommentsAndStrings = (content: string) =>
-  content.replace(
-    /("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`)|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
-    (match, string?: string) =>
-      string
-        ? string[0] +
-          string.slice(1, -1).replace(/[^\n]/g, " ") +
-          string[string.length - 1]
-        : match.replace(/[^\n]/g, " ")
-  );
+  content.replace(MASKED, (match, ...groups: Array<string | undefined>) => {
+    const [string, comment, before, regex] = groups;
+    if (string) return string[0] + blank(string.slice(1, -1)) + string[0];
+    if (comment) return blank(comment);
+    if (regex) return before + "/" + blank(regex.slice(1, -1)) + "/";
+    return match;
+  });
+
+/** Each character but a line break as a space */
+const blank = (text: string) => text.replace(/[^\n]/g, " ");
+
+/**
+ * A string (group 1), a comment (group 2), or a regular expression literal
+ * (group 4) with what lets it start (group 3). A `/` starts a regular
+ * expression only where a value is expected: after an operator, an opening
+ * bracket, a separator or a keyword such as `return`. After a name, a number or
+ * a closing bracket it divides.
+ */
+const MASKED =
+  // eslint-disable-next-line security/detect-unsafe-regex -- the alternatives inside each repeat start with different characters, so a match never backtracks between them
+  /("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`)|(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|((?:^|[(,=:[!&|?{};+\-*%>~^]|\b(?:return|typeof|case|in|of|delete|void|throw|yield|await|else|do|new))\s*)(\/(?![*/])(?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\n[])+\/)/g;
 
 /**
  * An import statement where a statement starts: at a line's start or after a
