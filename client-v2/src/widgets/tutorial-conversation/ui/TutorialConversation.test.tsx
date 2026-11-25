@@ -169,9 +169,10 @@ vi.mock("@/utils/tutorial", () => ({
   },
 }));
 
+// The mocked barrel above hands back the real cover, the one the widget draws
+import { TutorialCover } from "@/entities/tutorial";
 import { onCodeRequest } from "@/entities/tutorial/model/docs";
 import { tutorialTelemetry } from "@/entities/tutorial/model/telemetry";
-import TutorialCover from "@/entities/tutorial/ui/art/TutorialCover";
 import {
   PgConversation,
   tutorialRunner,
