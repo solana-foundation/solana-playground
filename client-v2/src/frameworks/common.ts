@@ -383,13 +383,13 @@ export const fetchJSDependencyMap = async (files: TupleFiles) => {
 /**
  * Get `package.json` dependencies from the given files.
  *
- * @param files all files
  * @param extra dependencies the export adds or pins over the ones the files use, `{}` for none
+ * @param files all files
  * @returns the dependency list
  */
 export const getJSDependencies = async (
-  files: TupleFiles,
-  extra: Dependencies
+  extra: Dependencies,
+  files: TupleFiles
 ) => {
   const dependencies = { ...(await fetchJSDependencyMap(files)), ...extra };
   const devDependencies: Dependencies = {
@@ -547,20 +547,38 @@ export const getImportedNames = (content: string) => {
 /**
  * Whether the module binds the name itself, by an import or by a top-level `const`, `let` or `var` declaration
  * (such as `const anchor = require("@coral-xyz/anchor")`), so it does not read the Playground global of that name.
- * A declaration counts only at the start of a line: one indented inside a function shadows the global in that
- * function alone, and the rest of the module still needs the import.
+ * A declaration counts only outside every block: one inside a function shadows the global in that function alone,
+ * and the rest of the module still needs the import.
  *
- * @param content JS/TS code
  * @param name the name, `\w` and `$` characters only
+ * @param content JS/TS code
  * @returns whether the module binds it
  */
-export const hasOwnBinding = (content: string, name: string) =>
-  getImportedNames(content).has(name) ||
+export const hasOwnBinding = (name: string, content: string) => {
+  if (getImportedNames(content).has(name)) return true;
+
+  const code = maskCommentsAndStrings(content);
   // eslint-disable-next-line security/detect-non-literal-regexp -- `\w` and `$` characters only, `$` escaped
-  new RegExp(
-    `^(?:const|let|var)\\s+${name.replaceAll("$", "\\$")}\\b`,
-    "m"
-  ).test(maskCommentsAndStrings(content));
+  const declaration = new RegExp(
+    `(?:^|[;{}])\\s*(?:const|let|var)\\s+${name.replaceAll("$", "\\$")}\\b`,
+    "gm"
+  );
+  return [...code.matchAll(declaration)].some(
+    ({ index = 0 }) => blockDepth(code.slice(0, index + 1)) === 0
+  );
+};
+
+/**
+ * How many blocks are open at the end of the given code.
+ *
+ * @param code JS/TS code, comments and strings masked
+ * @returns the number of `{` not yet closed
+ */
+const blockDepth = (code: string) =>
+  [...code].reduce(
+    (depth, char) => depth + (char === "{" ? 1 : char === "}" ? -1 : 0),
+    0
+  );
 
 /**
  * Get global packages that are used in the given content.
@@ -578,7 +596,7 @@ const getGlobalPackages = (content: string) => {
     const name = style.as ?? style.named ?? style.default;
     // `web3.` also matches inside "@solana/web3.js", so a client that binds
     // the name itself would get it twice
-    if (name !== undefined && hasOwnBinding(content, name)) continue;
+    if (name !== undefined && hasOwnBinding(name, content)) continue;
 
     const accessors = [name + ".", name + "("];
     for (const accessor of accessors) {

@@ -66,10 +66,12 @@ describe("hasOwnBinding", () => {
     ["let web3;", true],
     ["const web3x = 1;", false],
     ["function f() {\n  const web3 = 1;\n}\nweb3.Keypair;", false],
+    ["function f() {\nconst web3 = 1;\n}\nweb3.Keypair;", false],
+    ['const s = "{";\nconst web3 = 1;', true],
     ["// const web3 = 1;\nweb3.Keypair;", false],
     ["console.log(web3.Keypair);", false],
-  ])("for web3 in %j is %s", (content, expected) => {
-    expect(hasOwnBinding(content, "web3")).toBe(expected);
+  ])("detects the web3 binding in %j as %s", (content, expected) => {
+    expect(hasOwnBinding("web3", content)).toBe(expected);
   });
 });
 

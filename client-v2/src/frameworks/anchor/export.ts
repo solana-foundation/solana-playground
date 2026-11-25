@@ -244,9 +244,7 @@ codegen-units = 1
     "lint:fix": "prettier */*.js \\"*/**/*{.js,.ts}\\" -w",
     "lint": "prettier */*.js \\"*/**/*{.js,.ts}\\" --check"
   },
-${await getJSDependencies(frameworkFiles, {
-  [ANCHOR_CLIENT]: anchorVersion,
-})}
+${await getJSDependencies({ [ANCHOR_CLIENT]: anchorVersion }, frameworkFiles)}
 }
 `,
     ],
@@ -315,7 +313,7 @@ const convertJS = (
   content = addImports(content);
   // Every converted file uses `anchor` (the program set up below). A file that only mentions the word, as
   // `describe("hello_anchor")` does, still needs the import
-  if (!hasOwnBinding(content, "anchor")) {
+  if (!hasOwnBinding("anchor", content)) {
     content = `import * as anchor from "${ANCHOR_CLIENT}";\n` + content;
   }
   // The 0.x clients, imported by `addImports` for the `anchor` global or by the file itself: neither reads an IDL
@@ -325,8 +323,15 @@ const convertJS = (
     (_, quote: string) => quote + ANCHOR_CLIENT + quote
   );
   // The 1.x client types `accounts` without the accounts it resolves itself (the system program, PDAs), which the
-  // 0.29 client took. `accountsPartial` takes them all, as the test `anchor init` 1.1.2 writes calls it
-  content = content.replace(/\.accounts\(/g, ".accountsPartial(");
+  // 0.29 client took. `accountsPartial` takes them all, as the test `anchor init` 1.1.2 writes calls it. Only a call
+  // in a statement that builds an instruction through `.methods` is Anchor's
+  content = content.replace(/\.accounts\(/g, (call, offset: number) =>
+    /\.methods\s*\./.test(
+      content.slice(content.lastIndexOf(";", offset) + 1, offset)
+    )
+      ? ".accountsPartial("
+      : call
+  );
 
   // Top-level `await` doesn't compile with the exported `tsconfig.json`
   // (CommonJS) and Playground runs client code inside an async function anyway

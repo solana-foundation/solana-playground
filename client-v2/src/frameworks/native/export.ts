@@ -112,7 +112,7 @@ test-ledger
     "client": "yarn run ts-node client/*.ts",
     "test": "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
   },
-${await getJSDependencies(frameworkFiles, {})}
+${await getJSDependencies({}, frameworkFiles)}
 }
 `,
     ],
