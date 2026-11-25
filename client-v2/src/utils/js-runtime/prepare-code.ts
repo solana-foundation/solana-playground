@@ -1,8 +1,4 @@
-import type {
-  CompilerOptions,
-  ImportDeclaration,
-  StringLiteral,
-} from "typescript";
+import type { CompilerOptions, ImportDeclaration } from "typescript";
 import {
   createSourceFile,
   flattenDiagnosticMessageText,
@@ -37,8 +33,9 @@ const HIDDEN_GLOBALS = ["eval", "Function"];
  * @returns a function of the declaration
  */
 const importedFor = (index: number) => (declaration: ImportDeclaration) => {
-  const path = (declaration.moduleSpecifier as StringLiteral).text;
-  const imported = `await __pgImport(${JSON.stringify(path)})`;
+  // The specifier as the project wrote it: a string literal already, so it is
+  // copied rather than read and quoted again
+  const imported = `await __pgImport(${declaration.moduleSpecifier.getText()})`;
   const clause = declaration.importClause;
   if (!clause) return `${imported};`;
   if (clause.isTypeOnly) return "";

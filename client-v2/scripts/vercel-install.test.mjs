@@ -100,14 +100,14 @@ function scratchTree() {
 function run(tree, body, env) {
   const script = `
 set -euo pipefail
-. ${JSON.stringify(installScript)}
+. "$1"
 build_wasm_packages() {
   mkdir -p ../wasm/solana-cli/pkg
   echo built-here >../wasm/solana-cli/pkg/index.js
 }
 ${body}
 `;
-  const result = spawnSync("bash", ["-c", script], {
+  const result = spawnSync("bash", ["-c", script, "bash", installScript], {
     cwd: tree.client,
     encoding: "utf8",
     env: {
