@@ -408,6 +408,9 @@ async function handler(req, res) {
             day: turn.day,
             reserved: turn.amount,
             charge,
+            // The pool's state and timings when the failure was a connect
+            // (`ConnectContext`, Cloud SQL only), for HOO-2996
+            connect: e?.connect,
           },
         });
         return undefined;

@@ -247,6 +247,48 @@ describe("persistence/model/providers/cloud-sql", () => {
     assert.equal(second.sockets.length, 1);
   });
 
+  it("keeps a connection open unused for as long as a turn may run", async () => {
+    // HOO-2996: a settle 29 s after its reserve found the connection closed
+    // and could not open a new one in time
+    openReturning([fakeLink(1)]);
+    const pool = await createPool(ENV);
+    assert.equal(pool.options.idleTimeoutMillis, 300_000);
+  });
+
+  it("puts the pool's state and the connect's timings on a failed connect", async () => {
+    openReturning([fakeLink(1)]);
+    const pool = await createPool(ENV);
+    mock.timers.tick(10 * MINUTE);
+    const error = await pool.connect().then(
+      () => assert.fail("the fake socket refuses every connect"),
+      (e) => e
+    );
+    assert.deepEqual(error.connect, {
+      idle: 0,
+      total: 0,
+      waiting: 0,
+      linkAgeMs: 10 * MINUTE,
+      renewMs: 0,
+      connectMs: 0,
+    });
+  });
+
+  it("puts the same on a failed connect through the callback form", async () => {
+    openReturning([fakeLink(1)]);
+    const pool = await createPool(ENV);
+    const error = await new Promise((resolve) => {
+      pool.connect((e) => resolve(e));
+    });
+    assert.deepEqual(error.connect, {
+      idle: 0,
+      total: 0,
+      waiting: 0,
+      linkAgeMs: 0,
+      renewMs: 0,
+      connectMs: 0,
+    });
+  });
+
   it("waits for a slow renewal once the old connector is stale", async () => {
     const first = fakeLink(1);
     const second = fakeLink(2);
