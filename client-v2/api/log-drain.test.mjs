@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { Readable } from "node:stream";
-import { after, beforeEach, test } from "node:test";
+import { after, afterEach, beforeEach, mock, test } from "node:test";
 
 import {
   initServerLogger,
@@ -8,8 +8,9 @@ import {
 } from "../src/shared/lib/logger/server.mjs";
 import handler from "./log-drain.mjs";
 
-const originalFetch = globalThis.fetch;
 const keys = [
+  "VERCEL_ENV",
+  "REACT_APP_SENTRY_DSN",
   "VERCEL_DRAIN_SECRET",
   "GRAFANA_LOKI_URL",
   "GRAFANA_LOKI_USER",
@@ -24,6 +25,8 @@ let pushes;
 let entries;
 
 beforeEach(() => {
+  process.env.VERCEL_ENV = "development";
+  process.env.REACT_APP_SENTRY_DSN = "";
   process.env.VERCEL_DRAIN_SECRET = "made-up-drain-secret";
   process.env.GRAFANA_LOKI_URL = "https://loki.example.invalid";
   process.env.GRAFANA_LOKI_USER = "123";
@@ -33,13 +36,13 @@ beforeEach(() => {
   pushes = [];
   entries = [];
   initServerLogger({ providers: [{ log: (entry) => entries.push(entry) }] });
-  globalThis.fetch = async (url, init) => {
+  mock.method(globalThis, "fetch", async (url, init) => {
     pushes.push({ url: String(url), init });
     return new Response(undefined, { status: 204 });
-  };
+  });
 });
+afterEach(() => mock.restoreAll());
 after(() => {
-  globalThis.fetch = originalFetch;
   resetServerLogger();
   for (const key of keys) {
     if (originalEnv[key] === undefined) delete process.env[key];
@@ -73,7 +76,7 @@ const call = async (method, secret, body) => {
   return res;
 };
 
-test("GET verifies the endpoint without sending logs", async () => {
+test("verifies the endpoint on GET without sending logs", async () => {
   const res = await call("GET", "", "");
   assert.equal(res.statusCode, 200);
   assert.equal(res.headers["x-vercel-verify"], "made-up-verification");
@@ -154,12 +157,12 @@ test("rejects oversized payloads", async () => {
   );
   assert.equal(pushes.length, 0);
 });
-test("upstream rejection and transport errors stay retryable and redact secrets", async () => {
-  for (const fail of [false, true]) {
-    globalThis.fetch = async () => {
-      if (fail) throw new Error(process.env.GRAFANA_LOKI_TOKEN);
+test("keeps upstream failures retryable and redacts secrets", async () => {
+  for (const shouldThrow of [false, true]) {
+    mock.method(globalThis, "fetch", async () => {
+      if (shouldThrow) throw new Error(process.env.GRAFANA_LOKI_TOKEN);
       return new Response("private upstream body", { status: 503 });
-    };
+    });
     assert.equal(
       (
         await call(

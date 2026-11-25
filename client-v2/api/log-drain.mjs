@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 
+import { withObservability } from "../src/features/api/server.mjs";
 import { createServerLogger } from "../src/shared/lib/logger/server.mjs";
 
 const log = createServerLogger("api:log-drain");
@@ -8,7 +9,7 @@ const SOURCES = new Set(["static", "lambda", "edge", "build", "external"]);
 const LEVELS = new Set(["info", "warning", "error", "fatal"]);
 
 /** Vercel NDJSON receiver; labels and JSON fields match Explorer's dashboards. */
-export default async function handler(req, res) {
+async function handler(req, res) {
   const verify = process.env.VERCEL_LOG_DRAIN_VERIFY;
   if (verify) res.setHeader("x-vercel-verify", verify);
   res.setHeader("cache-control", "no-store");
@@ -150,3 +151,5 @@ export default async function handler(req, res) {
   }
   res.end();
 }
+
+export default withObservability("log-drain", handler);

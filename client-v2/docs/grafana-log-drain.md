@@ -23,7 +23,7 @@ Never expose these through browser-prefixed variables. Updating the configuratio
 4. Check the Grafana dashboard queries against those records, then enable the three rules. Confirm rule evaluation health is OK. The absence alert assumes regular production traffic and must be revisited if Playground becomes low-traffic.
 5. Test Slack delivery with the channel owner's approval. Rules target `playground-slack` directly; the shared notification tree needs no changes.
 
-The receiver drops foreign-project, preview and self-generated records, bounds labels, and rejects malformed or oversized batches. It returns 502 on a Loki push failure to allow Vercel retries. It does not exercise the IDE, wallet, compiler or assistant end to end.
+The receiver drops foreign-project, preview and self-generated records, bounds labels, and rejects malformed or oversized batches. It returns 502 on a Loki push failure to allow Vercel retries. The existing server observability wrapper reports generic configuration and delivery errors to Sentry when enabled and flushes them before returning; log bodies and drain credentials are excluded. It does not exercise the IDE, wallet, compiler or assistant end to end.
 
 ## Verification
 
