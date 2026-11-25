@@ -324,10 +324,17 @@ const convertJS = (
   );
   // The 1.x client types `accounts` without the accounts it resolves itself (the system program, PDAs), which the
   // 0.29 client took. `accountsPartial` takes them all, as the test `anchor init` 1.1.2 writes calls it. Only a call
-  // in a statement that builds an instruction through `.methods` is Anchor's
+  // in a statement that builds an instruction through `.methods` is Anchor's. A statement starts after a `;` or,
+  // in code without semicolons, after a blank line
   content = content.replace(/\.accounts\(/g, (call, offset: number) =>
     /\.methods\s*\./.test(
-      content.slice(content.lastIndexOf(";", offset) + 1, offset)
+      content.slice(
+        Math.max(
+          content.lastIndexOf(";", offset) + 1,
+          content.lastIndexOf("\n\n", offset)
+        ),
+        offset
+      )
     )
       ? ".accountsPartial("
       : call

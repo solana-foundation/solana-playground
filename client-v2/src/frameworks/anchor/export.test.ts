@@ -318,10 +318,12 @@ await pg.program.methods.hello(name).rpc();
     it("keeps an accounts call outside an Anchor methods chain", async () => {
       const files = await exported(LIB, [
         "client/client.ts",
-        "const helper = { accounts() { return []; } };\nconsole.log(helper.accounts());\n",
+        "await pg.program.methods.hello().accounts({}).rpc()\n\nconst helper = { accounts() { return [] } }\nconsole.log(helper.accounts())\n",
       ]);
 
-      expect(files.get("client/client.ts")).toContain("helper.accounts()");
+      const client = files.get("client/client.ts");
+      expect(client).toContain(".hello().accountsPartial({})");
+      expect(client).toContain("helper.accounts()");
     });
 
     it("pins the Anchor CLI in Anchor.toml, with the settings Anchor 1.x reads", async () => {

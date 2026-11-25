@@ -575,10 +575,10 @@ export const hasOwnBinding = (name: string, content: string) => {
  * @returns the number of `{` not yet closed
  */
 const blockDepth = (code: string) =>
-  [...code].reduce(
-    (depth, char) => depth + (char === "{" ? 1 : char === "}" ? -1 : 0),
-    0
-  );
+  [...code].reduce((depth, char) => depth + (BRACE_DEPTH[char] ?? 0), 0);
+
+/** How each brace moves the block depth */
+const BRACE_DEPTH: Record<string, number> = { "{": 1, "}": -1 };
 
 /**
  * Get global packages that are used in the given content.
