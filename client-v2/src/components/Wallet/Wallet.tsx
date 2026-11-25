@@ -39,7 +39,7 @@ import ErrorBoundary from "../ErrorBoundary";
 import FadeIn from "../FadeIn";
 import Img from "../Img";
 import Input from "../Input";
-import { forgetWalletAnchor, walletAnchor } from "./anchor";
+import { forgetWalletAnchor, onWalletAnchor, walletAnchor } from "./anchor";
 import Balance from "./Balance";
 import { useDarken } from "./hooks";
 import Send from "./Send";
@@ -61,10 +61,20 @@ const ANCHOR_GAP = 8;
 
 const FloatingWallet = () => {
   const rnd = useRef<Rnd>(null);
-  // Read once: the window stays where it opened until the user drags it
-  const [anchor] = useState(walletAnchor);
+  // The window stays where it opened until the user drags it, or until the
+  // chip asks again, which brings it back above the chip
+  const [anchor, setAnchor] = useState(walletAnchor);
   const isDragged = useRef(false);
-  useEffect(() => forgetWalletAnchor, []);
+  useEffect(() => {
+    const stop = onWalletAnchor((next) => {
+      isDragged.current = false;
+      setAnchor(next);
+    });
+    return () => {
+      stop();
+      forgetWalletAnchor();
+    };
+  }, []);
 
   const tabHeight = document
     .getElementById(PgView.ids.TABS)

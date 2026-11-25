@@ -258,6 +258,18 @@ describe("Wallet window", () => {
     expect(rnd.moves.at(-1)).toEqual({ x: 580, y: 592 });
   });
 
+  it("moves an already open window above the chip when the chip asks", () => {
+    wallets.show = true;
+    renderWallet();
+    rnd.moves = [];
+
+    const chip = document.createElement("button");
+    chip.getBoundingClientRect = () => ({ right: 900, top: 600 } as DOMRect);
+    act(() => showWalletAbove(chip));
+
+    expect(rnd.moves.at(-1)).toEqual({ x: 580, y: 592 });
+  });
+
   it("forgets the chip once closed, so another open keeps its usual place", () => {
     const chip = document.createElement("button");
     chip.getBoundingClientRect = () => ({ right: 900, top: 600 } as DOMRect);
