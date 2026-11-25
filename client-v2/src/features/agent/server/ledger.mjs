@@ -315,7 +315,7 @@ export const STALE_TURN_AGE = "1 hour";
 /**
  * End every turn still `started` {@link STALE_TURN_AGE} after its reserve as
  * `unfinished`, charged its reservation, and move that reservation into the
- * day's spend. Run by the retention job.
+ * day's spend. Run by the cron route `api/stale-turns.mjs`.
  *
  * Such a turn's route was killed at `maxDuration` or failed its
  * {@link settle} (HOO-2996), and what the turn cost died with it. Its

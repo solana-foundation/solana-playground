@@ -15,7 +15,10 @@
       "maxDuration": 300
     }
   },
-  "crons": [{ "path": "/api/retention", "schedule": "0 3 * * *" }],
+  "crons": [
+    { "path": "/api/retention", "schedule": "0 3 * * *" },
+    { "path": "/api/stale-turns", "schedule": "0 */6 * * *" }
+  ],
   "headers": [
     {
       "source": "/(.*)",

@@ -800,6 +800,11 @@ merges after that. Migrations are written so the code already deployed keeps wor
   credits are added, and Sentry receives the `api:agent` error `upstream credit balance is empty`.
 - **A leaked key:** create a new one in Nous with the same limits, replace it in `<DOPPLER_CONFIG>` (the sync
   redeploys), check the new deployment is Current, then revoke the old one.
+- **Turns that never settled:** every 6 hours Vercel Cron calls `GET /api/stale-turns` with `CRON_SECRET`
+  (`client-v2/vercel.json`, `crons`). It ends each turn still `started` an hour after its reserve as `unfinished`,
+  charged its reservation, so no user's budget changes. A `200` carries `{"staleTurns":n}`; a `500` means the sweep
+  failed, and Sentry has the `api:stale-turns` error. `503` and `401` mean what they mean for the retention job
+  ([Retention and account deletion](#retention-and-account-deletion)).
 
 ### Retention and account deletion
 
