@@ -20,7 +20,10 @@ import type { PhoneQuickstart, QuickstartTarget } from "./BasePhoneHome";
 import BasePhoneHome from "./BasePhoneHome";
 
 export interface PhoneHomeProps {
-  onAsk: () => void;
+  /** The question typed in the ask box, for the assistant panel */
+  onAsk: (text: string) => void;
+  /** What a send needs while no model can answer, said beside Send (`HomeComposer`) */
+  sendHint?: string;
   /** Continue was picked: go back to the project open under Home */
   onContinue: () => void;
   /** Open the Tutorials or Programs page, in Home's place (the phone has no New project tile) */
@@ -90,7 +93,12 @@ const openQuickstart = async (
   }
 };
 
-const PhoneHome = ({ onAsk, onContinue, onOpenPage }: PhoneHomeProps) => {
+const PhoneHome = ({
+  onAsk,
+  sendHint,
+  onContinue,
+  onOpenPage,
+}: PhoneHomeProps) => {
   const visit = useVisit();
   const programCount = useProgramCount();
   // As on desktop: retry a failed account check, never fall back to the example
@@ -178,10 +186,11 @@ const PhoneHome = ({ onAsk, onContinue, onOpenPage }: PhoneHomeProps) => {
             }
           : undefined
       }
-      onAsk={() => {
+      onAsk={(text) => {
         homeTelemetry.track("home_composer_opened", {});
-        onAsk();
+        onAsk(text);
       }}
+      sendHint={sendHint}
     />
   );
 };

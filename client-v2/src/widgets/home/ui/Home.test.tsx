@@ -222,11 +222,14 @@ it("shows the message of a tutorial failure that is not an Error", async () => {
   expect(await home.findByText("quota exceeded")).toBeTruthy();
 });
 
-it("opens the assistant from the composer and reports it", async () => {
+it("hands the typed question to the assistant and reports it", async () => {
   const { home, onAsk } = draw();
   await home.findByText("34 real programs");
-  fireEvent.click(home.getByRole("button", { name: "Ask the assistant" }));
-  expect(onAsk).toHaveBeenCalledTimes(1);
+  fireEvent.change(home.getByRole("textbox", { name: "Ask the assistant" }), {
+    target: { value: "What is a PDA?" },
+  });
+  fireEvent.click(home.getByRole("button", { name: "Send" }));
+  expect(onAsk).toHaveBeenCalledWith("What is a PDA?");
   expect(events("home_composer_opened")).toEqual([{}]);
 });
 

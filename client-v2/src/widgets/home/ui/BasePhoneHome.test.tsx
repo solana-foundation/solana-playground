@@ -50,7 +50,7 @@ it("asks the question, counts the library and offers the assistant", () => {
   ).toBeTruthy();
   expect(home.getByText("16 tutorials, 34 programs")).toBeTruthy();
   expect(home.getByRole("button", { name: "Browse" })).toBeTruthy();
-  expect(home.getByRole("button", { name: "Ask the assistant" })).toBeTruthy();
+  expect(home.getByRole("textbox", { name: "Ask the assistant" })).toBeTruthy();
 });
 
 it("shows the quick starts in order, each with its title and description", () => {
@@ -119,6 +119,9 @@ it("opens Browse and the assistant", () => {
   const home = draw(p);
   fireEvent.click(home.getByRole("button", { name: "Browse" }));
   expect(p.onBrowse).toHaveBeenCalledTimes(1);
-  fireEvent.click(home.getByRole("button", { name: "Ask the assistant" }));
-  expect(p.onAsk).toHaveBeenCalledTimes(1);
+  fireEvent.change(home.getByRole("textbox", { name: "Ask the assistant" }), {
+    target: { value: "What is a PDA?" },
+  });
+  fireEvent.click(home.getByRole("button", { name: "Send" }));
+  expect(p.onAsk).toHaveBeenCalledWith("What is a PDA?");
 });

@@ -1,42 +1,62 @@
 import type { ReactNode } from "react";
+import { useState } from "react";
 
 import {
   Composer,
   ComposerBanner,
+  ComposerInput,
   ComposerSend,
   ComposerToolbar,
 } from "@/shared/ui/composer";
 import { LogoPlay } from "@/shared/ui/logo";
 
 interface HomeComposerProps {
-  onAsk: () => void;
+  /** The question typed, handed to the assistant panel */
+  onAsk: (text: string) => void;
   banner?: ReactNode;
+  /**
+   * What a send will need while no model can answer this user, such as a
+   * sign-in, said beside Send before anything is typed
+   */
+  sendHint?: string;
 }
 
 /**
- * The composer that opens the assistant. It has no textarea: what it would
- * send without a project is a later stage's question, so the whole input is
- * one button that hands over to the assistant panel.
+ * The ask box on Home: a real input, as it looks. Send hands the question to
+ * the assistant panel, which asks for a sign-in or a key there if it needs
+ * one and keeps the question in its composer meanwhile. It was a button drawn
+ * as an input, which read as broken to a user who could not type in it
+ * (user feedback, 25 Nov).
  */
-const HomeComposer = ({ onAsk, banner }: HomeComposerProps) => (
-  <Composer>
-    {banner ? <ComposerBanner>{banner}</ComposerBanner> : null}
-    <button
-      type="button"
-      aria-label="Ask the assistant"
-      onClick={onAsk}
-      className="min-h-16 w-full px-[1.125rem] pt-[1.125rem] text-left text-[0.9375rem] font-read text-subtle outline-none max-md:min-h-12 max-md:px-4 max-md:pt-3 max-md:text-body"
+const HomeComposer = ({ onAsk, banner, sendHint }: HomeComposerProps) => {
+  const [text, setText] = useState("");
+  return (
+    <Composer
+      onSubmit={() => {
+        onAsk(text.trim());
+        setText("");
+      }}
     >
-      Ask anything…
-    </button>
-    <ComposerToolbar>
-      {/* At full strength, as the prototype's: there is nothing to type
-          here, so it opens the assistant like the rest of the box */}
-      <ComposerSend type="button" disabled={false} onClick={onAsk}>
-        <LogoPlay />
-      </ComposerSend>
-    </ComposerToolbar>
-  </Composer>
-);
+      {banner ? <ComposerBanner>{banner}</ComposerBanner> : null}
+      <ComposerInput
+        aria-label="Ask the assistant"
+        placeholder="Ask anything…"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        className="min-h-16 max-md:min-h-12 max-md:px-4 max-md:pt-3"
+      />
+      <ComposerToolbar>
+        {sendHint !== undefined && (
+          <span className="pl-2.5 text-xs font-read text-muted-foreground max-md:text-control">
+            {sendHint}
+          </span>
+        )}
+        <ComposerSend>
+          <LogoPlay />
+        </ComposerSend>
+      </ComposerToolbar>
+    </Composer>
+  );
+};
 
 export default HomeComposer;

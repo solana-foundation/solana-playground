@@ -26,11 +26,13 @@ import { PgCommon, PgExplorer, PgTutorial, PgView } from "@/utils";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
 import { AppNav, ProjectList, readProjectFiles } from "@/widgets/app-nav";
 import {
+  AI_OFF_SEND_HINT,
   Assistant,
   displayModelName,
   modelShown,
   probeDefaultBackend,
   retryDefaultBackend,
+  useAiOffReason,
   useDefaultBackend,
   useTurn,
 } from "@/widgets/assistant";
@@ -369,6 +371,8 @@ const FlowFrame = () => {
   );
 
   const page = useStartView();
+  // What Home's ask box says before a send, and whether a send runs at once
+  const aiOff = useAiOffReason();
   // The New project, Tutorials or Programs page shown, if any (`widgets/catalog`)
   const catalog = useCatalogPage();
   // Home, the page shown and the work, each on its own URL
@@ -536,7 +540,11 @@ const FlowFrame = () => {
             page.view,
             viewport,
             () => page.leaveHome("continue"),
-            (p) => catalogPage.open(p, "home")
+            (p) => catalogPage.open(p, "home"),
+            {
+              hint: aiOff && AI_OFF_SEND_HINT[aiOff],
+              sends: aiOff === undefined,
+            }
           )}
           keepWork={page.workKept}
           cover={catalogSlot(catalog)}

@@ -34,6 +34,17 @@ const REASONS: Record<
   },
 };
 
+/**
+ * The line an ask box away from the panel shows before a send, by reason:
+ * Home's says what a send will need, so the panel's off row is no surprise.
+ * None while the model is only out of reach, which a send will report
+ */
+export const AI_OFF_SEND_HINT: Record<AiOffReason, string | undefined> = {
+  "no-key": "Add a key to send",
+  "signed-out": "Sign in or add a key to send",
+  unreachable: undefined,
+};
+
 /** Send's tooltip while the row stands, by reason */
 export const AI_OFF_SEND_BLOCKED: Record<AiOffReason, string> = {
   "no-key": "Connect a model to send",
