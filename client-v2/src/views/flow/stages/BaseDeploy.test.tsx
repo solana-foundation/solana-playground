@@ -688,7 +688,7 @@ describe("BaseDeploy", () => {
       />
     );
     expect(screen.getByLabelText("Who pays").textContent).toBe(
-      `From your Playground wallet · Wallet 2 · ${shortKey(WALLET)} · 4.2 SOL`
+      `From Wallet 2 · ${shortKey(WALLET)} · 4.2 SOL`
     );
 
     rerender(

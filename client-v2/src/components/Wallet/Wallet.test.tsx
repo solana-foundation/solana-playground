@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
 
+import { showWalletAbove } from "./anchor";
 import Wallet, { WalletName } from "./Wallet";
 
 // The utils barrel needs build-time globals the unit runner does not define.
@@ -89,11 +90,21 @@ vi.mock("./Balance", () => ({ default: () => null }));
 vi.mock("./Send", () => ({ default: () => null }));
 vi.mock("./Settings", () => ({ default: () => null }));
 vi.mock("./Transactions", () => ({ default: () => null }));
-vi.mock("react-rnd", () => ({
-  Rnd: ({ style }: { style?: React.CSSProperties }) => (
-    <div data-testid="wallet-window" style={style} />
-  ),
-}));
+/** Where the window was moved to after it opened */
+const rnd = vi.hoisted(() => ({ moves: [] as { x: number; y: number }[] }));
+vi.mock("react-rnd", async () => {
+  const { forwardRef, useImperativeHandle, useRef } = await import("react");
+  return {
+    Rnd: forwardRef(({ style }: { style?: React.CSSProperties }, ref) => {
+      const el = useRef<HTMLDivElement>(null);
+      useImperativeHandle(ref, () => ({
+        getSelfElement: () => el.current,
+        updatePosition: (to: { x: number; y: number }) => rnd.moves.push(to),
+      }));
+      return <div ref={el} data-testid="wallet-window" style={style} />;
+    }),
+  };
+});
 vi.mock("../FadeIn", () => ({ default: () => null }));
 vi.mock("../ErrorBoundary", () => ({ default: () => null }));
 vi.mock("../Input", () => ({ default: () => null }));
@@ -119,6 +130,7 @@ beforeEach(() => {
   wallets.standard = [];
   wallets.isPg = true;
   wallets.show = false;
+  rnd.moves = [];
 });
 
 const renderName = () =>
@@ -225,6 +237,37 @@ describe("Wallet window", () => {
     );
 
     expect(screen.getByTestId("wallet-window").style.zIndex).toBe("30");
+  });
+
+  const renderWallet = () =>
+    render(
+      <ThemeProvider theme={theme}>
+        <Wallet />
+      </ThemeProvider>
+    );
+
+  it("opens right above the chip, right edges aligned, when the chip asks", () => {
+    const chip = document.createElement("button");
+    chip.getBoundingClientRect = () => ({ right: 900, top: 600 } as DOMRect);
+    showWalletAbove(chip);
+    wallets.show = true;
+    renderWallet();
+
+    // 320 wide; jsdom gives the window no height, so its bottom is the
+    // chip's top less the 8px gap
+    expect(rnd.moves.at(-1)).toEqual({ x: 580, y: 592 });
+  });
+
+  it("forgets the chip once closed, so another open keeps its usual place", () => {
+    const chip = document.createElement("button");
+    chip.getBoundingClientRect = () => ({ right: 900, top: 600 } as DOMRect);
+    showWalletAbove(chip);
+    wallets.show = true;
+    renderWallet().unmount();
+    rnd.moves = [];
+
+    renderWallet();
+    expect(rnd.moves).toEqual([]);
   });
 });
 

@@ -191,10 +191,10 @@ const payerLine = (p: BaseDeployProps) => {
     const which = payer.name ?? "your wallet";
     return `From ${which} · ${shortKey(payer.address)}${balance}`;
   }
-  const account = payer.account ? ` · ${payer.account}` : "";
-  return `From your Playground wallet${account} · ${shortKey(
-    payer.address
-  )}${balance}`;
+  // With two or more accounts the account is the payer's name: "From Wallet 2"
+  // (Almaz, 25 Nov)
+  const which = payer.account ?? "your Playground wallet";
+  return `From ${which} · ${shortKey(payer.address)}${balance}`;
 };
 
 /**

@@ -14,10 +14,11 @@ while another paid.
 ## What Changes
 
 - **Accounts in the chip popover.** Beside "Connect a wallet" the chip popover offers "Accounts". It closes the
-  popover and opens the Wallet window, where Playground accounts are added and switched. It does not show
+  popover and opens the Wallet window right above the chip, where Playground accounts are added and switched. It does not show
   while an extension is the current wallet, or while a deploy runs.
 - **The paying account is named.** With two or more Playground accounts, the chip's header and the Deploy
-  stage's payer line name the account that pays: "Playground wallet · Wallet 2". One rule
+  stage's payer line name the account that pays: "Playground wallet · Wallet 2" in the header, "From Wallet 2"
+  on the payer line. One rule
   (`payingAccountName`, `entities/wallet`) serves both.
 - **Balances to up to 4 decimals.** The account menu and the Deploy payer line show the balance to up to four
   decimals, like the chip; an empty wallet reads "0 SOL".

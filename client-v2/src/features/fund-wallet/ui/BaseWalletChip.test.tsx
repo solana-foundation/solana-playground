@@ -265,6 +265,10 @@ describe("features/fund-wallet/ui/BaseWalletChip", () => {
       ).toBeTruthy();
       fireEvent.click(accounts);
       expect(onManage).toHaveBeenCalledOnce();
+      // The chip itself, so the window opens above it
+      expect(onManage.mock.calls[0][0]?.hasAttribute("data-wallet-chip")).toBe(
+        true
+      );
       expect(screen.queryByRole("button", { name: "Accounts" })).toBeNull();
     });
 

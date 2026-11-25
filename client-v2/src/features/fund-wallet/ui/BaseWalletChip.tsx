@@ -1,4 +1,5 @@
 import { ArrowUpRight, Wallet } from "lucide-react";
+import { useRef } from "react";
 
 import type { AirdropRefusal } from "@/shared/lib/faucet-limit";
 import {
@@ -95,8 +96,9 @@ export interface BaseWalletChipProps {
   /** Opens the Playground wallet's own window, where its accounts are added
    * and switched; an extension's accounts live in the extension. Its button
    * sits beside Connect a wallet, so it shows only while Connect does
-   * (`onConnect` and `onConnectOpen` set, nothing being connected) */
-  onManage?: () => void;
+   * (`onConnect` and `onConnectOpen` set, nothing being connected). It gets
+   * the chip, so the window can open right above it */
+  onManage?: (chip: HTMLElement | null) => void;
   /** The Playground account that pays, named once there are two or more */
   account?: string;
 }
@@ -142,6 +144,8 @@ const BaseWalletChip = ({
   onManage,
   account,
 }: BaseWalletChipProps) => {
+  const chip = useRef<HTMLButtonElement>(null);
+  const manage = onManage && (() => onManage(chip.current));
   const short = shortAddress(address);
   const shown = balance === undefined ? "…" : fmt(balance);
   const isEmpty = balance === 0;
@@ -150,6 +154,7 @@ const BaseWalletChip = ({
     <Popover onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
         <button
+          ref={chip}
           type="button"
           data-wallet-chip
           aria-label={`Wallet ${short}${
@@ -234,7 +239,7 @@ const BaseWalletChip = ({
               connect={connect}
               onConnectOpen={onConnectOpen}
               onConnect={onConnect}
-              onManage={onManage}
+              onManage={manage}
             />
           )}
         </div>

@@ -15,9 +15,13 @@
 
 ## 2. Design answers (Slava's questions in the SF#205 body)
 
-- [ ] 2.1 Confirm where the account list lives (the Wallet window, not the chip popover) and whether two wallet
+Almaz answered all seven on 25 Nov: everything stays as built except two changes, both made here. The Wallet
+window opens right above the chip (question 1), and with two or more accounts the payer line reads
+"From Wallet 2 · …" (question 6). Folding the account list into the chip popover is a later follow-up.
+
+- [x] 2.1 Confirm where the account list lives (the Wallet window, not the chip popover) and whether two wallet
   surfaces stay (questions 1, 2) (HOO-2972)
-- [ ] 2.2 Confirm the label "Accounts", its half-width placement beside "Connect a wallet", and hiding it for an
+- [x] 2.2 Confirm the label "Accounts", its half-width placement beside "Connect a wallet", and hiding it for an
   extension (questions 3, 4, 5); update the chip requirement if any changes (HOO-2972)
-- [ ] 2.3 Decide the payer line on narrow widths and the 4-decimal balance (questions 6, 7); update the Deploy
+- [x] 2.3 Decide the payer line on narrow widths and the 4-decimal balance (questions 6, 7); update the Deploy
   requirement if either changes (HOO-2972)
