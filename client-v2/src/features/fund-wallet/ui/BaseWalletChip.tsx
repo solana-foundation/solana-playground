@@ -9,6 +9,7 @@ import {
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { shortAddress } from "@/shared/lib/short-address";
 import { shortKey } from "@/shared/lib/short-key";
+import { solAmount } from "@/shared/lib/sol-amount";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import { CopyButton } from "@/shared/ui/copy-button";
@@ -103,8 +104,6 @@ export interface BaseWalletChipProps {
   account?: string;
 }
 
-const fmt = (sol: number) => `${Number(sol.toFixed(4))} SOL`;
-
 const clusterName = (cluster: string) =>
   cluster === "mainnet"
     ? "Mainnet"
@@ -147,7 +146,7 @@ const BaseWalletChip = ({
   const chip = useRef<HTMLButtonElement>(null);
   const manage = onManage && (() => onManage(chip.current));
   const short = shortAddress(address);
-  const shown = balance === undefined ? "…" : fmt(balance);
+  const shown = balance === undefined ? "…" : solAmount(balance);
   const isEmpty = balance === 0;
   const hasTwoBelow = state === "refused" || state === "away";
   return (
@@ -287,7 +286,7 @@ const BaseWalletChip = ({
           {state === "received" && (
             <p role="status" className="text-[0.8125rem] text-success">
               {received
-                ? `Got ${fmt(received)}. You're ready to deploy`
+                ? `Got ${solAmount(received)}. You're ready to deploy`
                 : "Airdrop landed. You're ready to deploy"}
             </p>
           )}

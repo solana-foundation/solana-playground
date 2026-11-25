@@ -1,4 +1,5 @@
 import type { SessionUser, SignInState } from "@/features/auth";
+import { solAmount } from "@/shared/lib/sol-amount";
 
 import type { ClusterStatus } from "./use-cluster-status";
 
@@ -188,7 +189,7 @@ export const githubProfileUrl = (login: string) =>
   `https://github.com/${login}`;
 
 export const formatBalance = (balance: number | null) =>
-  `${balance === null ? "…" : Number(balance.toFixed(4))} SOL`;
+  balance === null ? "… SOL" : solAmount(balance);
 
 export const accountUser = ({ session }: AccountView) =>
   session.status === "signed-in" ? session.user : undefined;

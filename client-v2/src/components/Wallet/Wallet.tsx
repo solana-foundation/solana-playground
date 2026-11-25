@@ -63,7 +63,7 @@ const FloatingWallet = () => {
   const rnd = useRef<Rnd>(null);
   // Read once: the window stays where it opened until the user drags it
   const [anchor] = useState(walletAnchor);
-  const dragged = useRef(false);
+  const isDragged = useRef(false);
   useEffect(() => forgetWalletAnchor, []);
 
   const tabHeight = document
@@ -79,7 +79,7 @@ const FloatingWallet = () => {
     const el = rnd.current?.getSelfElement();
     if (!anchor || !el) return;
     const place = () => {
-      if (dragged.current) return;
+      if (isDragged.current) return;
       rnd.current?.updatePosition({
         x: Math.max(12, anchor.right - WALLET_WIDTH),
         y: Math.max(top, anchor.top - el.offsetHeight - ANCHOR_GAP),
@@ -98,7 +98,7 @@ const FloatingWallet = () => {
       <Rnd
         ref={rnd}
         onDragStart={() => {
-          dragged.current = true;
+          isDragged.current = true;
         }}
         default={{
           x: window.innerWidth - (WALLET_WIDTH + 12),

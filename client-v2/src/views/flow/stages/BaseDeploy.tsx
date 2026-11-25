@@ -15,6 +15,7 @@ import {
   shortKey,
 } from "@/features/deploy";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { solAmount } from "@/shared/lib/sol-amount";
 import { cn } from "@/shared/lib/utils";
 import { Badge } from "@/shared/ui/badge";
 import { BrandButton, BrandButtonIcon } from "@/shared/ui/brand-button";
@@ -184,9 +185,7 @@ const payerLine = (p: BaseDeployProps) => {
       : "From your Playground wallet";
   }
   const balance =
-    payer.balance === undefined
-      ? ""
-      : ` · ${Number(payer.balance.toFixed(4))} SOL`;
+    payer.balance === undefined ? "" : ` · ${solAmount(payer.balance)}`;
   if (!payer.playground) {
     const which = payer.name ?? "your wallet";
     return `From ${which} · ${shortKey(payer.address)}${balance}`;
