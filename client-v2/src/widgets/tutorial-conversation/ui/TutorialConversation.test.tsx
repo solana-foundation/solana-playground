@@ -157,6 +157,8 @@ vi.mock("@/entities/tutorial", async () => {
     docForLink: docs.docForLink,
     requestDoc: docs.requestDoc,
     requestCode: docs.requestCode,
+    TutorialCover: (await import("@/entities/tutorial/ui/art/TutorialCover"))
+      .default,
   };
 });
 // The listed tutorials, for the finish card's "Next: <tutorial>"

@@ -8,6 +8,7 @@ import {
   requestCode,
   requestDoc,
   slugOf,
+  TutorialCover,
 } from "@/entities/tutorial";
 import { isSignInFailure, PgSession, useSignedIn } from "@/features/auth";
 import { fundFor } from "@/features/fund-wallet";
@@ -864,6 +865,13 @@ export const TutorialConversation = ({
             nextTutorial={nextTutorial}
             programId={PgProgramInfo.pk?.toBase58() ?? null}
             signedIn={signedIn}
+            cover={
+              <TutorialCover
+                name={context.definition.name}
+                framework={context.definition.framework}
+                className="size-10 rounded-lg"
+              />
+            }
             on={on}
           />
         )}

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { type ReactNode, useEffect } from "react";
 
 import type { Text } from "@/entities/tutorial";
 import { cn } from "@/shared/lib/utils";
@@ -20,7 +20,10 @@ export const HOW_IT_GOES =
 
 export interface BaseIntroCardProps {
   name: string;
-  thumbnail: string;
+  /** The tutorial's cover, 40 square, as Home and the catalog wear it. The
+   * connected feed passes it in, so this card stays clear of the entity's
+   * entry, which reaches the store */
+  cover?: ReactNode;
   minutes: number;
   stepCount: number;
   /** The definition's promise line */
@@ -39,7 +42,7 @@ export interface BaseIntroCardProps {
  */
 const BaseIntroCard = ({
   name,
-  thumbnail,
+  cover,
   minutes,
   stepCount,
   promise,
@@ -63,11 +66,7 @@ const BaseIntroCard = ({
       className="flex flex-col rounded-panel border border-border bg-surface-panel p-5"
     >
       <div className="flex items-center gap-3">
-        <img
-          src={thumbnail}
-          alt=""
-          className="size-10 shrink-0 rounded-lg object-cover"
-        />
+        {cover}
         <div className="min-w-0">
           <h2
             id="tutorial-intro-name"
