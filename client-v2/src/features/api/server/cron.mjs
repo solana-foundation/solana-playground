@@ -9,7 +9,7 @@ import { cronEnv } from "../../../shared/config/server-env.mjs";
 import { createServerLogger } from "../../../shared/lib/logger/server.mjs";
 
 /** @param {import("node:http").ServerResponse} res */
-const sendJsonTo = (res) => (status, body) => {
+const sendJsonFor = (res) => (status, body) => {
   res.statusCode = status;
   res.setHeader("content-type", "application/json");
   res.setHeader("cache-control", "no-store");
@@ -53,19 +53,19 @@ export const refuseCronFor = (job) => {
       log.error(new Error(`CRON_SECRET is unset; ${job} did not run`), {
         report: true,
       });
-      sendJsonTo(res)(503, { error: `The ${job} job is not configured` });
+      sendJsonFor(res)(503, { error: `The ${job} job is not configured` });
       return true;
     }
     if (req.method !== "GET") {
       res.setHeader("allow", "GET");
-      sendJsonTo(res)(405, { error: "Use GET." });
+      sendJsonFor(res)(405, { error: "Use GET." });
       return true;
     }
     if (!isBearer(req.headers.authorization, CRON_SECRET)) {
       // Not reported: anyone can call the route. A run of these in the log
       // beside no "<job> ran" means Vercel Cron holds an old secret
       log.warn(`${job} refused a request without the cron secret`);
-      sendJsonTo(res)(401, { error: "Unauthorized" });
+      sendJsonFor(res)(401, { error: "Unauthorized" });
       return true;
     }
     return false;
