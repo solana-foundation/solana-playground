@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
@@ -22,32 +22,51 @@ const repo = execFileSync(
   { encoding: "utf8" }
 ).trim();
 
-describe("sync-upstream", () => {
-  const generated = message(repo, "86460da5", "6ec9b806");
+const MERGED = "a7a8a1f9ed2e9a2cebafd4b59427fe61ab99702a";
 
-  it("writes the merge subject", () => {
+const hasCommit = (rev) =>
+  spawnSync("git", ["-C", repo, "cat-file", "-e", `${rev}^{commit}`])
+    .status === 0;
+
+// `message` exits the process on a commit it cannot read, so these cases skip where the commits are absent
+const withoutHistory = ["86460da5", "6ec9b806", MERGED].every(hasCommit)
+  ? false
+  : "needs upstream's commits, which a shallow checkout or a clone without solpg lacks";
+
+describe("sync-upstream", () => {
+  it("writes the merge subject", { skip: withoutHistory }, () => {
     assert.equal(
-      generated.split("\n")[0],
+      message(repo, "86460da5", "6ec9b806").split("\n")[0],
       "chore(upstream): merge solpg/master to 6ec9b806 (86460da5..6ec9b806)"
     );
   });
 
-  it("writes the body of the merged commit a7a8a1f9", () => {
-    const merged = execFileSync(
-      "git",
-      [
-        "-C",
-        repo,
-        "log",
-        "-1",
-        "--format=%B",
-        "a7a8a1f9ed2e9a2cebafd4b59427fe61ab99702a",
-      ],
-      { encoding: "utf8" }
+  it(
+    "writes the body of the merged commit a7a8a1f9",
+    { skip: withoutHistory },
+    () => {
+      const merged = execFileSync(
+        "git",
+        ["-C", repo, "log", "-1", "--format=%B", MERGED],
+        { encoding: "utf8" }
+      );
+      const body = (text) =>
+        text.split("\n").slice(1).join("\n").replace(/\n+$/, "");
+      assert.equal(
+        body(message(repo, "86460da5", "6ec9b806")),
+        body(merged)
+      );
+    }
+  );
+
+  it("names a command that could not start", () => {
+    const result = spawnSync(
+      process.execPath,
+      [path.join(import.meta.dirname, "sync-upstream.mjs"), "prepare"],
+      { encoding: "utf8", env: { PATH: path.join(repo, "no-such-dir") } }
     );
-    const body = (text) =>
-      text.split("\n").slice(1).join("\n").replace(/\n+$/, "");
-    assert.equal(body(generated), body(merged));
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /git: .*ENOENT/);
   });
 
   for (const [subject, to] of [

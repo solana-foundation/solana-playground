@@ -136,10 +136,12 @@ Env overrides: `UPSTREAM_REMOTE`, `UPSTREAM_BRANCH`, `TARGET_REMOTE`, `TARGET_BR
 `dryrun/merge-<to8>`, and may set `SYNC_NO_SIGN=1` to commit unsigned; `publish` refuses that commit. Remove the
 dry run's worktree and branch afterwards.
 
-`node --test .claude/skills/sync-upstream/scripts/sync-upstream.test.mjs` checks the message format against the
-merged commit a7a8a1f9, the subject parser against both subject forms, the `GUARDS` matching, the import list
-matcher, the report a file of a tutorial imported whole goes to, the order a whole import writes its files in,
-and that the import list or `FORK_OWNED` covers every file in `client-v2/public/`.
+`yarn test-api` in `client-v2/` runs `scripts/sync-upstream.test.mjs`, in CI too;
+`node --test .claude/skills/sync-upstream/scripts/sync-upstream.test.mjs` runs it alone. It checks the message
+format against the merged commit a7a8a1f9 (skipped where upstream's commits are absent, as on a shallow checkout),
+the subject parser against both subject forms, the `GUARDS` matching, the import list matcher, the report a file of
+a tutorial imported whole goes to, the order a whole import writes its files in, that a command which could not
+start is named, and that the import list or `FORK_OWNED` covers every file in `client-v2/public/`.
 
 ## Common mistakes
 

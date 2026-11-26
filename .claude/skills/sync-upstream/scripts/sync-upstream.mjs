@@ -112,12 +112,16 @@ const die = (text) => {
   process.exit(1);
 };
 
-const spawn = (cmd, args, stdio) =>
-  spawnSync(cmd, args, {
+const spawn = (cmd, args, stdio) => {
+  const result = spawnSync(cmd, args, {
     encoding: "utf8",
     maxBuffer: 256 * 1024 * 1024,
     stdio,
   });
+  // A command that never started, or overran the buffer, printed no message of its own
+  if (result.error) die(`${cmd}: ${result.error.message}`);
+  return result;
+};
 
 // Mirrors `set -e`: the failing command's own stderr is the message.
 const run = (cmd, args) => {
