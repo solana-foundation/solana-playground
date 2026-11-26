@@ -24,6 +24,14 @@ const TRANSPILE_OPTIONS: CompilerOptions = {
 const HIDDEN_GLOBALS = ["eval", "Function"];
 
 /**
+ * Any character but the line breaks TypeScript counts when it numbers lines
+ * (LF, CR, U+2028 and U+2029). Blanking the rest of a declaration keeps each
+ * break where it was: a lone CR left beside the next line's LF would join it
+ * into one CRLF and lose a line.
+ */
+const NOT_LINE_BREAK = /[^\n\r\u2028\u2029]/g;
+
+/**
  * A string literal with its line continuations (a backslash before a line
  * break) taken out: the same string on one line, so the hoisted imports stay
  * on the first line and every later line keeps its number (`hoistImports`
@@ -122,7 +130,7 @@ const hoistImports = (code: string) => {
     const text = rest.slice(start, declaration.end);
     rest =
       rest.slice(0, start) +
-      "\n".repeat(text.split("\n").length - 1) +
+      text.replace(NOT_LINE_BREAK, " ") +
       rest.slice(declaration.end);
   }
   return `${hoisted.join(" ")} ${rest}`;
@@ -260,10 +268,40 @@ if (import.meta.vitest) {
       ).toThrow(/^Line 3: /);
     });
 
-    it("keeps the code's line numbers when an import's specifier spans two lines", () => {
-      expect(() =>
-        prepareCode('import * as ns from "a\\\nb";\nconst x = ;')
-      ).toThrow(/^Line 3: /);
+    it.each([
+      ["a line feed", "\n"],
+      ["a carriage return and line feed", "\r\n"],
+      ["a lone carriage return", "\r"],
+      ["a line separator", "\u2028"],
+      ["a paragraph separator", "\u2029"],
+    ])(
+      "loads an import whose specifier is continued after %s, and keeps the line numbers",
+      async (_, lineBreak) => {
+        const declaration = `import * as ns from "a\\${lineBreak}b";`;
+        expect(() => prepareCode(`${declaration}\nconst x = ;`)).toThrow(
+          /^Line 3: /
+        );
+        const seen = await runPrepared(`${declaration}\nseen.push(ns.x);`, {
+          ab: { x: 1 },
+        });
+        expect(seen).toEqual([1]);
+      }
+    );
+
+    it("reads an escaped backslash before a line continuation as a backslash", async () => {
+      const seen = await runPrepared(
+        'import * as ns from "a\\\\\\\nb";\nseen.push(ns.x);',
+        { "a\\b": { x: 1 } }
+      );
+      expect(seen).toEqual([1]);
+    });
+
+    it("loads an import whose specifier holds an escape", async () => {
+      const seen = await runPrepared(
+        'import * as ns from "a\\\\b";\nimport * as hex from "\\x63";\nseen.push(ns.x, hex.x);',
+        { "a\\b": { x: 1 }, c: { x: 2 } }
+      );
+      expect(seen).toEqual([1, 2]);
     });
 
     it("throws a SyntaxError naming the line of an import whose specifier is not a string", () => {
@@ -273,14 +311,6 @@ if (import.meta.vitest) {
       expect(() => prepareCode("import x from `a`;")).toThrow(
         /^Line 1: String literal expected\.$/
       );
-    });
-
-    it("loads an import whose specifier spans two lines", async () => {
-      const seen = await runPrepared(
-        'import * as ns from "a\\\r\nb";\nseen.push(ns.x);',
-        { ab: { x: 1 } }
-      );
-      expect(seen).toEqual([1]);
     });
 
     it("runs TypeScript with top-level await", async () => {
