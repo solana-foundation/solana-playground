@@ -55,6 +55,15 @@ const RING_PX = 3;
  */
 const BUSY_LIMIT_MS = 60_000;
 
+/**
+ * How long the frame outlives a save. The key page says "exported" as it
+ * clicks the file's link, before the browser has taken the download; a caller
+ * that unmounts the panel at once (the Export dialog closes, the deploy card
+ * answers its backup line) removes the frame, and Chromium cancels the
+ * download with it.
+ */
+const EXPORT_HANDOFF_MS = 1_000;
+
 /** The elements the panel's look is read from */
 export type ThemeProbes = {
   /** A hidden button of the panel's look (outline, primary or callout action) with its label */
@@ -202,6 +211,10 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
   resultsRef.current = props;
   const nameRef = useRef(name);
   nameRef.current = name;
+  // A save told late (EXPORT_HANDOFF_MS); kept across the key page's restarts,
+  // dropped with the panel
+  const exportedRef = useRef<number | undefined>(undefined);
+  useEffect(() => () => clearTimeout(exportedRef.current), []);
   const [isUnavailable, setIsUnavailable] = useState(!origin);
   // Counts the key page's restarts, each of which needs a connection of its own
   const [connection, reconnect] = useReducer((n: number) => n + 1, 0);
@@ -320,7 +333,11 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
               }
               break;
             case "exported":
-              if (results.action === "export") results.onExported?.();
+              clearTimeout(exportedRef.current);
+              exportedRef.current = window.setTimeout(() => {
+                const latest = resultsRef.current;
+                if (latest.action === "export") latest.onExported?.();
+              }, EXPORT_HANDOFF_MS);
               break;
             case "error":
               results.onError(data.message);

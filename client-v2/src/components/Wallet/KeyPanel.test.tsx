@@ -161,6 +161,38 @@ describe("components/Wallet/KeyPanel", () => {
     expect(onBusy.mock.calls).toEqual([[true], [false], [true], [false]]);
   });
 
+  it("tells of a save only once the browser has had time to take the file", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const { connect, panel, srcs } = fakePanel();
+      const onExported = vi.fn();
+      render(
+        <BaseKeyPanel
+          action="export"
+          publicKey={PUBLIC_KEY}
+          name="Wallet 1"
+          origin={ORIGIN}
+          connect={connect}
+          readTokens={readTokens}
+          onExported={onExported}
+          onError={() => {}}
+        />
+      );
+      await waitFor(() => expect(srcs).toHaveLength(1));
+      panel.postMessage({ type: "exported" });
+      // The message is taken, but the caller (which may unmount the frame
+      // and cancel the download with it) is not told yet
+      await vi.advanceTimersByTimeAsync(50);
+      expect(onExported).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(onExported).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("gives up on a panel that stays busy, and says so", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
