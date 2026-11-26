@@ -15,9 +15,9 @@ fork's assets are edited where they are served.
   scripts write there stay gitignored.
 - `public/index.html` is upstream's file as is, so an upstream sync copies it unchanged. `scripts/brand-head.mjs`
   adds the brand icons and share card to its head when webpack writes the page, in `yarn dev` and the production
-  build alike. The card's domain comes from the build environment (`SITE_URL`, else Vercel's
-  `VERCEL_PROJECT_PRODUCTION_URL`, else `http://localhost:3000`) instead of a hardcoded preview host, so a
-  production build names the production domain.
+  build alike. The card's domain comes from the build environment (the optional `SITE_URL`, else Vercel's
+  `VERCEL_PROJECT_PRODUCTION_URL`, else the production site, `https://playground.solana.com`) instead of a
+  hardcoded preview host, so a production build names the production domain.
 - The fork decides which Markdown tutorials the app shows in one file it owns,
   `client-v2/src/tutorials/markdown-tutorials.json`, which also holds each tutorial's date. The tracked copy has no
   upstream history to date a tutorial from, and an upstream sync that adds a tutorial folder does not show it until
@@ -83,8 +83,8 @@ None.
   (`generate`, `generate-fast`), `client-v2/craco.config.js`, `client-v2/src/tutorials/markdown-tutorials.json`,
   `.claude/skills/sync-upstream/`, `client-v2/Dockerfile`, `.dockerignore`, `.gitignore`, `compose.yaml`, `.env.example`, `client-v2/.env.example` (`SITE_URL`), `reusable-client-v2.yml`, `preview.yml`,
   and the docs that described the mirror.
-- A Vercel build names its production domain in the card only while `VERCEL_PROJECT_PRODUCTION_URL` reaches the
-  build; `SITE_URL` overrides it.
+- A Vercel build names its project's production domain in the card through `VERCEL_PROJECT_PRODUCTION_URL`, and a
+  build outside Vercel names the production site; `SITE_URL` overrides both.
 - Asset changes from upstream reach `public/` through the `sync-upstream` skill's `assets` command during an
   upstream sync (HOO-2687), which also updates `scripts/assets-commit.txt` and reports each new tutorial folder
   for the user to enable or leave out.

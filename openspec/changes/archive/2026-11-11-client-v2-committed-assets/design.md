@@ -36,10 +36,10 @@ without git data of the checkout.
   `%PUBLIC_URL%` afterwards, and a throw from `brandHeadFor` stops webpack before it starts. Rejected: commit the
   branded page. An upstream change to the head would then be a manual merge on every sync, and the card's domain
   would be fixed in a file.
-- **The card's domain comes from the build environment.** `resolveSiteUrl` takes `SITE_URL`, else
-  `https://$VERCEL_PROJECT_PRODUCTION_URL`, which Vercel sets on every build, previews included, else
-  `http://localhost:3000`, and fails the build on anything that is not an `http(s)` origin. A preview's card
-  therefore names the production domain, which is the page a shared link should open.
+- **The card's domain comes from the build environment.** `resolveSiteUrl` takes the optional `SITE_URL`, else
+  `https://$VERCEL_PROJECT_PRODUCTION_URL`, which Vercel sets on every build, previews included, else the
+  production site, `https://playground.solana.com`, and fails the build on anything that is not an `http(s)`
+  origin. A preview's card therefore names the production domain, which is the page a shared link should open.
 - **One fork-owned list enables Markdown tutorials and dates them.** `src/tutorials/markdown-tutorials.json` maps a
   folder name to `{ "added": <unix seconds> }`, and `MARKDOWN_TUTORIALS` in `craco.config.js` is built from its
   names, in its order. The tracked copy has this repository's history, not the assets repository's, so `git log`
@@ -103,8 +103,9 @@ without git data of the checkout.
   and adding the path to `scripts/assets-import.txt` brings it in.
 - [The repository grows by the assets' size] → the files were already in every checkout through the submodule; the
   history grows once, by the size of `public/`.
-- [Vercel stops passing `VERCEL_PROJECT_PRODUCTION_URL` to the build] → the card falls back to
-  `http://localhost:3000`, which a link preview cannot load; setting `SITE_URL` on the project restores it.
+- [Vercel stops passing `VERCEL_PROJECT_PRODUCTION_URL` to the build] → the card names the production site,
+  `https://playground.solana.com`, which is wrong only for a project with another production domain; setting
+  `SITE_URL` on that project restores it.
 - [An edit to `public/index.html` does not reach a running `yarn dev`] → the page is read when webpack starts;
   restart the dev server.
 - [Removing the submodule would break the server deploy] → `client/` is not deployed, but on a release tag

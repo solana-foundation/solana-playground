@@ -278,7 +278,7 @@ for (const [title, env, expected] of [
     { SITE_URL: "", VERCEL_PROJECT_PRODUCTION_URL: "b.vercel.app" },
     "https://b.vercel.app",
   ],
-  ["neither gives the local dev server", {}, "http://localhost:3000"],
+  ["neither gives the production site", {}, "https://playground.solana.com"],
   [
     "a trailing slash is dropped",
     { SITE_URL: "https://a.test/" },

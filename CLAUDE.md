@@ -219,8 +219,9 @@ Asked to build something in the client, look in `openspec/changes/` first.
   (`programs/programs.json`). `index.html` stays upstream's file;
   `craco.config.js` adds the brand icons and share card to its head when
   webpack writes the page (`scripts/brand-head.mjs`), with the card's domain
-  from `SITE_URL`, else `VERCEL_PROJECT_PRODUCTION_URL`, else
-  `http://localhost:3000`. The rest is the part of upstream's assets
+  from the optional `SITE_URL`, else `VERCEL_PROJECT_PRODUCTION_URL`, else
+  the production site (`PRODUCTION_HOST` in `scripts/robots.mjs`). The rest
+  is the part of upstream's assets
   repository that `client-v2/scripts/assets-import.txt` lists, at the commit
   in `client-v2/scripts/assets-commit.txt`; upstream's `tutorials/` is left
   out, and the ladder tutorials keep their thumbnails in

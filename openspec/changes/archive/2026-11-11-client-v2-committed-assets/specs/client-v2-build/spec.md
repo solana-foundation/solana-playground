@@ -97,8 +97,9 @@ app icons. No script SHALL replace the page icon at runtime.
 The `index.html` that `client-v2` serves SHALL carry Open Graph and Twitter
 card tags in its markup, so a link preview reads them without running the
 bundle. Every URL in them SHALL be absolute, on the site URL the build
-environment gives: `SITE_URL`, else Vercel's production domain, else the local
-dev server. The share image SHALL be served from the site root.
+environment gives: the optional `SITE_URL`, else Vercel's production domain,
+else the production site, `https://playground.solana.com`. The share image
+SHALL be served from the site root.
 
 #### Scenario: The generated card tags (manual)
 
@@ -117,8 +118,8 @@ dev server. The share image SHALL be served from the site root.
 - **WHEN** the production build runs with `SITE_URL=https://example.test`, then with only
   `VERCEL_PROJECT_PRODUCTION_URL=example.vercel.app`, then with neither
 - **THEN** `og:url` in `build/index.html` is `https://example.test/`, then
-  `https://example.vercel.app/`, then `http://localhost:3000/`, and `og:image` is the same origin's `/og.png` each
-  time
+  `https://example.vercel.app/`, then `https://playground.solana.com/`, and `og:image` is the same origin's `/og.png`
+  each time
 
 #### Scenario: A site URL that is not an origin fails the build (manual)
 

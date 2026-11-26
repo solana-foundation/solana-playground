@@ -39,9 +39,11 @@ as soon as the Root Directory points at `client-v2`.
      without it (`scripts/check-agent-env.mjs`).
    - `SITE_URL`, optional: the origin the share card's `og:url` and
      `og:image` name. Unset, the build takes Vercel's
-     `VERCEL_PROJECT_PRODUCTION_URL`, which Vercel sets on every build
-     (`resolveSiteUrl` in `scripts/brand-head.mjs`); set it only when the card
-     must name another domain.
+     `VERCEL_PROJECT_PRODUCTION_URL`, the project's production domain, which
+     Vercel sets on every build, previews included (`resolveSiteUrl` in
+     `scripts/brand-head.mjs`); a build outside Vercel takes
+     `https://playground.solana.com`. Set it only when the card must name
+     another origin, such as a Preview environment with a domain of its own.
    - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — see step 3.
    - `CACHE_SEAL_KEY`: `openssl rand -hex 32`, Production only, never on
      Preview or Development, stored as Sensitive so nobody who can read the

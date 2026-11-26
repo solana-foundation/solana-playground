@@ -12,6 +12,8 @@
  * card tags are replaced; the files they name are the fork's, in `public/`.
  */
 
+import { PRODUCTION_HOST } from "./robots.mjs";
+
 /** Design's copy, and the line `og.png` itself carries */
 export const DESCRIPTION =
   "Write, build and deploy Solana programs in your browser.";
@@ -26,9 +28,10 @@ const escapeAttr = (value) =>
     .replaceAll(">", "&gt;");
 
 /**
- * The site's origin, from `SITE_URL`, else Vercel's production domain, else
- * the local dev server. Card URLs must be absolute: crawlers do not resolve
- * relative ones, so `%PUBLIC_URL%` cannot serve here.
+ * The site's origin: the optional `SITE_URL`, else Vercel's production domain,
+ * else the production site, for a build outside Vercel. Card URLs must be
+ * absolute: crawlers do not resolve relative ones, so `%PUBLIC_URL%` cannot
+ * serve here.
  *
  * @param {Record<string, string | undefined>} env the build's environment
  * @returns {string} an `http` or `https` origin, without a trailing slash
@@ -42,7 +45,10 @@ export const resolveSiteUrl = (env) => {
       env.VERCEL_PROJECT_PRODUCTION_URL &&
         `https://${env.VERCEL_PROJECT_PRODUCTION_URL}`,
     ],
-  ].find(([, candidate]) => candidate) ?? ["default", "http://localhost:3000"];
+  ].find(([, candidate]) => candidate) ?? [
+    "PRODUCTION_HOST",
+    `https://${PRODUCTION_HOST}`,
+  ];
   let url;
   try {
     url = new URL(value);

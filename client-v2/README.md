@@ -186,10 +186,10 @@ passes it through `brandHeadFor` (`scripts/brand-head.mjs`) when webpack
 writes the page, in `yarn dev` and in the production build alike, and a page
 whose head the rewrite cannot place fails the build. An edit to
 `public/index.html` reaches `yarn dev` after a restart. The card's absolute
-URLs name `SITE_URL` when it is set, else
+URLs name the optional `SITE_URL` when it is set, else
 `https://$VERCEL_PROJECT_PRODUCTION_URL`, which Vercel sets on every build,
-else `http://localhost:3000` (`resolveSiteUrl`); a value that is not an
-`http(s)` origin fails the build.
+else the production site, `https://playground.solana.com`
+(`resolveSiteUrl`); a value that is not an `http(s)` origin fails the build.
 
 | File | Used for |
 | --- | --- |
