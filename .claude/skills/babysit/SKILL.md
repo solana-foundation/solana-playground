@@ -212,6 +212,9 @@ it ran at. Every pass re-verifies those ticks against `headRefOid`; one whose li
 again. A tick the author set stands unless its own evidence line names an older SHA. The `check` script item
 needs a local run, recorded the same way.
 
+The Greptile item takes step 4's result as its evidence: tick it when the score for `headRefOid` is 5/5 and no
+review thread is unresolved. On a PR that step 4 skips, strike it.
+
 ## 6. Apply the body
 
 When the local file changed in this pass, read the remote body again. When it differs from the body step 1 read,

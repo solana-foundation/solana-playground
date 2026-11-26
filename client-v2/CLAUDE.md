@@ -510,10 +510,12 @@ reason.
   `sx` plugin (github.com/hoodieshq/solana-explorer-dev-skills) runs
   `/sx:review-pr full`, then `/sx:review-pr`, on every PR and before
   `gh pr create`. `full` hands the review to the pr-review-toolkit plugin,
-  which must be installed too; the default run checks the plugin's built-in
-  rules and this repository's, plus the governing OpenSpec change and the
-  Solana guidance where they apply. An author without the plugin skips the
-  run, and the human review is the gate. Human reviewers read the diff and
+  which must be installed too; launching it is the developer's obligation,
+  and the PR checklist tracks only the default run. The default run checks
+  the plugin's built-in rules and this repository's, plus the governing
+  OpenSpec change and the Solana guidance where they apply. An author
+  without the plugin skips both runs, and the human review is the gate.
+  Human reviewers read the diff and
   the PR's screenshots; they do not re-run the review. The Git integration
   builds no preview of a ticket branch (`scripts/vercel-ignore-build.mjs`),
   only of the integration branches, so a PR that changes the UI shows it in
@@ -525,9 +527,11 @@ reason.
   goes to its existing Linear issue, or a new one when none fits; a gap the
   review keeps missing becomes a Linear issue too, closed later through agent
   rules or tooling. The PR description may carry the line
-  `sx:review-pr (full + default) @ <sha>: <n> critical open`, where `<sha>`
-  is the head both runs read; write it only when both runs read that head,
-  and update it after each re-run. The line is optional: a PR without it is
+  `sx:review-pr @ <sha>: <n> critical open`, where `<sha>` is the head the
+  default run read; write it only when that run read that head, and update
+  it after each re-run. An author whose `full` run read the same head may
+  write `sx:review-pr (full + default) @ <sha>: <n> critical open`. The
+  line is optional: a PR without it is
   reviewed and merged the usual way, with a human approval. With it, a PR
   into a `scope/*` branch or `new-face-polish-2` merges without a human
   approval once it has no conflict, no human has requested changes, CI is
@@ -540,6 +544,13 @@ reason.
   agent session that merges ready PRs) merges these PRs, never their author.
   Without the line, with a stale one or with any critical open, and for any
   other base, a human approves.
+- **Greptile's comments are fixed before the merge.** Greptile reviews
+  every push to a PR into `master` on the foundation repository
+  (`greptile.json`). Before the merge, its score for the PR's head is 5/5
+  and no review thread is unresolved: a comment that needs a change is
+  fixed in the PR, a comment that needs none gets a reply saying why, and
+  the thread is then resolved. `/greploop` works through the comments this
+  way. A PR into any other base has no Greptile review.
 - **Work that overlaps an open PR is stacked on it.** It branches from
   that PR's branch, targets it, and says `Stacked on #<n>` in its
   description. A stacked PR is rebased whenever the one under it moves.

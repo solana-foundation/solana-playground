@@ -46,7 +46,8 @@ Linear: [HOO-](https://linear.app/solana-fndn/issue/HOO-)
 <!-- The rules are in client-v2/CLAUDE.md; tick what applies, delete the rest. -->
 
 - [ ] `check` script green locally ("Before a PR")
-- [ ] With the `sx` plugin: `/sx:review-pr full`, then `/sx:review-pr`, run; critical and needed important findings fixed here, the rest in Linear ("Before a PR"). Without it, delete this line
+- [ ] With the `sx` plugin: `/sx:review-pr` run; critical and needed important findings fixed here, the rest in Linear ("Before a PR"). Without it, delete this line
+- [ ] Greptile's comments fixed or answered, every thread resolved, and its score 5/5 on the head; `/greploop` works through them ("Before a PR"). On a PR Greptile does not review, delete this line
 - [ ] Task ticked in `tasks.md`; if it was the last, asked whether to close the change ("Specs and changes" 4-5)
 - [ ] Ids, `aria-label`s, test ids unchanged across any move ("What survives every move")
 - [ ] One migration, this PR's own ("What review keeps finding")
