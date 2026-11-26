@@ -11,7 +11,7 @@
   "level": "Beginner",
   "framework": "Anchor",
   "languages": ["Rust"],
-  "thumbnail": "thumbnail.jpg",
+  "thumbnail": "/tutorials/hello-anchor/thumbnail.jpg",
   "minutes": 5,
   "intro": {
     "promise": "You write hello.",
