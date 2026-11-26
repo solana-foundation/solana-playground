@@ -324,9 +324,12 @@ describe("components/Wallet/KeyPanel", () => {
     expect(
       readThemeTokens({ button: probe("0 solid white"), hover, ring }).border
     ).toBe("transparent");
-    expect(
-      readThemeTokens({ button: probe("1px solid white"), hover, ring }).border
-    ).toBe("rgb(255, 255, 255)");
+    // An edged button sends its edge's colour as the browser computes it
+    const edged = probe("1px solid white");
+    expect(readThemeTokens({ button: edged, hover, ring }).border).toBe(
+      getComputedStyle(edged).borderTopColor
+    );
+    expect(getComputedStyle(edged).borderTopColor).not.toBe("transparent");
   });
 
   it("sends the look again when the window's width changes it", async () => {
