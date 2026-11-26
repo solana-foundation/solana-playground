@@ -1,4 +1,5 @@
 # GitHub requests a review from these owners on a pull request into the branch that holds this file.
 /client-v2/ @iamanikeev @ocatave @rogaldh
+/client-v2/docs/production-runbook.md @catmcgee @iamanikeev @ocatave @rogaldh
 /server/ @iamanikeev @rogaldh
 /wasm/ @rogaldh
