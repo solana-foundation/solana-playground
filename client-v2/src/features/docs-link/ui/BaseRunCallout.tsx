@@ -204,7 +204,9 @@ const BaseRunCallout: FC<BaseRunCalloutProps> = ({
                 className="max-md:size-11"
               />
               <CalloutAction onClick={onCheckAgain}>Check again</CalloutAction>
-              <CalloutAction onClick={onNotNow}>Not now</CalloutAction>
+              <CalloutAction quiet onClick={onNotNow}>
+                Not now
+              </CalloutAction>
             </CalloutActions>
           </div>
         </Callout>
