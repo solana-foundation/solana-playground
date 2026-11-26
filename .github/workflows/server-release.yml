@@ -39,6 +39,8 @@ jobs:
     concurrency:
       group: server-release
       cancel-in-progress: false
+    # Protected to master in the repository settings; the GCP secrets live in it (docs/server-release.md)
+    environment: playground-server
     permissions:
       contents: read
       id-token: write

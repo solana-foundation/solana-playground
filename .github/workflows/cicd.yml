@@ -12,8 +12,8 @@ permissions:
 
 jobs:
   # Resolve the App Engine version from the tag at HEAD. Push to master deploys
-  # only when that commit is tagged; manual dispatch falls back to the latest
-  # reachable tag so it always has a version to deploy.
+  # only when that commit is tagged; manual dispatch fails unless it is, since
+  # deploying HEAD under an older tag would overwrite that version.
   resolve_version:
     name: Resolve deploy version
     runs-on: ubuntu-latest
@@ -28,11 +28,12 @@ jobs:
 
       - id: tag
         name: Compute App Engine version tag
+        # The event and ref come from the runner's environment, never from an expression inside the script
         run: |
           # Only solana-foundation/solana-playground (id 1003072868) deploys: forks such as hoodieshq hold no GCP access.
           # A push there stays green with nothing to deploy; a dispatch there fails, so it does not read as a deploy.
           if [ "$GITHUB_REPOSITORY_ID" != "1003072868" ]; then
-            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
               echo "::error::Deploy from solana-foundation/solana-playground; $GITHUB_REPOSITORY deploys nothing." >&2
               exit 1
             fi
@@ -40,12 +41,23 @@ jobs:
             echo "version_tag=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          # Only master deploys: the OIDC provider and the playground-server environment admit nothing else
+          # (docs/server-release.md), so a dispatch from a branch fails here instead of further on.
+          if [ "$GITHUB_REF" != "refs/heads/master" ]; then
+            echo "::error::Deploy from master; $GITHUB_REF deploys nothing." >&2
+            exit 1
+          fi
           # Tags are already present from checkout (fetch-depth: 0); no network fetch needed.
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            # Manual deploy: use the latest reachable tag; fail loudly rather than deploy a sentinel version.
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            # Manual deploy: redeploy the latest tag, which must be on HEAD; fail loudly rather than deploy a sentinel version.
             TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
             if [ -z "$TAG" ]; then
               echo "::error::No git tag found to derive a deploy version; create a tag before dispatching." >&2
+              exit 1
+            fi
+            # A version name must match its code: deploying master's head under an older tag would overwrite that version.
+            if [ "$(git rev-parse "$TAG^{commit}")" != "$(git rev-parse HEAD)" ]; then
+              echo "::error::$TAG is not on master's head; tag the head before dispatching." >&2
               exit 1
             fi
           else
@@ -68,6 +80,8 @@ jobs:
       - resolve_version
       - checks
     if: needs.resolve_version.outputs.version_tag != ''
+    # Protected to master in the repository settings; the GCP secrets live in it (docs/server-release.md)
+    environment: playground-server
     permissions:
       contents: read
       id-token: write
