@@ -38,12 +38,14 @@ test("ignores HTML entities", () => {
   assert.deepEqual(findColors("<>&#8592;&#10003;</>"), []);
 });
 
-test("allows only the token bridge, the colour resolver, the language logos, the brand art and the voxel shadows", () => {
+test("allows only the token bridge, the colour resolver, the language and framework logos, the brand art and the voxel shadows", () => {
   assert.equal(isAllowed("app/styles/playground-tokens.css"), true);
   assert.equal(isAllowed("app/styles/playground-theme.css"), true);
   assert.equal(isAllowed("shared/lib/css-color/css-color.ts"), true);
   assert.equal(isAllowed("shared/lib/css-color/css-color.test.ts"), true);
   assert.equal(isAllowed("languages/python.tsx"), true);
+  assert.equal(isAllowed("frameworks/anchor/icon.svg"), true);
+  assert.equal(isAllowed("frameworks/anchor/anchor.ts"), false);
   assert.equal(isAllowed("components/Markdown/Markdown.tsx"), false);
   assert.equal(isAllowed("views/sidebar/icons/build.svg"), false);
   assert.equal(isAllowed("app/styles/other.css"), false);

@@ -10,7 +10,10 @@ import { CLIENT_PATH } from "./utils.mjs";
 /** Tutorials public directory path */
 const TUTORIALS_PATH = pathModule.join(CLIENT_PATH, "public", "tutorials");
 
-const tutorials = await fs.readdir(TUTORIALS_PATH);
+// The folder exists only while `src/tutorials/markdown-tutorials.json` enables a tutorial
+const tutorials = existsSync(TUTORIALS_PATH)
+  ? await fs.readdir(TUTORIALS_PATH)
+  : [];
 for (const name of tutorials) {
   const tutorialPath = pathModule.join(TUTORIALS_PATH, name);
   const dir = await fs.readdir(tutorialPath);

@@ -13,7 +13,7 @@
   "framework": "Anchor",
   "languages": ["Rust", "TypeScript"],
   "categories": ["Gaming"],
-  "thumbnail": "/tutorials/lumberjack/thumbnail.jpg",
+  "thumbnail": "thumbnail.jpg",
   "minutes": 15,
   "intro": {
     "promise": "You'll build a small game on chain: each player gets an account with wood and energy, chopping a tree spends energy, and the energy comes back over time.",

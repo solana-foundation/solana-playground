@@ -1,20 +1,19 @@
-// The fork's `static/manifest.json`, which replaces upstream's in `public/`
-// (client-v2-build: "The manifest").
+// The fork's `public/manifest.json` (client-v2-build: "The manifest").
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-const STATIC = path.join(
+const PUBLIC = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
-  "../static"
+  "../public"
 );
 const manifest = JSON.parse(
-  await fs.readFile(path.join(STATIC, "manifest.json"), "utf8")
+  await fs.readFile(path.join(PUBLIC, "manifest.json"), "utf8")
 );
 
-test("the manifest lists the brand icons, each a file in static/", async () => {
+test("the manifest lists the brand icons, each a file in public/", async () => {
   assert.deepEqual(
     manifest.icons.map(({ src, sizes, purpose }) => [src, sizes, purpose]),
     [
@@ -24,7 +23,7 @@ test("the manifest lists the brand icons, each a file in static/", async () => {
     ]
   );
   for (const { src } of manifest.icons) {
-    await fs.access(path.join(STATIC, src));
+    await fs.access(path.join(PUBLIC, src));
   }
 });
 

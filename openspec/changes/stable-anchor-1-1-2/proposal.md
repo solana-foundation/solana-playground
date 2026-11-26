@@ -111,8 +111,8 @@ users a guided way to build the IDL on their own machine and upload it.
   the missing crate.
 - Seahorse (Python) projects compile to Anchor code through the same route; the default Seahorse starter builds on
   Anchor 1.1.2 (task 1.4).
-- Tutorials that fail on 1.1.2 are fixed in the assets repository behind the `client/public` submodule. Developers
-  bump the submodule and run `update-static`; this change does no work for them.
+- Tutorials that fail on 1.1.2 are fixed in upstream's assets repository, and reach `client-v2/public/` through the
+  sync-upstream skill's assets step; this change does no work for them.
 - Out of scope: Anchor 1.2.x (a later change moves both templates together; its Solana pairing is disputed in
   otter-sec/anchor#5031); IDL generation on the server in any form; the unstable route and its templates; editing
   `client/`; the `REACT_APP_SERVER_URL` requirement, which is its own change on this branch.

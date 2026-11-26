@@ -5,12 +5,12 @@ const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
 
-// CRA's missing-index.html error gives no hint that public/ is a submodule.
+// CRA's missing-index.html error does not say the file is tracked.
 if (!fs.existsSync(path.join(__dirname, "public", "index.html"))) {
   throw new Error(
     "client-v2/public has no index.html. These assets are tracked files, " +
-      "not a submodule, so a normal checkout has them.\n" +
-      "To restore: make update-static"
+      "so a normal checkout has them.\n" +
+      "To restore: git restore client-v2/public"
   );
 }
 
@@ -18,6 +18,8 @@ if (!fs.existsSync(path.join(__dirname, "public", "index.html"))) {
 const {
   missingObservabilityIds,
 } = require("./src/features/api/server/observability.mjs");
+const { brandHeadFor, resolveSiteUrl } = require("./scripts/brand-head.mjs");
+const { isRobotsDisallowed, robotsTxt } = require("./scripts/robots.mjs");
 
 // The build succeeds without these, so say in the build log what it ships without
 const warnAboutMissingObservabilityIds = () => {
@@ -277,6 +279,25 @@ class SwapFilesPlugin {
   }
 }
 
+/** Emits the deployment's `robots.txt` (`scripts/robots.mjs`); `public/` holds none, so the dev server and the build serve this one */
+class RobotsTxtPlugin {
+  constructor(text) {
+    this.text = text;
+  }
+
+  apply(compiler) {
+    const name = "RobotsTxtPlugin";
+    const { Compilation, sources } = compiler.webpack;
+    compiler.hooks.thisCompilation.tap(name, (compilation) => {
+      compilation.hooks.processAssets.tap(
+        { name, stage: Compilation.PROCESS_ASSETS_STAGE_ADDITIONAL },
+        () =>
+          compilation.emitAsset("robots.txt", new sources.RawSource(this.text))
+      );
+    });
+  }
+}
+
 module.exports = {
   style: {
     postcss: {
@@ -515,50 +536,63 @@ module.exports = {
           /** Supported packages(TypeScript) */
           PACKAGES: JSON.stringify(readSupportedPackages()),
 
-          /** Array of all markdown tutorial data */
-          MARKDOWN_TUTORIALS: defineFromPublicDir(
-            "tutorials",
-            (dirItems, tutorialsPath) => {
-              return dirItems
-                .filter((tutorialName) => !tutorialName.startsWith("_"))
-                .map((tutorialName) => {
-                  const tutorialDir = path.join(tutorialsPath, tutorialName);
-                  const tutorialDirItems = fs.readdirSync(tutorialDir);
-                  const tutorialDataFileName = tutorialDirItems.find(
-                    (name) => name === "data.json"
+          /** The markdown tutorials `src/tutorials/markdown-tutorials.json` enables */
+          MARKDOWN_TUTORIALS: JSON.stringify(
+            Object.entries(MARKDOWN_TUTORIAL_LIST).map(
+              ([tutorialName, entry]) => {
+                const added = entry?.added;
+                if (!Number.isInteger(added)) {
+                  throw new Error(
+                    `src/tutorials/markdown-tutorials.json: "${tutorialName}" needs "added", ` +
+                      "its date in whole unix seconds"
                   );
-                  if (!tutorialDataFileName) return null;
+                }
 
-                  const data = JSON.parse(
-                    fs.readFileSync(
-                      path.join(tutorialDir, tutorialDataFileName)
-                    )
+                const tutorialDir = path.join(
+                  "public",
+                  "tutorials",
+                  tutorialName
+                );
+                const dataPath = path.join(tutorialDir, "data.json");
+                if (!fs.existsSync(dataPath)) {
+                  throw new Error(
+                    `src/tutorials/markdown-tutorials.json lists "${tutorialName}", ` +
+                      `but ${path.join("client-v2", dataPath)} does not exist`
                   );
-                  data.pageCount = fs.readdirSync(
-                    path.join(tutorialDir, "pages")
-                  ).length;
-                  data.unixTimestamp =
-                    TUTORIAL_TIMESTAMPS[tutorialName] ??
-                    gitAddedTimestamp(tutorialDir);
+                }
 
-                  const thumbnailFileName = tutorialDirItems.find((name) =>
-                    name.startsWith("thumbnail")
-                  );
-                  if (thumbnailFileName) data.thumbnail ??= thumbnailFileName;
+                const data = JSON.parse(fs.readFileSync(dataPath));
+                data.pageCount = fs.readdirSync(
+                  path.join(tutorialDir, "pages")
+                ).length;
+                data.unixTimestamp = added;
 
-                  return data;
-                })
-                .filter(Boolean);
-            }
+                const thumbnailFileName = fs
+                  .readdirSync(tutorialDir)
+                  .find((name) => name.startsWith("thumbnail"));
+                if (thumbnailFileName) data.thumbnail ??= thumbnailFileName;
+
+                return data;
+              }
+            )
           ),
 
           /** Map of kebab-case tutorial names to necessary custom tutorial data */
           CUSTOM_TUTORIALS: defineFromPublicDir(
             "tutorials",
             (dirItems, tutorialsPath) => {
-              return dirItems.reduce((acc, tutorialName) => {
+              // A custom tutorial with pages in `src/` has no asset folder when the import list leaves it out
+              const srcPaged = fs
+                .readdirSync(path.join("src", "tutorials"))
+                .filter((name) =>
+                  fs.existsSync(path.join("src", "tutorials", name, "pages"))
+                );
+              const names = [...new Set([...dirItems, ...srcPaged])];
+              return names.reduce((acc, tutorialName) => {
                 const tutorialDir = path.join(tutorialsPath, tutorialName);
-                const tutorialDirItems = fs.readdirSync(tutorialDir);
+                const tutorialDirItems = fs.existsSync(tutorialDir)
+                  ? fs.readdirSync(tutorialDir)
+                  : [];
                 const tutorialDataFileName = tutorialDirItems.find(
                   (name) => name === "data.json"
                 );
@@ -640,6 +674,27 @@ module.exports = {
       cssMinimizer.options.minimizer.options = {
         preset: ["default", { calc: false }],
       };
+
+      // The page stays upstream's file; the brand head goes in as webpack writes it
+      const htmlPlugin = webpackConfig.plugins.find(
+        (plugin) => plugin.constructor.name === "HtmlWebpackPlugin"
+      );
+      if (!htmlPlugin) {
+        throw new Error("craco: expected CRA's HtmlWebpackPlugin");
+      }
+      htmlPlugin.userOptions.templateContent = brandHeadFor(
+        resolveSiteUrl(process.env)
+      )(fs.readFileSync(htmlPlugin.userOptions.template, "utf8"));
+
+      // The environment decides the file, so a preview or a staging project keeps crawlers out
+      webpackConfig.plugins.push(new RobotsTxtPlugin(robotsTxt(process.env)));
+      if (env === "production") {
+        console.log(
+          isRobotsDisallowed(process.env)
+            ? "craco: disallowed every crawler in robots.txt"
+            : "craco: allowed crawlers in robots.txt except /api/"
+        );
+      }
 
       // Ignore useless warnings
       webpackConfig.ignoreWarnings = [
@@ -737,21 +792,13 @@ const toDevServer5 = ({
   },
 });
 
-/** Real asset-repo dates captured by `make update-static`; see that script */
-const TUTORIAL_TIMESTAMPS = (() => {
-  const file = path.join("public", "tutorial-timestamps.json");
-  return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
-})();
-
-/** When the directory's first file was added, per git history */
-const gitAddedTimestamp = (dir) =>
-  execSync("git log --follow --format=%ad --date=unix --diff-filter=A .", {
-    cwd: dir,
-  })
-    .toString()
-    .split("\n")
-    .filter(Boolean)
-    .pop();
+/** Folder name to `{ added }`; a folder under `public/tutorials` shows only when listed */
+const MARKDOWN_TUTORIAL_LIST = JSON.parse(
+  fs.readFileSync(
+    path.join("src", "tutorials", "markdown-tutorials.json"),
+    "utf8"
+  )
+);
 
 /**
  * Define global variable based on the items in `public` directory.
@@ -763,9 +810,6 @@ const gitAddedTimestamp = (dir) =>
 const defineFromPublicDir = (dirName, cb) => {
   const publicPath = path.join("public", dirName);
 
-  if (!fs.existsSync(publicPath)) {
-    fs.mkdirSync(publicPath);
-  }
-
-  return JSON.stringify(cb(fs.readdirSync(publicPath), publicPath));
+  const dirItems = fs.existsSync(publicPath) ? fs.readdirSync(publicPath) : [];
+  return JSON.stringify(cb(dirItems, publicPath));
 };

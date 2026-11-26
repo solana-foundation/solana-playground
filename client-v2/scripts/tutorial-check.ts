@@ -35,17 +35,8 @@ const folders = (dir: string) =>
 const holds = (dir: string, test: Parameters<string[]["some"]>[0]) =>
   fs.readdirSync(dir).some(test);
 
-/** Upstream's tutorials, copied into `public/` by `yarn generate` */
-const PUBLIC = [
-  path.join(CLIENT, "public", "tutorials"),
-  path.join(CLIENT, "..", "client", "public", "tutorials"),
-].find((dir) => fs.existsSync(dir));
-if (!PUBLIC) {
-  console.error(
-    "no public/tutorials: run `git submodule update --init client/public`"
-  );
-  process.exit(1);
-}
+/** The Markdown tutorials `src/tutorials/markdown-tutorials.json` enables, tracked in `public/` */
+const PUBLIC = path.join(CLIENT, "public", "tutorials");
 
 /**
  * Every tutorial a definition's `next` may name, by slug, as the app's

@@ -57,7 +57,6 @@ jobs:
             ':(exclude,glob)client-v2/*.md'
             ':(exclude,glob)client-v2/db/*.md'
             ':(exclude,glob)client-v2/src/tutorials/*.md'
-            ':(exclude,glob)client-v2/static/**/*.md'
           )
           changed=$(git diff --name-only HEAD^1 HEAD -- \
             client-v2 \

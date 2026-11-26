@@ -1,6 +1,7 @@
 /**
- * The `robots.txt` each deployment serves, written by `update-static.mjs` over
- * the mirror of upstream's file, which allows every crawler everywhere.
+ * The `robots.txt` each deployment serves, emitted by `RobotsTxtPlugin` in
+ * `craco.config.js`. `public/` holds no copy: upstream's file allows every
+ * crawler everywhere.
  *
  * The production site lets crawlers in, except into `/api/`. A preview, and a
  * deployment that is not the public site but builds as production (a staging

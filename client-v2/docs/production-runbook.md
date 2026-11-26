@@ -59,8 +59,8 @@ On the machine that runs the steps (macOS or Linux):
   ([client-v2/db/README.md](../db/README.md)).
 - Node at the version in `client-v2/.nvmrc`, yarn 1, `jq`, `make`, `curl`, `git` and `openssl`. The production
   build installs Rust itself (`scripts/vercel-install.sh`) and takes about an hour the first time.
-- A full clone (not `--depth`) of `solana-foundation/solana-playground`, on `master`, with
-  `git submodule update --init`. Every command runs from the repository root of that checkout.
+- A clone of `solana-foundation/solana-playground`, on `master`. Every command runs from the repository root of
+  that checkout.
 
 Accounts and access:
 

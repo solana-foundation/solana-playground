@@ -37,6 +37,13 @@ as soon as the Root Directory points at `client-v2`.
      `api/agent.mjs`, `api/mcp.mjs`, `api/projects.mjs` and
      `api/conversations.mjs` answer its writes with `403`. A production build with `PG_AI_API_KEY` fails
      without it (`scripts/check-agent-env.mjs`).
+   - `SITE_URL`, optional: the origin the share card's `og:url` and
+     `og:image` name. Unset, the build takes Vercel's
+     `VERCEL_PROJECT_PRODUCTION_URL`, the project's production domain, which
+     Vercel sets on every build, previews included (`resolveSiteUrl` in
+     `scripts/brand-head.mjs`); a build outside Vercel takes
+     `https://playground.solana.com`. Set it only when the card must name
+     another origin, such as a Preview environment with a domain of its own.
    - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — see step 3.
    - `CACHE_SEAL_KEY`: `openssl rand -hex 32`, Production only, never on
      Preview or Development, stored as Sensitive so nobody who can read the
@@ -264,7 +271,7 @@ The version comes from the lockfile, the file wasm-pack reads, after `cargo meta
 
 ## Crawlers
 
-`scripts/update-static.mjs`, which every build runs, writes `robots.txt` per deployment (`scripts/robots.mjs`). The production site gets `Allow: /` and `Disallow: /api/`, and the log line says `allowed crawlers in robots.txt except /api/`. A preview (`VERCEL_ENV=preview`) disallows the whole site without any setting. A project that is not the public site but builds as production, such as a staging project or hoodies' `solana-playground` project, sets `DISALLOW_ROBOTS=true` (a build-time variable, not `REACT_APP_*`; only the exact value `true` counts) and gets the same disallow-all file; the log line then ends with `disallowed every crawler in robots.txt`. The variable is read at build time, so setting it takes a redeploy. Never set it on the Solana Foundation project that serves `playground.solana.com`: that domain would drop out of crawling.
+Every build writes `robots.txt` per deployment: `RobotsTxtPlugin` in `craco.config.js` emits the text `scripts/robots.mjs` gives, and `public/` holds no copy. The production site gets `Allow: /` and `Disallow: /api/`, and the build log says `allowed crawlers in robots.txt except /api/`. A preview (`VERCEL_ENV=preview`) disallows the whole site without any setting. A project that is not the public site but builds as production, such as a staging project or hoodies' `solana-playground` project, sets `DISALLOW_ROBOTS=true` (a build-time variable, not `REACT_APP_*`; only the exact value `true` counts) and gets the same disallow-all file; the build log then says `disallowed every crawler in robots.txt`. The variable is read at build time, so setting it takes a redeploy. Never set it on the Solana Foundation project that serves `playground.solana.com`: that domain would drop out of crawling.
 
 `vercel.json` also sends `X-Robots-Tag: noindex, nofollow` on every host but `playground.solana.com`, whatever the variable says, since `vercel.json` cannot read the environment. It covers a staging deployment before its project sets the variable, and every page a crawler fetches without reading `robots.txt`. Where `robots.txt` disallows the whole site, a crawler that obeys it never fetches a page and so never reads the header: `Disallow` stops crawling, not listing, and a URL linked from elsewhere can still appear in search results without a snippet.
 

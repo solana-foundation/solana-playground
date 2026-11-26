@@ -1,3 +1,10 @@
+import {
+  FilePlus,
+  FolderPlus,
+  LucideIcon,
+  Minimize2,
+  Undo2,
+} from "lucide-react";
 import { FC } from "react";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
@@ -5,7 +12,6 @@ import { cn } from "@/shared/lib/utils";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
 
-import Img from "../../../../components/Img";
 import { PgExplorer, PgRouter } from "../../../../utils";
 import { CreateItem } from "./Modals";
 import { useCreateItem } from "./useCreateItem";
@@ -14,19 +20,17 @@ const ExplorerButtons = () => (
   <div
     className={cn(
       "flex justify-end px-2 py-1 [&_button]:my-2",
-      // The icons are dark glyphs: half-inverted at rest, fully on hover in
-      // the dark theme and plain in the light one
-      "[&_button_img]:[filter:invert(0.5)] [&_button:hover_img]:[filter:invert(0)]",
-      "dark:[&_button:hover_img]:[filter:invert(1)]"
+      // Muted at rest; the ghost button's hover brings the foreground colour
+      "[&_button]:text-muted-foreground"
     )}
   >
     <NewItemButton
-      imageName="new_file.png"
+      Icon={FilePlus}
       title="New file"
       failureAction="add a file"
     />
     <NewItemButton
-      imageName="new_folder.png"
+      Icon={FolderPlus}
       title="New folder"
       failureAction="add a folder"
     />
@@ -37,14 +41,14 @@ const ExplorerButtons = () => (
 );
 
 interface ButtonProps {
-  imageName: string;
+  Icon: LucideIcon;
   title: string;
   /** What did not happen when the click fails, completing "Could not …" */
   failureAction: string;
 }
 
 const NewItemButton: FC<React.PropsWithChildren<ButtonProps>> = ({
-  imageName,
+  Icon,
   title,
   failureAction,
 }) => {
@@ -59,11 +63,7 @@ const NewItemButton: FC<React.PropsWithChildren<ButtonProps>> = ({
       title={title}
       loadingText={<span className="sr-only">{title}</span>}
     >
-      <Img
-        src={getExplorerIconsPath(imageName)}
-        alt={title}
-        className="size-4"
-      />
+      <Icon className="size-4" />
     </AsyncButton>
   );
 };
@@ -75,11 +75,7 @@ const CollapseAllButton = () => (
     size="icon-sm"
     title="Collapse folders"
   >
-    <Img
-      src={getExplorerIconsPath("collapse.png")}
-      alt="Collapse folders"
-      className="size-4"
-    />
+    <Minimize2 className="size-4" />
   </Button>
 );
 
@@ -90,16 +86,12 @@ const GoBackButton = () => (
     variant="ghost"
     size="icon-sm"
     title="Go back to projects"
+    // The button's name; without it `title` would rename the button
+    aria-label="Go back to your project"
     loadingText={<span className="sr-only">Go back to your project</span>}
   >
-    <Img
-      src={getExplorerIconsPath("back.png")}
-      alt="Go back to your project"
-      className="size-4"
-    />
+    <Undo2 className="size-4" />
   </AsyncButton>
 );
-
-const getExplorerIconsPath = (name: string) => "/icons/explorer/" + name;
 
 export default ExplorerButtons;

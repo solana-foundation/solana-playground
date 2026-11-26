@@ -39,8 +39,8 @@ The PR body is [`.github/pull_request_template.md`](../../../.github/pull_reques
 author. The skill works from that body and never from a structure of its own:
 
 - The checklist is the template's `## Checklist`, item for item; the table in "5. Walk the checklist" says how
-  to mark it. Where the template's comment says to delete an item that does not apply, strike it instead: a
-  struck item shows the reviewer it was considered, a deleted one does not.
+  to mark it. An item that does not apply is struck, as the template's comment says, never deleted: a struck
+  item shows the reviewer it was considered, a deleted one does not.
 - The filled sections are the author's statement of the PR's scope. Judge each item against them: what
   `## TLDR` and `## Blast radius` say the PR changes, what `## Not in this PR` says it leaves out, and what
   `## Evidence` already names.
@@ -211,6 +211,9 @@ nothing. For each item the skill ticks, it adds one line under `## Evidence` nam
 it ran at. Every pass re-verifies those ticks against `headRefOid`; one whose line names an older SHA is open
 again. A tick the author set stands unless its own evidence line names an older SHA. The `check` script item
 needs a local run, recorded the same way.
+
+The Greptile item takes step 4's result as its evidence: tick it when the score for `headRefOid` is 5/5 and no
+review thread is unresolved. On a PR that step 4 skips, strike it.
 
 ## 6. Apply the body
 

@@ -1,10 +1,12 @@
 import { createFramework } from "../create";
+import icon from "./icon.svg";
 
 export const anchor = createFramework({
   name: "Anchor",
   description:
     "Anchor is a framework providing several convenient developer tools for writing Solana programs.",
   language: "Rust",
+  icon,
   docs: {
     url: "https://www.anchor-lang.com/docs/quickstart/solpg",
   },
