@@ -87,7 +87,7 @@ has never been run end to end as one pass ([Known gaps](#known-gaps)).
 4. **Build server.** Production sets `REACT_APP_SERVER_URL=/api/build-server`,
    `PG_BUILD_SERVER_URL` and `PG_BUILD_SERVER_API_KEY`, the build server's
    `PG_API_KEYS` holds that key, and its `PG_CLIENT_URLS` includes the
-   production origin ([Build server](#build-server)).
+   production origin ([Build server](../../docs/build-server.md#values)).
 5. **Dry run on staging**, from the branch being released, with
    `client-v2/.env` naming the staging project:
 
@@ -151,9 +151,8 @@ The Production Branch row was confirmed on 2026-10-19.
 `api/*.mjs` handler answers in one round trip and keeps the platform default:
 
 - `api/agent.mjs` streams a model's answer.
-- `api/build-server.mjs` waits for a build. The build server bounds each
-  `/build` request to 280 s, queue wait included (`REQUEST_TIME_LIMIT` in
-  `server/src/routes/build.rs`), sized to fit inside the function's 300:
+- `api/build-server.mjs` waits for a build, bounded on the server's side to
+  280 s ([Build server](../../docs/build-server.md#how-production-reaches-it)):
   change the two together.
 
 **Why 300.** A value in `vercel.json` replaces the platform default, up or
@@ -225,30 +224,10 @@ Connect the build server as [Build server](#build-server) describes.
 
 ## Build server
 
-Production does not send the browser to the build server. It sets
-`REACT_APP_SERVER_URL=/api/build-server`, its own route (`api/build-server.mjs`),
-which forwards each build to `PG_BUILD_SERVER_URL`:
-
-- **Only a signed-in GitHub user builds.** The route checks the Better Auth
-  session and `isAllowedOrigin`, as `/api/agent` does. Signed out, it answers
-  `401` and the Build stage asks the user to sign in. A deployment without
-  sign-in configured refuses every build.
-- **Every build is on record.** A `build_audit` row is written before a build
-  reaches the build server, so the table needs `yarn db-migrate`. A build
-  whose row cannot be written is refused. Each user has one build running and
-  a capped number an hour; past either, the route answers `429`.
-- **The build server takes only this route.** The route sends
-  `PG_BUILD_SERVER_API_KEY` as `x-api-key`. Set it to this deployment's entry
-  of the build server's `PG_API_KEYS`, a comma-separated list with one key per
-  client. With keys set, the server answers `401` to a request without one.
-  Set the key on Vercel before the server gets it: a key the server holds and
-  Vercel does not send refuses every build.
-- **`PG_BUILD_SERVER_URL` unset** refuses every build.
-
-The build server's `PG_CLIENT_URLS` (its CORS list) matters only to a browser
-that calls the server directly, as a user who picks it in Settings does. Keep
-the production origin in it. The production runbook lists each value and who
-sets the server's side.
+Production sends builds through its own `/api/build-server` route to the build
+server, App Engine service `playground-server`. What the route checks, the
+values that connect the two and the server's own setup are in
+[Build server](../../docs/build-server.md).
 
 ## Deploy
 
