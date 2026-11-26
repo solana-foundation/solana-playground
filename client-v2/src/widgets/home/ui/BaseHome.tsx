@@ -79,7 +79,10 @@ export interface BaseHomeProps {
   /** The last tutorial that failed to open, or `undefined` */
   tutorialError: TutorialFailure | undefined;
   onAllTutorials: () => void;
-  onAsk: () => void;
+  /** The question typed in the ask box */
+  onAsk: (text: string) => void;
+  /** What a send needs while no model can answer, said beside Send (`HomeComposer`) */
+  sendHint?: string;
 }
 
 const SHOWN_TUTORIALS = 4;
@@ -246,6 +249,7 @@ const BaseHome = ({
   tutorialError,
   onAllTutorials,
   onAsk,
+  sendHint,
 }: BaseHomeProps) => {
   const tutorialCount = tutorials.length;
 
@@ -268,7 +272,7 @@ const BaseHome = ({
           onOpen={start.onOpen}
         />
       )}
-      <HomeComposer onAsk={onAsk} />
+      <HomeComposer onAsk={onAsk} sendHint={sendHint} />
 
       <div className="grid grid-cols-3 gap-3">
         <ActionCard orientation="vertical">

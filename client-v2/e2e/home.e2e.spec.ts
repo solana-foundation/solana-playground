@@ -8,6 +8,8 @@ import {
   projectMenu,
   projectRow,
   startProject,
+  stubAiStatus,
+  stubSignedOut,
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
@@ -22,7 +24,7 @@ test.describe("on a desktop window", () => {
 
     const region = homeRegion(page);
     await expect(
-      region.getByRole("button", { name: "Ask the assistant" })
+      region.getByRole("textbox", { name: "Ask the assistant" })
     ).toBeVisible();
     await expect(
       region.getByRole("button", { name: /^New project/ })
@@ -107,14 +109,43 @@ test.describe("on a desktop window", () => {
   });
 
   test("client-v2-layout: The composer on Home", async ({ page }) => {
+    await stubAiStatus(page, "own");
     await page.goto("/");
     await expect(home(page)).toBeVisible();
 
-    await homeRegion(page)
-      .getByRole("button", { name: "Ask the assistant" })
-      .click();
+    const region = homeRegion(page);
+    await region
+      .getByRole("textbox", { name: "Ask the assistant" })
+      .fill("What is a PDA?");
+    await region.getByRole("button", { name: "Send" }).click();
 
+    // No hosted model, so the question waits in the panel's composer under
+    // the off row instead of being sent
     await expect(page.getByRole("dialog", { name: "Assistant" })).toBeVisible();
+    await expect(
+      page.getByRole("textbox", { name: "Message the assistant" })
+    ).toHaveValue("What is a PDA?");
+  });
+
+  test("client-v2-layout: Home says what a send needs", async ({ page }) => {
+    // A deployment with a hosted model, to a signed-out user
+    await stubAiStatus(page, "m");
+    await stubSignedOut(page);
+    await page.goto("/");
+    await expect(home(page)).toBeVisible();
+
+    const region = homeRegion(page);
+    await expect(
+      region.getByText("Sign in or add a key to send")
+    ).toBeVisible();
+    await expect(
+      region.getByRole("textbox", { name: "Ask the assistant" })
+    ).toBeEditable();
+
+    // A deployment with no hosted model: the newer route answers first
+    await stubAiStatus(page, "own");
+    await page.reload();
+    await expect(region.getByText("Add a key to send")).toBeVisible();
   });
 
   test("client-v2-layout: Opening a tile", async ({ page }) => {
@@ -242,7 +273,7 @@ test.describe("on a phone", () => {
     ).toBeVisible();
     await expect(region.getByRole("button", { name: "Browse" })).toBeVisible();
     await expect(
-      region.getByRole("button", { name: "Ask the assistant" })
+      region.getByRole("textbox", { name: "Ask the assistant" })
     ).toBeVisible();
 
     await region.getByRole("button", { name: /New Anchor project/ }).click();

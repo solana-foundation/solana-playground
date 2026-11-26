@@ -45,7 +45,7 @@ it("asks the question and offers the assistant", () => {
   expect(
     home.getByRole("heading", { level: 1, name: "Where should we begin?" })
   ).toBeTruthy();
-  expect(home.getByRole("button", { name: "Ask the assistant" })).toBeTruthy();
+  expect(home.getByRole("textbox", { name: "Ask the assistant" })).toBeTruthy();
 });
 
 it("shows the three tiles with their counts", () => {
@@ -159,11 +159,50 @@ it("opens a tutorial from its card, where the Open button is hidden below md", (
   expect(p.onTutorial).toHaveBeenCalledWith("Hello Anchor");
 });
 
-it("opens the assistant from the composer", () => {
+it("hands the typed question to the assistant on Send, and clears the box", () => {
   const p = props(undefined);
   const home = draw(p);
-  fireEvent.click(home.getByRole("button", { name: "Ask the assistant" }));
-  expect(p.onAsk).toHaveBeenCalledTimes(1);
+  fireEvent.change(home.getByRole("textbox", { name: "Ask the assistant" }), {
+    target: { value: "What is a PDA?" },
+  });
+  fireEvent.click(home.getByRole("button", { name: "Send" }));
+  expect(p.onAsk).toHaveBeenCalledWith("What is a PDA?");
+  expect(
+    (
+      home.getByRole("textbox", {
+        name: "Ask the assistant",
+      }) as HTMLTextAreaElement
+    ).value
+  ).toBe("");
+});
+
+it("sends nothing from an empty box", () => {
+  const p = props(undefined);
+  const home = draw(p);
+  fireEvent.click(home.getByRole("button", { name: "Send" }));
+  expect(p.onAsk).not.toHaveBeenCalled();
+});
+
+it("says beside Send what a send needs while no model can answer", () => {
+  const p: BaseHomeProps = {
+    tutorials: props(undefined).tutorials,
+    programCount: 34,
+    onTile: vi.fn(),
+    onTutorial: vi.fn().mockResolvedValue(undefined),
+    tutorialError: undefined,
+    onAllTutorials: vi.fn(),
+    onAsk: vi.fn(),
+    start: undefined,
+    sendHint: "Sign in or add a key to send",
+  };
+  const home = draw(p);
+  expect(home.getByText("Sign in or add a key to send")).toBeTruthy();
+  // The box still takes the question: the panel asks for the sign-in
+  fireEvent.change(home.getByRole("textbox", { name: "Ask the assistant" }), {
+    target: { value: "What is a PDA?" },
+  });
+  fireEvent.click(home.getByRole("button", { name: "Send" }));
+  expect(p.onAsk).toHaveBeenCalledWith("What is a PDA?");
 });
 
 it("lays out the prototype's 736 px column, 20 px apart, with its send", () => {
@@ -176,13 +215,6 @@ it("lays out the prototype's 736 px column, 20 px apart, with its send", () => {
   expect(home.querySelector('[data-slot="logo-play"]')).not.toBeNull();
 });
 
-it("lets its send open the assistant too", () => {
-  const p = props(undefined);
-  const home = draw(p);
-  fireEvent.click(home.getByRole("button", { name: "Send" }));
-  expect(p.onAsk).toHaveBeenCalledTimes(1);
-});
-
 it("offers the example on a first visit, ahead of the composer", async () => {
   const onRun = vi.fn().mockResolvedValue(undefined);
   const home = draw(props({ kind: "example", onRun }));
@@ -193,7 +225,7 @@ it("offers the example on a first visit, ahead of the composer", async () => {
     )
   ).toBeTruthy();
   const run = example.getByRole("button", { name: "Run it" });
-  const ask = home.getByRole("button", { name: "Ask the assistant" });
+  const ask = home.getByRole("textbox", { name: "Ask the assistant" });
   // Tab reaches Run it before the composer (spec `client-v2-first-run`)
   expect(
     run.compareDocumentPosition(ask) & Node.DOCUMENT_POSITION_FOLLOWING

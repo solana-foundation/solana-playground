@@ -26,16 +26,18 @@ import { PgCommon, PgExplorer, PgTutorial, PgView } from "@/utils";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
 import { AppNav, ProjectList, readProjectFiles } from "@/widgets/app-nav";
 import {
+  AI_OFF_SEND_HINT,
   Assistant,
   displayModelName,
   modelShown,
   probeDefaultBackend,
   retryDefaultBackend,
+  useAiOffReason,
   useDefaultBackend,
   useTurn,
 } from "@/widgets/assistant";
 import { catalogPage, catalogSlot, useCatalogPage } from "@/widgets/catalog";
-import { homeSlot, useStartView } from "@/widgets/home";
+import { homeSlotWith, useStartView } from "@/widgets/home";
 import { CONSOLE_KEY, keyLabel, LayoutShell } from "@/widgets/layout-shell";
 import { AnalyticsSwitch } from "@/widgets/observability";
 import { ModalHost, ToastHost } from "@/widgets/overlays";
@@ -92,7 +94,7 @@ const retryHostedModel = async () =>
  * stage bar (`BaseStageBar`) and then the `StageBar` stage tabs across the
  * last two (a tutorial's frame draws neither the tabs nor the files column).
  * The sync banner sits above all four, full width. On `/` with no project,
- * `useStartView` hands the shell `homeSlot`, and Home stands where the
+ * `useStartView` hands the shell `homeSlotWith`'s slot, and Home stands where the
  * assistant and the work go.
  *
  * The feedback form and its state sit in `FeedbackHost`, above the frame, not
@@ -369,6 +371,8 @@ const FlowFrame = () => {
   );
 
   const page = useStartView();
+  // What Home's ask box says before a send, and whether a send runs at once
+  const aiOff = useAiOffReason();
   // The New project, Tutorials or Programs page shown, if any (`widgets/catalog`)
   const catalog = useCatalogPage();
   // Home, the page shown and the work, each on its own URL
@@ -532,12 +536,16 @@ const FlowFrame = () => {
               onRetryAi={retryHostedModel}
             />
           }
-          home={homeSlot(
-            page.view,
+          home={homeSlotWith(() => page.leaveHome("continue"))((p) =>
+            catalogPage.open(p, "home")
+          )({
+            view: page.view,
             viewport,
-            () => page.leaveHome("continue"),
-            (p) => catalogPage.open(p, "home")
-          )}
+            ask: {
+              hint: aiOff && AI_OFF_SEND_HINT[aiOff],
+              canSend: aiOff === undefined,
+            },
+          })}
           keepWork={page.workKept}
           cover={catalogSlot(catalog)}
           stageBarActions={<ShareButton />}

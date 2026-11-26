@@ -151,14 +151,14 @@ test("a command allowed on Home fails within seconds, with no terminal mounted",
   });
   await page.goto("/");
   await expect(home(page)).toBeVisible(LONG);
-  await homeRegion(page)
-    .getByRole("button", { name: "Ask the assistant" })
-    .click();
+  // Home's ask box sends the question with the panel it opens
+  const region = homeRegion(page);
+  await region
+    .getByRole("textbox", { name: "Ask the assistant" })
+    .fill("Build it");
+  await region.getByRole("button", { name: "Send", exact: true }).click();
   const sheet = page.getByRole("dialog", { name: "Assistant" });
   await expect(sheet).toBeVisible();
-
-  await input(page).fill("Build it");
-  await page.getByRole("button", { name: "Send", exact: true }).click();
   await sheet.getByRole("button", { name: "Allow" }).click({ timeout: 30_000 });
 
   await expect(

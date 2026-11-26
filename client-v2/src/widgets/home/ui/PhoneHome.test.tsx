@@ -275,10 +275,13 @@ it("opens the Tutorials page from Browse, and no gallery", async () => {
   await home.findByText("3 tutorials, 34 programs");
 });
 
-it("opens the assistant from the composer and reports it", async () => {
+it("hands the typed question to the assistant and reports it", async () => {
   const { home, onAsk } = draw();
-  fireEvent.click(home.getByRole("button", { name: "Ask the assistant" }));
-  expect(onAsk).toHaveBeenCalledTimes(1);
+  fireEvent.change(home.getByRole("textbox", { name: "Ask the assistant" }), {
+    target: { value: "What is a PDA?" },
+  });
+  fireEvent.click(home.getByRole("button", { name: "Send" }));
+  expect(onAsk).toHaveBeenCalledWith("What is a PDA?");
   expect(events("home_composer_opened")).toEqual([{}]);
   await home.findByText("3 tutorials, 34 programs");
 });

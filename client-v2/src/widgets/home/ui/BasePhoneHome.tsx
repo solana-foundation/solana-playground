@@ -41,7 +41,10 @@ export interface BasePhoneHomeProps {
   /** A rejection is the connected component's to report */
   onQuickstart: (quickstart: PhoneQuickstart) => Promise<void>;
   onBrowse: () => void;
-  onAsk: () => void;
+  /** The question typed in the ask box */
+  onAsk: (text: string) => void;
+  /** What a send needs while no model can answer, said beside Send (`HomeComposer`) */
+  sendHint?: string;
   /** Set once the account check has spent its automatic re-reads */
   onRetrySession?: () => Promise<void>;
 }
@@ -67,6 +70,7 @@ const BasePhoneHome = ({
   onQuickstart,
   onBrowse,
   onAsk,
+  sendHint,
   onRetrySession,
 }: BasePhoneHomeProps) => (
   <section
@@ -124,6 +128,7 @@ const BasePhoneHome = ({
 
     <HomeComposer
       onAsk={onAsk}
+      sendHint={sendHint}
       banner={
         <>
           <span className="flex-1">

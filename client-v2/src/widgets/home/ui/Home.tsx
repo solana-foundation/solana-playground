@@ -19,7 +19,10 @@ import type { HomeStart, TutorialFailure } from "./BaseHome";
 import BaseHome from "./BaseHome";
 
 export interface HomeProps {
-  onAsk: () => void;
+  /** The question typed in the ask box, for the assistant panel */
+  onAsk: (text: string) => void;
+  /** What a send needs while no model can answer, said beside Send (`HomeComposer`) */
+  sendHint?: string;
   /** Go back to the project open under Home */
   onContinue: () => void;
   /** Open the New project, Tutorials or Programs page, in Home's place */
@@ -97,7 +100,7 @@ const useStart = (onContinue: () => void): HomeStart | undefined => {
   };
 };
 
-const Home = ({ onAsk, onContinue, onOpenPage }: HomeProps) => {
+const Home = ({ onAsk, sendHint, onContinue, onOpenPage }: HomeProps) => {
   const programCount = useProgramCount();
   const start = useStart(onContinue);
   const [tutorialError, setTutorialError] = useState<
@@ -134,10 +137,11 @@ const Home = ({ onAsk, onContinue, onOpenPage }: HomeProps) => {
         homeTelemetry.track("home_tutorial_opened", {});
       }}
       onAllTutorials={() => onOpenPage("tutorials")}
-      onAsk={() => {
+      onAsk={(text) => {
         homeTelemetry.track("home_composer_opened", {});
-        onAsk();
+        onAsk(text);
       }}
+      sendHint={sendHint}
     />
   );
 };

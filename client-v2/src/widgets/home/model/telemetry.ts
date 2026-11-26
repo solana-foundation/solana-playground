@@ -43,7 +43,7 @@ type HomeEvents = {
   home_recent_opened: { kind: HomeRecentKind };
   /** A user pressed "Try again" after the account check kept failing */
   home_session_retried: NoParams;
-  /** A user opened the assistant from Home's composer */
+  /** A user sent a question from Home's ask box, which opens the assistant with it */
   home_composer_opened: NoParams;
 };
 

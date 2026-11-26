@@ -24,6 +24,8 @@ export type {
 export { BaseAssistantComposer } from "./ui/BaseAssistantComposer";
 export type { ComposerContextChip } from "./ui/BaseAssistantComposer";
 export { AssistantComposer } from "./ui/AssistantComposer";
+export { AI_OFF_SEND_HINT } from "./ui/BaseAiOffRow";
+export { useAiOffReason } from "./model/use-ai-off-reason";
 export { BaseAssistantHead } from "./ui/BaseAssistantHead";
 export type { BaseAssistantHeadProps } from "./ui/BaseAssistantHead";
 export { BaseThread } from "./ui/BaseThread";
