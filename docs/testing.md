@@ -124,7 +124,7 @@ Expect: exit code 0; `ls wasm/*/pkg/*_bg.wasm` lists a compiled module for each 
 
 ### B-2. client: CI parity
 
-Not runnable until `client/` is removed (solana-foundation/solana-playground#126): `client/package.json` names
+Not runnable until `client/` is removed (HOO-2686): `client/package.json` names
 `../wasm/anchor-cli/pkg`, which this fork deleted, so `yarn --cwd client setup` fails at the install. A failure here is
 not a regression.
 
@@ -279,7 +279,7 @@ and `POST /new` from Share, which the server answers with 404. Nothing calls the
 
 ### C-1. client starts
 
-Not runnable until `client/` is removed (solana-foundation/solana-playground#126), for the reason B-2 gives. A
+Not runnable until `client/` is removed (HOO-2686), for the reason B-2 gives. A
 failure here is not a regression; C-6 runs on a C-4 session instead.
 
 Precondition: B-1 done; nothing listens on port 8080.
