@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { isNetworkFailure } from "@/shared/lib/ai";
 import { createLogger } from "@/shared/lib/logger";
 
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
@@ -73,10 +74,28 @@ export const resetDefaultBackendProbe = () => {
   PgAssistant.setDefaultProbe("unasked");
 };
 
-const failed = (reason: ProbeFailure, error: unknown): Asked => {
-  log.error(error, { report: true, context: { reason } });
+/** A failed ask, counted: the default reads as unreachable and the next caller asks again */
+const unreachable = (reason: ProbeFailure): Asked => {
   assistantTelemetry.track("assistant_default_probe_failed", { reason });
   return { backend: { state: "unreachable" }, failed: true };
+};
+
+/**
+ * A failed ask, reported. A dropped connection, on the request or while the
+ * body streams in, is most likely the user's: it is counted and warned of,
+ * but nothing for error tracking (SOLANA-PLAYGROUND-F). Our own timeout is
+ * still reported, as `TimeoutError` or, where fetch drops the signal's
+ * reason, `AbortError`: nothing else aborts this request.
+ */
+const failed = (reason: ProbeFailure, error: unknown): Asked => {
+  if (isNetworkFailure(error)) {
+    log.warn(`could not ask for the AI status: ${String(error)}`, {
+      context: { reason },
+    });
+    return unreachable(reason);
+  }
+  log.error(error, { report: true, context: { reason } });
+  return unreachable(reason);
 };
 
 const answered = (backend: DefaultBackend): Asked => ({

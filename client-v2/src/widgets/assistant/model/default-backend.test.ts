@@ -137,6 +137,82 @@ describe("probeDefaultBackend", () => {
     expectFailure("network");
   });
 
+  it.each([
+    // Chrome's and Safari's dropped connection (Sentry SOLANA-PLAYGROUND-F)
+    new TypeError("Failed to fetch"),
+    new TypeError("Load failed"),
+  ])(
+    "is unreachable, warned of and counted, not reported, when the request gets %s",
+    async (error) => {
+      vi.spyOn(globalThis, "fetch").mockRejectedValue(error);
+      expect(await probeDefaultBackend()).toEqual({ state: "unreachable" });
+      expect(logs.entries.map((e) => [e.ns, e.level, e.report])).toEqual([
+        ["assistant:connect", "warn", false],
+      ]);
+      expect(events.events.map((e) => [e.name, e.params])).toEqual([
+        ["assistant_default_probe_failed", { reason: "network" }],
+      ]);
+    }
+  );
+
+  it.each([
+    // The probe's own timeout, and the same where fetch drops its reason
+    new DOMException("signal timed out", "TimeoutError"),
+    new DOMException("aborted", "AbortError"),
+    // A bug that is also a TypeError
+    new TypeError("x.fetch is not a function"),
+  ])("is unreachable and reported when the request gets %s", async (error) => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(error);
+    expect(await probeDefaultBackend()).toEqual({ state: "unreachable" });
+    expectFailure("network");
+  });
+
+  it("is warned of and counted, not reported, when the connection drops mid-body", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new TypeError("Load failed");
+      },
+    } as unknown as Response);
+    expect(await probeDefaultBackend()).toEqual({ state: "unreachable" });
+    expect(logs.entries.map((e) => [e.ns, e.level, e.report])).toEqual([
+      ["assistant:connect", "warn", false],
+    ]);
+    expect(events.events.map((e) => [e.name, e.params])).toEqual([
+      ["assistant_default_probe_failed", { reason: "body" }],
+    ]);
+  });
+
+  it("is unreachable and reported on a body that is not JSON", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new SyntaxError("Unexpected token < in JSON");
+      },
+    } as unknown as Response);
+    expect(await probeDefaultBackend()).toEqual({ state: "unreachable" });
+    expectFailure("body");
+  });
+
+  it("asks again after a dropped connection", async () => {
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new TypeError("Load failed"));
+    spy.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => served("m"),
+    } as Response);
+    await probeDefaultBackend();
+    expect(await probeDefaultBackend()).toEqual({
+      state: "present",
+      model: "m",
+    });
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
   it("is unreachable and reported when the route answers a 5xx", async () => {
     answer({}, 503);
     expect(await probeDefaultBackend()).toEqual({ state: "unreachable" });

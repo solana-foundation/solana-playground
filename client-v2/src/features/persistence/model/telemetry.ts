@@ -10,6 +10,22 @@ export type HunkHowParam = "take" | "dismiss" | "edit";
 /** Why an Apply in the resolve view settled nothing */
 export type ApplyFailureParam = "refused" | "error";
 
+/**
+ * The kind of sync request that lost its connection: the first word of the
+ * operation diagnostics records, or `other` for one not listed here
+ */
+export const DROPPED_OPS = [
+  "pull",
+  "push",
+  "fetch",
+  "list",
+  "merge",
+  "delete",
+  "adopt",
+  "reconcile",
+] as const;
+export type DroppedOpParam = typeof DROPPED_OPS[number] | "other";
+
 /** Who found a project over a limit: the client's check, or a 413 */
 export type LimitByParam = "client" | "server";
 
@@ -84,6 +100,13 @@ type PersistenceEvents = {
     kind: "project" | "tutorial";
     projects: number;
   };
+  /**
+   * A sync request lost its connection (`isNetworkFailure`), which
+   * diagnostics warns of instead of reporting. `op` is the first word of the
+   * failed operation (`DROPPED_OPS`, else `other`), never an id, so a fault
+   * that drops every user's requests still shows up as a rise in this count.
+   */
+  sync_request_dropped: { op: DroppedOpParam };
 };
 
 export const persistenceTelemetry = createTracker<PersistenceEvents>();
