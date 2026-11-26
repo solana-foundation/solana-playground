@@ -42,7 +42,7 @@ const TEST = [
 ] as const;
 
 /** The placeholder test as `anchor test` finds it */
-const PLACEHOLDER = `import * as anchor from "@coral-xyz/anchor";
+const PLACEHOLDER = `import * as anchor from "@anchor-lang/core";
 import { expect } from "chai";
 import type { HelloAnchor } from "../target/types/hello_anchor";
 
@@ -77,7 +77,10 @@ describe("convertFromPlayground", () => {
   beforeEach(() => {
     // Set at boot by `globals/`, which this test does not load
     PgLanguage.all = [];
-    vi.spyOn(PgCommon, "fetchJSON").mockResolvedValue({});
+    // The build server's crate versions, which the export pins Anchor to
+    vi.spyOn(PgCommon, "fetchJSON").mockImplementation(async (path) =>
+      path === "/crates/versions.json" ? { "anchor-lang": "1.1.2" } : {}
+    );
     // The crates' features and the build server's lock, which the exports fetch
     vi.spyOn(PgCommon, "fetchText").mockImplementation(async (path) =>
       path.endsWith("features.json") ? "{}" : "# server lock\n"
@@ -251,5 +254,144 @@ await pg.program.methods.hello(name).rpc();
 
     const tsconfig = JSON.parse(files.get("tsconfig.json") ?? "{}");
     expect(tsconfig.compilerOptions.types).toContain("node");
+  });
+
+  // HOO-2964: the Playground runs the 0.29 client, the build server Anchor 1.1.2
+  describe("on the Anchor version the build server runs", () => {
+    beforeEach(() => {
+      vi.spyOn(PgLanguage, "getIsPathJsLike").mockImplementation((path) =>
+        /\.(js|ts)$/.test(path)
+      );
+      vi.spyOn(PgCommon, "fetchJSON").mockImplementation(async (path) =>
+        path === "/crates/versions.json"
+          ? { "anchor-lang": "1.1.2" }
+          : { "@coral-xyz/anchor": "0.29.0", "@solana/web3.js": "1.98.4" }
+      );
+    });
+
+    it("installs the TypeScript client of the program's Anchor version", async () => {
+      const files = await exported(LIB, CLIENT, TEST);
+
+      const { dependencies } = JSON.parse(files.get("package.json") ?? "{}");
+      expect(dependencies["@anchor-lang/core"]).toBe("1.1.2");
+      expect(dependencies).not.toHaveProperty("@coral-xyz/anchor");
+    });
+
+    it("installs that client for a client that imports the 0.29 one itself", async () => {
+      const files = await exported(LIB, [
+        "client/client.ts",
+        'import { BN } from "@coral-xyz/anchor";\nconsole.log(new BN(1));\n',
+      ]);
+
+      const { dependencies } = JSON.parse(files.get("package.json") ?? "{}");
+      expect(dependencies["@anchor-lang/core"]).toBe("1.1.2");
+      expect(dependencies).not.toHaveProperty("@coral-xyz/anchor");
+      expect(files.get("client/client.ts")).toContain(
+        'import { BN } from "@anchor-lang/core";'
+      );
+    });
+
+    it("imports that client in the tests, the client and the migration", async () => {
+      const files = await exported(LIB, CLIENT, TEST);
+
+      for (const path of [
+        "tests/anchor.ts",
+        "client/client.ts",
+        "migrations/deploy.ts",
+      ]) {
+        expect(files.get(path), path).toContain('"@anchor-lang/core"');
+        expect(files.get(path), path).not.toContain("@coral-xyz/anchor");
+      }
+    });
+
+    it("passes the accounts the 1.x client resolves itself through accountsPartial", async () => {
+      const files = await exported(LIB, [
+        "tests/anchor.test.ts",
+        'describe("t", () => {\n  it("runs", async () => {\n    await pg.program.methods.hello().accounts({ systemProgram: web3.SystemProgram.programId }).rpc();\n  });\n});\n',
+      ]);
+
+      expect(files.get("tests/anchor.ts")).toContain(
+        ".hello().accountsPartial({ systemProgram"
+      );
+    });
+
+    it.each([
+      ['await pg.program.methods["hello"]().accounts({}).rpc();'],
+      ["const ix = pg.program.methods.hello();\nawait ix.accounts({}).rpc();"],
+      [
+        "let builder = pg.program.methods\n  .hello();\n\nbuilder = builder.accounts({});",
+      ],
+    ])("passes accountsPartial for the builder in %j", async (code) => {
+      const files = await exported(LIB, ["client/client.ts", code + "\n"]);
+
+      expect(files.get("client/client.ts")).toContain(".accountsPartial({})");
+      expect(files.get("client/client.ts")).not.toContain(".accounts(");
+    });
+
+    it("keeps an accounts call outside an Anchor methods chain", async () => {
+      const files = await exported(LIB, [
+        "client/client.ts",
+        "await pg.program.methods.hello().accounts({}).rpc()\n\nconst helper = { accounts() { return [] } }\nconsole.log(helper.accounts())\n",
+      ]);
+
+      const client = files.get("client/client.ts");
+      expect(client).toContain(".hello().accountsPartial({})");
+      expect(client).toContain("helper.accounts()");
+    });
+
+    it("pins the Anchor CLI in Anchor.toml, with the settings Anchor 1.x reads", async () => {
+      const files = await exported(LIB, CLIENT);
+
+      const toml = files.get("Anchor.toml") ?? "";
+      expect(toml).toMatch(
+        /^\[toolchain\]\nanchor_version = "1\.1\.2"\npackage_manager = "yarn"$/m
+      );
+      expect(toml).toMatch(/^\[features\]\nresolution = true$/m);
+      expect(toml).not.toContain("seeds");
+    });
+
+    it("refuses to export when the build server's Anchor version is unknown", async () => {
+      vi.spyOn(PgCommon, "fetchJSON").mockResolvedValue({});
+
+      await expect(exported(LIB, CLIENT)).rejects.toThrow(
+        "anchor-lang version is unknown"
+      );
+    });
+
+    it.each([
+      ['import * as anchor from "@coral-xyz/anchor";'],
+      ["const anchor = require('@coral-xyz/anchor');"],
+      ['const anchor = require("@coral-xyz/anchor"); // the client'],
+      ['const anchor = require("@anchor-lang/core");'],
+    ])("keeps one anchor binding for a client that has %s", async (line) => {
+      const files = await exported(LIB, [
+        "client/client.ts",
+        `${line}\nconsole.log(anchor.web3);\n`,
+      ]);
+
+      const client = files.get("client/client.ts") ?? "";
+      expect(
+        client.match(/\banchor = require\(|import \* as anchor\b/g)
+      ).toHaveLength(1);
+      expect(client).toContain("@anchor-lang/core");
+      expect(client).not.toContain("@coral-xyz/anchor");
+      // The program is set up after the binding it reads
+      expect(
+        client.search(/import \* as anchor\b|anchor = require/)
+      ).toBeLessThan(client.indexOf("anchor.setProvider"));
+    });
+
+    it("moves a client off the @project-serum/anchor client too", async () => {
+      const files = await exported(LIB, [
+        "client/client.ts",
+        'import * as anchor from "@project-serum/anchor";\nconsole.log(anchor.web3);\n',
+      ]);
+
+      expect(files.get("client/client.ts")).toContain(
+        'import * as anchor from "@anchor-lang/core";'
+      );
+      expect(files.get("client/client.ts")).not.toContain("@project-serum");
+      expect(files.get("package.json")).not.toContain("@project-serum");
+    });
   });
 });

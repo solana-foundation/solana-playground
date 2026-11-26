@@ -35,6 +35,8 @@ const renderChip = (props: Partial<BaseWalletChipProps>) =>
         onConnectOpen={props.onConnectOpen ?? vi.fn()}
         onConnect={props.onConnect}
         onDisconnect={props.onDisconnect}
+        onManage={props.onManage}
+        account={props.account}
       />
     </TooltipProvider>
   );
@@ -249,6 +251,54 @@ describe("features/fund-wallet/ui/BaseWalletChip", () => {
         screen.getByRole("button", { name: "Disconnect Phantom" })
       );
       expect(onDisconnect).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe("the Playground wallet's accounts", () => {
+    it("offers Accounts beside Connect a wallet, and closes on the way out", () => {
+      const onManage = vi.fn();
+      renderChip({ onManage, onConnect: vi.fn() });
+      open();
+      const accounts = screen.getByRole("button", { name: "Accounts" });
+      expect(
+        screen.getByRole("button", { name: "Connect a wallet" })
+      ).toBeTruthy();
+      fireEvent.click(accounts);
+      expect(onManage).toHaveBeenCalledOnce();
+      // The chip itself, so the window opens above it
+      expect(onManage.mock.calls[0][0]?.hasAttribute("data-wallet-chip")).toBe(
+        true
+      );
+      expect(screen.queryByRole("button", { name: "Accounts" })).toBeNull();
+    });
+
+    it("offers no Accounts while a deploy holds the signer", () => {
+      // Mid-deploy the container passes neither onConnect nor onManage
+      renderChip({});
+      open();
+      expect(screen.queryByRole("button", { name: "Accounts" })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Connect a wallet" })
+      ).toBeNull();
+    });
+
+    it("leaves an extension's accounts to the extension", () => {
+      renderChip({
+        owner: { name: "Phantom", icon: "data:," },
+        onManage: vi.fn(),
+        account: "Wallet 2",
+        onConnect: vi.fn(),
+        onDisconnect: vi.fn(),
+      });
+      open();
+      expect(screen.queryByRole("button", { name: "Accounts" })).toBeNull();
+      expect(screen.queryByText("· Wallet 2")).toBeNull();
+    });
+
+    it("names the account that pays once there are several", () => {
+      renderChip({ onManage: vi.fn(), account: "Wallet 2" });
+      open();
+      expect(screen.getByText("· Wallet 2")).toBeTruthy();
     });
   });
 });

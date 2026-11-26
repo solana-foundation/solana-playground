@@ -9,6 +9,7 @@ import { requireFor } from "../../test-utils/require-for";
 import { PgCommon } from "../common";
 import { PgView } from "../view";
 import { PgWeb3 } from "../web3";
+import { AccountsHeldError } from "./accounts-held";
 import { type KeyFrame, KeyFrameUnavailable } from "./key-origin/client";
 import { handlerWith } from "./key-origin/frame/handler";
 import { CLI_KEY_ERROR, keyOriginSignerProvider } from "./key-origin/provider";
@@ -129,6 +130,54 @@ describe("utils/wallet/wallet", () => {
 
       await expect(PgWallet.import()).rejects.toThrow("Wallet unavailable");
       expect(click).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("while a deploy holds the current account", () => {
+    it("refuses every change of account, and allows them once released", async () => {
+      const update = vi.spyOn(PgWallet, "update").mockImplementation(() => {});
+      const click = vi.spyOn(HTMLInputElement.prototype, "click");
+      const release = PgWallet.holdSwitch();
+      try {
+        expect(PgWallet.isSwitchHeld).toBe(true);
+        expect(() => PgWallet.switch(0)).toThrow(AccountsHeldError);
+        expect(() => PgWallet.selectStandard("Phantom")).toThrow(
+          AccountsHeldError
+        );
+        expect(() => PgWallet.add()).toThrow("A deploy is running");
+        await expect(PgWallet.addNew()).rejects.toThrow("A deploy is running");
+        await expect(PgWallet.import()).rejects.toThrow("A deploy is running");
+        await expect(PgWallet.remove()).rejects.toThrow("A deploy is running");
+        expect(update).not.toHaveBeenCalled();
+        expect(click).not.toHaveBeenCalled();
+      } finally {
+        release();
+      }
+      expect(PgWallet.isSwitchHeld).toBe(false);
+    });
+
+    it("counts holds, and a second release of one hold frees nothing", () => {
+      const first = PgWallet.holdSwitch();
+      const second = PgWallet.holdSwitch();
+      first();
+      first();
+      expect(PgWallet.isSwitchHeld).toBe(true);
+      second();
+      expect(PgWallet.isSwitchHeld).toBe(false);
+    });
+
+    it("tells its listeners when the accounts become held and free, once each", () => {
+      const seen: (boolean | undefined)[] = [];
+      const { dispose } = PgWallet.onDidChangeSwitchHeld((isHeld) =>
+        seen.push(isHeld)
+      );
+      const first = PgWallet.holdSwitch();
+      const second = PgWallet.holdSwitch();
+      first();
+      second();
+      dispose();
+      PgWallet.holdSwitch()();
+      expect(seen).toStrictEqual([true, false]);
     });
   });
 

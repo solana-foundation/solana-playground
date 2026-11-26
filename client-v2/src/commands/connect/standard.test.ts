@@ -12,6 +12,8 @@ const wallets = vi.hoisted(() => ({
   }[],
 }));
 const update = vi.hoisted(() => vi.fn());
+/** A deploy holds the wallet's accounts */
+const held = vi.hoisted(() => ({ is: false }));
 
 vi.mock("../../utils", () => ({
   PgCommon: { sleep: vi.fn() },
@@ -23,9 +25,13 @@ vi.mock("../../utils", () => ({
       return wallets.list;
     },
     update,
+    get isSwitchHeld() {
+      return held.is;
+    },
   },
 }));
 
+import { AccountsHeldError } from "../../utils/wallet/accounts-held";
 import { PgDeployRun } from "../deploy/run";
 import {
   connectTo,
@@ -77,6 +83,25 @@ describe("commands/connect, a standard wallet from a button", () => {
 
     await setStandardCurrentWith(() => false)("Phantom");
 
+    expect(wallet.connect).toHaveBeenCalledOnce();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  // Greptile on the SF PR: an approval that lands after a deploy began must not
+  // change the wallet the deploy signs with
+  it("leaves the wallet connected but not current when it answers during a deploy", async () => {
+    const wallet = phantom(false);
+    wallets.list = [wallet];
+    wallet.connect.mockImplementation(async () => {
+      held.is = true;
+    });
+    try {
+      await expect(setStandardCurrent("Phantom")).rejects.toBeInstanceOf(
+        AccountsHeldError
+      );
+    } finally {
+      held.is = false;
+    }
     expect(wallet.connect).toHaveBeenCalledOnce();
     expect(update).not.toHaveBeenCalled();
   });

@@ -383,11 +383,15 @@ export const fetchJSDependencyMap = async (files: TupleFiles) => {
 /**
  * Get `package.json` dependencies from the given files.
  *
+ * @param extra dependencies the export adds or pins over the ones the files use, `{}` for none
  * @param files all files
  * @returns the dependency list
  */
-export const getJSDependencies = async (files: TupleFiles) => {
-  const dependencies = await fetchJSDependencyMap(files);
+export const getJSDependencies = async (
+  extra: Dependencies,
+  files: TupleFiles
+) => {
+  const dependencies = { ...(await fetchJSDependencyMap(files)), ...extra };
   const devDependencies: Dependencies = {
     "@types/bn.js": "^5.1.1",
     "@types/chai": "^4.3.5",
@@ -403,6 +407,16 @@ export const getJSDependencies = async (files: TupleFiles) => {
 
   return PgCommon.prettyJSON({ dependencies, devDependencies }).slice(2, -2);
 };
+
+/**
+ * Get the version of a crate the build server compiles with.
+ *
+ * @param crateName the crate, kebab case
+ * @returns its version, absent when the server does not ship it
+ */
+export const fetchCrateVersion = async (
+  crateName: string
+): Promise<string | undefined> => (await getVersions("crates"))[crateName];
 
 /**
  * Get a map of names to versions.
@@ -449,25 +463,38 @@ export const addImports = (content: string) => {
 };
 
 /**
- * The given code with the text of its comments and strings blanked: each
- * character but a line break becomes a space, and a string keeps its quotes.
- * The length and the line breaks stay, so a match found in the result sits at
- * the same place in the code. Comments and strings are read together, so
- * "http://" in a string is not taken for a comment.
+ * The given code with the text of its comments, strings and regular expression
+ * literals blanked: each character but a line break becomes a space, and a
+ * string keeps its quotes, a regular expression its slashes. The length and the
+ * line breaks stay, so a match found in the result sits at the same place in
+ * the code. Comments and strings are read together, so "http://" in a string is
+ * not taken for a comment.
  *
  * @param content JS/TS code
  * @returns the code with only its own tokens readable
  */
 const maskCommentsAndStrings = (content: string) =>
-  content.replace(
-    /("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`)|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
-    (match, string?: string) =>
-      string
-        ? string[0] +
-          string.slice(1, -1).replace(/[^\n]/g, " ") +
-          string[string.length - 1]
-        : match.replace(/[^\n]/g, " ")
-  );
+  content.replace(MASKED, (match, ...groups: Array<string | undefined>) => {
+    const [string, comment, before, regex] = groups;
+    if (string) return string[0] + blank(string.slice(1, -1)) + string[0];
+    if (comment) return blank(comment);
+    if (regex) return before + "/" + blank(regex.slice(1, -1)) + "/";
+    return match;
+  });
+
+/** Each character but a line break as a space */
+const blank = (text: string) => text.replace(/[^\n]/g, " ");
+
+/**
+ * A string (group 1), a comment (group 2), or a regular expression literal
+ * (group 4) with what lets it start (group 3). A `/` starts a regular
+ * expression only where a value is expected: after an operator, an opening
+ * bracket, a separator or a keyword such as `return`. After a name, a number or
+ * a closing bracket it divides.
+ */
+const MASKED =
+  // eslint-disable-next-line security/detect-unsafe-regex -- the alternatives inside each repeat start with different characters, so a match never backtracks between them
+  /("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`)|(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|((?:^|[(,=:[!&|?{};+\-*%>~^]|\b(?:return|typeof|case|in|of|delete|void|throw|yield|await|else|do|new))\s*)(\/(?![*/])(?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\n[])+\/)/g;
 
 /**
  * An import statement where a statement starts: at a line's start or after a
@@ -531,6 +558,42 @@ export const getImportedNames = (content: string) => {
 };
 
 /**
+ * Whether the module binds the name itself, by an import or by a top-level `const`, `let` or `var` declaration
+ * (such as `const anchor = require("@coral-xyz/anchor")`), so it does not read the Playground global of that name.
+ * A declaration counts only outside every block: one inside a function shadows the global in that function alone,
+ * and the rest of the module still needs the import.
+ *
+ * @param name the name, `\w` and `$` characters only
+ * @param content JS/TS code
+ * @returns whether the module binds it
+ */
+export const hasOwnBinding = (name: string, content: string) => {
+  if (getImportedNames(content).has(name)) return true;
+
+  const code = maskCommentsAndStrings(content);
+  // eslint-disable-next-line security/detect-non-literal-regexp -- `\w` and `$` characters only, `$` escaped
+  const declaration = new RegExp(
+    `(?:^|[;{}])\\s*(?:const|let|var)\\s+${name.replaceAll("$", "\\$")}\\b`,
+    "gm"
+  );
+  return [...code.matchAll(declaration)].some(
+    ({ index = 0 }) => blockDepth(code.slice(0, index + 1)) === 0
+  );
+};
+
+/**
+ * How many blocks are open at the end of the given code.
+ *
+ * @param code JS/TS code, comments and strings masked
+ * @returns the number of `{` not yet closed
+ */
+const blockDepth = (code: string) =>
+  [...code].reduce((depth, char) => depth + (BRACE_DEPTH[char] ?? 0), 0);
+
+/** How each brace moves the block depth */
+const BRACE_DEPTH: Record<string, number> = { "{": 1, "}": -1 };
+
+/**
  * Get global packages that are used in the given content.
  *
  * @param content JS/TS code
@@ -538,7 +601,6 @@ export const getImportedNames = (content: string) => {
  */
 const getGlobalPackages = (content: string) => {
   const packages: Record<string, ValueOf<typeof PACKAGES["global"]>> = {};
-  const imported = getImportedNames(content);
   for (const [_packageName, importStyle] of PgCommon.entries(PACKAGES.global)) {
     if (PACKAGES_MAP[_packageName] === null) continue;
     const packageName = PACKAGES_MAP[_packageName] ?? _packageName;
@@ -547,7 +609,7 @@ const getGlobalPackages = (content: string) => {
     const name = style.as ?? style.named ?? style.default;
     // `web3.` also matches inside "@solana/web3.js", so a client that binds
     // the name itself would get it twice
-    if (name !== undefined && imported.has(name)) continue;
+    if (name !== undefined && hasOwnBinding(name, content)) continue;
 
     const accessors = [name + ".", name + "("];
     for (const accessor of accessors) {

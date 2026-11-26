@@ -2,6 +2,7 @@ import { useState } from "react";
 import styled, { css } from "styled-components";
 
 import { createLogger } from "@/shared/lib/logger";
+import { isPlainRefusal } from "@/shared/lib/plain-refusal";
 import { ModalFrame } from "@/widgets/overlays";
 
 import { PgWallet } from "../../../utils";
@@ -24,6 +25,11 @@ export const ImportKey = () => {
         isNew ? addNewImportedKey(publicKey) : addExistingImportedKey(publicKey)
       );
     } catch (err) {
+      // Accounts held by a running deploy: say so, it is not a failure
+      if (isPlainRefusal(err)) {
+        setText(err.message);
+        return;
+      }
       log.error(err, { report: true });
       setText(
         "Could not import the keypair: " +

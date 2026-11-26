@@ -24,6 +24,8 @@ const { DEVNET_RPC } = await vi.hoisted(async () => ({
 const balance = vi.fn(async () => 10_000_000_000);
 const waitForInput = vi.fn(async () => true);
 
+/** The deploy's hold on the current account: taken, and released */
+const accountHold = vi.hoisted(() => ({ taken: 0, held: 0 }));
 const chain = vi.hoisted(() => ({
   /** What `getReadBufferConnection` answers; the selected connection when unset */
   readBuffer: undefined as
@@ -112,7 +114,14 @@ vi.mock("../../utils", () => {
       confirm: vi.fn(async () => ({ err: chain.confirmErr ?? null })),
     },
     PgView: { setMainSecondaryProgress: vi.fn() },
-    PgWallet: { current: { publicKey: pk, isPg: true } },
+    PgWallet: {
+      current: { publicKey: pk, isPg: true },
+      holdSwitch: () => {
+        accountHold.taken++;
+        accountHold.held++;
+        return () => void accountHold.held--;
+      },
+    },
     PgWeb3: {
       Keypair: { generate: () => ({ publicKey: pk }) },
       // Holds the bytes it was made from, so a stubbed read can tell accounts apart
@@ -160,6 +169,12 @@ const runChecks = async () => {
   for (const check of checks.slice(1)) await check();
 };
 
+// Every run, whether it deployed, failed or stopped, lets go of the accounts
+afterEach(() => {
+  expect(accountHold.held).toBe(0);
+  accountHold.taken = 0;
+});
+
 beforeEach(() => {
   for (const sub of subscriptions.splice(0)) sub.dispose();
   vi.clearAllMocks();
@@ -202,6 +217,9 @@ describe("deploy run", () => {
     const result = await handleDeploy();
 
     expect(steps).toEqual(["buffer", "write", "deploy"]);
+    // The accounts were held for the run; afterEach checks the release
+    expect(accountHold.taken).toBe(1);
+    expect(accountHold.held).toBe(0);
     expect(result).toEqual({
       signature: "sig-deploy",
       cost: 1_000_000_000,

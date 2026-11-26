@@ -363,6 +363,32 @@ it("should stay open and quiet when the user cancels the submit", async () => {
   expect(logs.entries.filter((entry) => entry.report)).toEqual([]);
 });
 
+it("should show a plain refusal as it is, without reporting it", async () => {
+  renderFrame({
+    title: "Add",
+    buttonProps: {
+      text: "Add",
+      onSubmit: async () => {
+        throw Object.assign(
+          new Error(
+            "A deploy is running: accounts cannot change until it ends."
+          ),
+          { isPlain: true }
+        );
+      },
+    },
+  });
+
+  await submit("Add");
+
+  expect(screen.getByRole("alert").textContent).toBe(
+    "A deploy is running: accounts cannot change until it ends."
+  );
+  expect(closeModal).not.toHaveBeenCalled();
+  expect(events("overlay_modal_submit_failed")).toEqual([]);
+  expect(logs.entries.filter((entry) => entry.report)).toEqual([]);
+});
+
 it("should not close another dialog when it was closed before its submit settled", async () => {
   let finish!: (value: number) => void;
   const { unmount } = renderFrame({

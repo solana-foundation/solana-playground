@@ -8,14 +8,30 @@
  *
  * So failures are recorded here and reported through the logger at `error`,
  * which reaches the console and error tracking in production too: this fires
- * when data the user created failed to be stored, retrieved or synced.
+ * when data the user created failed to be stored, retrieved or synced. The
+ * one exception is a request whose connection dropped (`isNetworkFailure`):
+ * it is recorded, warned of and counted (`sync_request_dropped`), never
+ * reported, since the next push, pull or reconcile asks again, and each one
+ * reached Sentry as noise (SOLANA-PLAYGROUND-E). An `AbortError` is still reported: here it is as
+ * likely an aborted IndexedDB write, or a timeout of ours on an engine that
+ * drops the signal's reason, as a request the browser let go.
  *
  * While diagnosing, the whole list is one command away in the browser console:
  *
  *   __pgSyncDiagnostics.failures()
  */
+import { isNetworkFailure } from "@/shared/lib/ai";
 import { isMissing } from "@/shared/lib/is-missing";
 import { createLogger } from "@/shared/lib/logger";
+
+import type { DroppedOpParam } from "./telemetry";
+import { DROPPED_OPS, persistenceTelemetry } from "./telemetry";
+
+/** The first word of an operation, as `sync_request_dropped` counts it */
+const opOf = (what: string): DroppedOpParam => {
+  const word = what.split(" ", 1)[0];
+  return DROPPED_OPS.find((op) => op === word) ?? "other";
+};
 
 const log = createLogger("persistence:diagnostics");
 
@@ -33,7 +49,13 @@ const failures: Failure[] = [];
 export const report = (what: string, error: unknown) => {
   failures.push({ what, error, at: new Date().toISOString() });
   if (failures.length > MAX) failures.shift();
-  log.error(error, { report: true, context: { what: `${what} failed` } });
+  const context = { what: `${what} failed` };
+  if (isNetworkFailure(error)) {
+    log.warn(`${what} failed: the connection dropped`, { context });
+    persistenceTelemetry.track("sync_request_dropped", { op: opOf(what) });
+    return;
+  }
+  log.error(error, { report: true, context });
 };
 
 /** Shared with entities that read the same filesystem (`useTutorialProgress`) */
@@ -68,14 +90,24 @@ if (import.meta.vitest) {
       ));
     });
     let logged: ReturnType<typeof memoryProvider>;
+    let telemetry: typeof import("@/shared/lib/telemetry");
+    let events: ReturnType<typeof telemetry.memoryProvider>;
+    beforeAll(async () => {
+      telemetry = await import("@/shared/lib/telemetry");
+    });
 
     beforeEach(() => {
       clearFailures();
       logged = memoryProvider();
       initLogger({ providers: [logged] });
+      events = telemetry.memoryProvider();
+      telemetry.initTelemetry({ providers: [events] });
     });
 
-    afterEach(() => resetLogger());
+    afterEach(() => {
+      resetLogger();
+      telemetry.resetTelemetry();
+    });
 
     it("records a failure and hands back the newest one", () => {
       const error = new Error("disk full");
@@ -98,6 +130,49 @@ if (import.meta.vitest) {
           context: { what: "write thread failed" },
         }),
       ]);
+    });
+
+    it.each([
+      // Safari's and Chrome's dropped connection (Sentry SOLANA-PLAYGROUND-E)
+      new TypeError("Load failed"),
+      new TypeError("Failed to fetch"),
+    ])("records, but does not report, a request that got %s", (error) => {
+      report("pull thread", error);
+
+      expect(getLastFailure()).toMatchObject({ what: "pull thread", error });
+      expect(logged.entries).toEqual([
+        expect.objectContaining({
+          ns: "persistence:diagnostics",
+          level: "warn",
+          context: { what: "pull thread failed" },
+        }),
+      ]);
+      expect(logged.entries.some((e) => e.report)).toBe(false);
+      expect(events.events.map((e) => [e.name, e.params])).toEqual([
+        ["sync_request_dropped", { op: "pull" }],
+      ]);
+    });
+
+    it.each([
+      // A bug that is also a TypeError
+      new TypeError("x.fetch is not a function"),
+      // A request of ours that ran out of its time limit
+      new DOMException("signal timed out", "TimeoutError"),
+      // An aborted IndexedDB write, or a timeout where fetch drops the reason
+      new DOMException("aborted", "AbortError"),
+    ])("still reports %s", (error) => {
+      report("write thread", error);
+
+      expect(logged.entries).toEqual([
+        expect.objectContaining({ level: "error", report: true }),
+      ]);
+      expect(events.events).toEqual([]);
+    });
+
+    it("counts an operation it does not list as other", () => {
+      report("threads of p1", new TypeError("Load failed"));
+
+      expect(events.events.map((e) => e.params)).toEqual([{ op: "other" }]);
     });
 
     it("keeps the list bounded so a failing loop cannot grow it forever", () => {
