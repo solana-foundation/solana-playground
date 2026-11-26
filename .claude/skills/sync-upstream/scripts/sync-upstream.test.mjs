@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, it } from "node:test";
 
 import {
+  dataJsonLast,
   GUARDS,
   isForkOwned,
   isGuardHit,
@@ -119,6 +120,23 @@ describe("sync-upstream", () => {
     it(`whole import: ${name} is reported as ${report}`, () => {
       assert.equal(wholeImportReport(local, Buffer.from("upstream")), report);
     });
+
+  it("whole import: writes the tutorial's data.json after its other files", () => {
+    assert.deepEqual(
+      dataJsonLast("bank-simulator", [
+        "tutorials/bank-simulator/about.md",
+        "tutorials/bank-simulator/data.json",
+        "tutorials/bank-simulator/files/data.json",
+        "tutorials/bank-simulator/pages/1.md",
+      ]),
+      [
+        "tutorials/bank-simulator/about.md",
+        "tutorials/bank-simulator/files/data.json",
+        "tutorials/bank-simulator/pages/1.md",
+        "tutorials/bank-simulator/data.json",
+      ]
+    );
+  });
 
   it("imports or owns every tracked file under client-v2/public/", () => {
     const listed = parseImportList(

@@ -573,6 +573,15 @@ export const wholeImportReport = (localBytes, newBytes) => {
   return sameBytes(localBytes, newBytes) ? "current" : "differs";
 };
 
+/** A tutorial's upstream files with its `data.json` last: `assets` reads that file as "imported", so an import that stops midway runs whole again. */
+export const dataJsonLast = (name, files) => {
+  const dataJson = `tutorials/${name}/data.json`;
+  return [
+    ...files.filter((file) => file !== dataJson),
+    ...files.filter((file) => file === dataJson),
+  ];
+};
+
 const assets = async (wt, toArg) => {
   const to = toArg
     ? git(wt, "rev-parse", "--verify", `${toArg}^{commit}`)
@@ -657,7 +666,7 @@ const assets = async (wt, toArg) => {
       .split("\0")
       .filter(Boolean);
     if (files.length === 0) report.absent.push(name);
-    for (const file of files) {
+    for (const file of dataJsonLast(name, files)) {
       wholeFiles.add(file);
       const local = path.join(wt, PUBLIC_DIR, file);
       const localBytes = existsSync(local) ? readFileSync(local) : undefined;

@@ -96,7 +96,8 @@ any other file as it is, because the fork keeps its images optimised:
 A tutorial that `markdown-tutorials.json` lists and that has no `client-v2/public/tutorials/<name>/data.json` is
 imported whole from `<new>`, because that diff never visits a file upstream left unchanged. A file the fork lacks
 is written, a copy that differs from upstream's is reported as changed by the fork, and a listed name that
-upstream lacks is reported.
+upstream lacks is reported. `data.json` is written last, so an import that stops midway runs whole again on the
+next run.
 
 The optimiser's output is the same only for the svgo and sharp versions `client-v2/package.json` pins. A change
 that bumps either one runs `node scripts/optimise-image.mjs` over every image in `client-v2/public/`,
@@ -137,8 +138,8 @@ dry run's worktree and branch afterwards.
 
 `node --test .claude/skills/sync-upstream/scripts/sync-upstream.test.mjs` checks the message format against the
 merged commit a7a8a1f9, the subject parser against both subject forms, the `GUARDS` matching, the import list
-matcher, the report a file of a tutorial imported whole goes to, and that the import list or `FORK_OWNED` covers
-every file in `client-v2/public/`.
+matcher, the report a file of a tutorial imported whole goes to, the order a whole import writes its files in,
+and that the import list or `FORK_OWNED` covers every file in `client-v2/public/`.
 
 ## Common mistakes
 
