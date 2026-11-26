@@ -50,6 +50,20 @@ describe("Connect to Localnet", () => {
     );
   });
 
+  it("starts a validator that accepts Playground's programs", () => {
+    render(<Local />);
+
+    // Agave 4.x turns SIMD-0500 (this feature id) on at genesis and refuses
+    // the SBPF v0 programs the build server makes, so a plain validator
+    // refuses every Playground deploy. The flag can go once the build server
+    // emits a current SBPF version.
+    expect(
+      screen.queryByText(
+        /solana-test-validator --deactivate-feature B8JJXCy5amZyWG9r7EnUYLwzXSXTxG7GZ1qZ1qggo83g/
+      )
+    ).not.toBeNull();
+  });
+
   it("gives Surfpool's own steps when Surfpool is the network picked", () => {
     render(<Local surfpool />);
 
