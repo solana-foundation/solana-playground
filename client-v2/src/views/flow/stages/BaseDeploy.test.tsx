@@ -636,17 +636,17 @@ describe("BaseDeploy", () => {
         })}
       />
     );
-    expect(screen.getByLabelText("Who pays").textContent).toBe(
-      `From Phantom · ${shortKey(
-        WALLET
-      )} · 4.2 SOLPhantom asks twice: to send SOL for the deploy, then to deploy.`
+    // The payer is one line and the note a block line under it
+    const [line, note] = screen.getByLabelText("Who pays").childNodes;
+    expect(line.textContent).toBe(
+      `From Phantom · ${shortKey(WALLET)} · 4.2 SOL`
     );
-    // The note is a line of its own, so the payer stays one line
-    expect(
+    expect(note).toBe(
       screen.getByText(
         "Phantom asks twice: to send SOL for the deploy, then to deploy."
-      ).tagName
-    ).toBe("SPAN");
+      )
+    );
+    expect((note as HTMLElement).className).toContain("block");
   });
 
   it("names the wallet that pays, or the Playground wallet before the first deploy", () => {
