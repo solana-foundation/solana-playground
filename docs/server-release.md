@@ -30,7 +30,7 @@ Both workflows sign in through [gcp-auth](../.github/actions/gcp-auth/action.yml
 
 ### Setting up OIDC, and retiring the key
 
-The one-time setup is step 10 of the [production runbook](../client-v2/docs/production-runbook.md#step-10-the-build-servers-releases-and-its-sign-in-to-gcp):
+The one-time setup is in [Build server](build-server.md#releases-from-actions-and-sign-in-through-oidc):
 the role that lets the service account move traffic, the Workload Identity pool `github-server` and its provider,
 the variable, the checks, and deleting the key.
 
