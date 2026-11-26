@@ -33,8 +33,10 @@ route's 300-second `maxDuration` in `client-v2/vercel.json`: change the two
 together.
 
 The build server's `PG_CLIENT_URLS` (its CORS list) matters only to a browser
-that calls the server directly, as a user who picks it in Settings does. Keep
-the production origins in it.
+that calls the server directly, as a user who picks it in Settings does. Such a
+call works only while the server holds no `PG_API_KEYS`: its CORS headers allow
+no `x-api-key`, so with keys set it answers `401` whatever the list holds. Keep
+the production origins in it for a server without keys.
 
 ## Values
 
@@ -44,7 +46,7 @@ the production origins in it.
 | Vercel, Production | `PG_BUILD_SERVER_URL` | The build server's `https://` origin, no trailing slash |
 | Vercel, Production | `PG_BUILD_SERVER_API_KEY` | This deployment's entry of the build server's `PG_API_KEYS` |
 | The build server's environment | `PG_API_KEYS` | A comma-separated list of keys, one per client of the server; set it from a GCP secret, never in `app.yaml`. Generate each key with `openssl rand -hex 32`, so every key has one length and holds no space or comma. `PG_BUILD_SERVER_API_KEY` is one entry. Set, the server answers `401` to `/build`, `/deploy` and `/unstable/*` unless `x-api-key` matches an entry, so only a client holding a key gets in. Removing an entry and redeploying the server revokes that client alone: the server reads its keys once, at start. After a change, check each client's key with the `curl` of [D-9](testing.md#d-9-the-server-builds-a-program-without-a-client): a listed key passes, a removed one gets `401`. `PG_API_KEY`, a single key, is read only while `PG_API_KEYS` holds no key: once the list is set, the old key stops working unless it is also an entry, so put the Playground's key in the list and unset `PG_API_KEY` after the move. Either variable set without a key, or with a key holding a space or a character outside visible ASCII, stops the server at start. Both unset, those routes stay open and the server logs an error at start, the one level App Engine prints without `RUST_LOG`. Set `PG_BUILD_SERVER_API_KEY` on Vercel first: a key on the server alone refuses every build, while a key Vercel sends to a server without one is ignored |
-| The build server's environment | `PG_CLIENT_URLS` | The production origins, `https://<VERCEL_APP_DOMAIN>` and `https://<CUSTOM_DOMAIN>`. Production's own builds go through `/api/build-server` and do not need it; a user who picks the build server directly in Settings does, or the browser refuses the answers by CORS |
+| The build server's environment | `PG_CLIENT_URLS` | The production origins, `https://<VERCEL_APP_DOMAIN>` and `https://<CUSTOM_DOMAIN>`. Production's own builds go through `/api/build-server` and do not need it. A user who picks the build server directly in Settings needs it, and only while the server holds no `PG_API_KEYS`; with keys set, such a call gets `401` |
 | GitHub, `solana-foundation/solana-playground` → Settings → Secrets and variables → Actions → Repository variables | `GCP_WORKLOAD_IDENTITY_PROVIDER` | The full resource name of the server's Workload Identity provider. Set, the server's deploys and releases sign in to GCP through OIDC; empty, through the `GCP_KEY` secret. The secrets `GCP_KEY`, `SERVICE_ACCOUNT` and `PROJECT_ID` already exist there |
 
 The production runbook says in which of its steps each Vercel value is set and who sets the server's side.
@@ -90,6 +92,8 @@ In one shell:
    SERVER_PROJECT_ID=<SERVER_PROJECT_ID>
    SERVER_SA=<SERVER_SA>
    REPO_ID=1003072868   # solana-foundation/solana-playground; check: gh api repos/solana-foundation/solana-playground --jq .id
+   PROJECT_ID=<PROJECT_ID>   # production's Cloud SQL project, read by check 4
+   RUNTIME_SA=$(gcloud app describe --project="$SERVER_PROJECT_ID" --format='value(serviceAccount)')
    ```
 
 2. **Let the account move traffic.** Deploying needs only `roles/appengine.deployer`, which cannot move traffic.
@@ -119,7 +123,6 @@ In one shell:
      gcloud projects add-iam-policy-binding "$SERVER_PROJECT_ID" \
        --member="serviceAccount:$SERVER_SA" --role="$role" --condition=None
    done
-   RUNTIME_SA=$(gcloud app describe --project="$SERVER_PROJECT_ID" --format='value(serviceAccount)')
    gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_SA" --project="$SERVER_PROJECT_ID" \
      --member="serviceAccount:$SERVER_SA" --role=roles/iam.serviceAccountUser
    ```
