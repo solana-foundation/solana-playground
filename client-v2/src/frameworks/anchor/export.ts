@@ -3,13 +3,21 @@ import {
   addAfter,
   addAfterImports,
   addImports,
+  fetchCrateVersion,
   fetchServerCargoLock,
   getJSDependencies,
   getRustDependencies,
+  hasOwnBinding,
   readExportedProject,
   wrapTopLevelAwait,
 } from "../common";
 import { getIdlBuildFeature } from "./idl-build-feature";
+
+/**
+ * The package of Anchor's TypeScript client since 1.0; the export installs it at the build server's `anchor-lang`
+ * version. The Playground runs the 0.29 client, `@coral-xyz/anchor`, which cannot read an IDL Anchor 1.x writes (HOO-2964).
+ */
+const ANCHOR_CLIENT = "@anchor-lang/core";
 
 /**
  * {@link Framework.importFromPlayground}
@@ -19,6 +27,12 @@ export const convertFromPlayground = async (
   name: string | undefined
 ) => {
   const project = await readExportedProject(name);
+  // The `anchor-lang` the build server compiles with: the CLI, the crate and the TypeScript client share a version.
+  // Without it the export would install a client that does not match the program, the failure HOO-2964 fixed
+  const anchorVersion = await fetchCrateVersion("anchor-lang");
+  if (!anchorVersion) {
+    throw new Error("The build server's anchor-lang version is unknown");
+  }
   // Program manifest's lib name must match the `#[program]` module name and
   // Anchor.toml programs definition
   const libContent = files.find(([path]) => path.endsWith("lib.rs"))?.[1];
@@ -67,7 +81,7 @@ export const convertFromPlayground = async (
     frameworkFiles.push([
       PgCommon.joinPaths(PgExplorer.PATHS.TESTS_DIRNAME, `${packageName}.ts`),
       convertJS(
-        `import * as anchor from "@coral-xyz/anchor";
+        `import * as anchor from "${ANCHOR_CLIENT}";
 import { expect } from "chai";
 
 describe("${programName}", () => {
@@ -101,7 +115,7 @@ describe("${programName}", () => {
 // single deploy script that's invoked from the CLI, injecting a provider
 // configured from the workspace's Anchor.toml.
 
-const anchor = require("@coral-xyz/anchor");
+const anchor = require("${ANCHOR_CLIENT}");
 
 module.exports = async function (provider) {
   // Configure client to use the provider.
@@ -154,6 +168,7 @@ target
 **/*.rs.bk
 node_modules
 test-ledger
+.surfpool
 .yarn
 `,
     ],
@@ -174,8 +189,12 @@ test-ledger
     // Anchor.toml
     [
       "Anchor.toml",
-      `[features]
-seeds = false
+      `[toolchain]
+anchor_version = "${anchorVersion}"
+package_manager = "yarn"
+
+[features]
+resolution = true
 skip-lint = false
 
 ${
@@ -225,7 +244,7 @@ codegen-units = 1
     "lint:fix": "prettier */*.js \\"*/**/*{.js,.ts}\\" -w",
     "lint": "prettier */*.js \\"*/**/*{.js,.ts}\\" --check"
   },
-${await getJSDependencies(frameworkFiles)}
+${await getJSDependencies({ [ANCHOR_CLIENT]: anchorVersion }, frameworkFiles)}
 }
 `,
     ],
@@ -258,6 +277,10 @@ ${await getJSDependencies(frameworkFiles)}
   return frameworkFiles;
 };
 
+/** `const anchor = require(...)` of an Anchor client, the 0.x packages or 1.x's, at the start of a line */
+const ANCHOR_REQUIRE =
+  /^(?:const|let|var)\s+anchor\s*=\s*require\((["'])(?:@coral-xyz\/anchor|@project-serum\/anchor|@anchor-lang\/core)\1\);?/;
+
 /**
  * Try to make the JS/TS file work in a local `node` environment by making the
  * necessary conversions.
@@ -273,11 +296,35 @@ const convertJS = (
   programName: string,
   opts?: { isTest?: boolean }
 ) => {
+  // A top-level require of an Anchor client becomes an import, so the program set up below, which goes after the
+  // imports, follows it. A trailing line comment goes with it
+  content = content
+    .split("\n")
+    .map((line) => {
+      const required = ANCHOR_REQUIRE.exec(line);
+      const rest = required ? line.slice(required[0].length).trim() : "";
+      return required && (rest === "" || rest.startsWith("//"))
+        ? `import * as anchor from "${ANCHOR_CLIENT}";`
+        : line;
+    })
+    .join("\n");
+
   // Handle imports
   content = addImports(content);
-  if (!content.includes("anchor")) {
-    content = `import * as anchor from "@coral-xyz/anchor";\n` + content;
+  // Every converted file uses `anchor` (the program set up below). A file that only mentions the word, as
+  // `describe("hello_anchor")` does, still needs the import
+  if (!hasOwnBinding("anchor", content)) {
+    content = `import * as anchor from "${ANCHOR_CLIENT}";\n` + content;
   }
+  // The 0.x clients, imported by `addImports` for the `anchor` global or by the file itself: neither reads an IDL
+  // Anchor 1.x writes, and two clients in one project would not share their types
+  content = content.replace(
+    /(["'])(?:@coral-xyz|@project-serum)\/anchor\1/g,
+    (_, quote: string) => quote + ANCHOR_CLIENT + quote
+  );
+  // The 1.x client types `accounts` without the accounts it resolves itself (the system program, PDAs), which the
+  // 0.29 client took. `accountsPartial` takes them all, as the test `anchor init` 1.1.2 writes calls it
+  content = toAccountsPartial(content);
 
   // Top-level `await` doesn't compile with the exported `tsconfig.json`
   // (CommonJS) and Playground runs client code inside an async function anyway
@@ -317,4 +364,51 @@ const program = anchor.workspace.${pascalCaseProgramName} as anchor.Program<${pa
     .replaceAll("pg.wallet.keypair", "program.provider.wallet.payer");
 
   return content;
+};
+
+/** Where an instruction builder starts: `program.methods.name(` or `program.methods["name"](` */
+const METHODS = /\.methods\s*[.[]/;
+
+/**
+ * Rename each `.accounts(` call of an Anchor instruction builder to `.accountsPartial(`. A call is the builder's when
+ * its statement goes through `.methods`, or names a variable an earlier statement set to one. A statement starts
+ * after a `;` or, in code without semicolons, after a blank line. Any other `.accounts(` is not Anchor's and stays.
+ *
+ * @param content JS/TS code
+ * @returns the code with the builders' calls renamed
+ */
+const toAccountsPartial = (content: string) => {
+  const statementStart = (offset: number) =>
+    Math.max(
+      content.lastIndexOf(";", offset) + 1,
+      content.lastIndexOf("\n\n", offset)
+    );
+  const statementEnd = (offset: number) => {
+    const ends = [
+      content.indexOf(";", offset),
+      content.indexOf("\n\n", offset),
+    ];
+    return Math.min(...ends.map((end) => (end === -1 ? content.length : end)));
+  };
+
+  const builders = new Set<string>();
+  for (const { 1: name, index = 0 } of content.matchAll(
+    /([\w$]+)\s*=(?![=>])/g
+  )) {
+    if (METHODS.test(content.slice(index, statementEnd(index))))
+      builders.add(name);
+  }
+
+  return content.replace(/\.accounts\(/g, (call, offset: number) => {
+    const statement = content.slice(statementStart(offset), offset);
+    const isBuilder =
+      METHODS.test(statement) ||
+      [...builders].some((name) =>
+        // eslint-disable-next-line security/detect-non-literal-regexp -- `\w` and `$` characters only, `$` escaped
+        new RegExp(
+          `(?:^|[^\\w$.])${name.replaceAll("$", "\\$")}(?![\\w$])`
+        ).test(statement)
+      );
+    return isBuilder ? ".accountsPartial(" : call;
+  });
 };

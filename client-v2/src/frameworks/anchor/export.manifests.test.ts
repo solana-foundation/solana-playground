@@ -30,6 +30,8 @@ vi.mock("../common", () => ({
   getRustDependencies: async () => "[dependencies]",
   getJSDependencies: async () => '"dependencies": {}',
   fetchServerCargoLock: async () => SERVER_LOCK,
+  fetchCrateVersion: async () => "1.1.2",
+  hasOwnBinding: () => false,
   readExportedProject: async (name: string | undefined) => ({
     name,
     kp: undefined,

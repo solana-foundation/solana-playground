@@ -22,6 +22,7 @@ vi.stubGlobal("CRATES", {
 const {
   addAfterImports,
   getImportedNames,
+  hasOwnBinding,
   getRustDependencies,
   wrapTopLevelAwait,
 } = await import("./common");
@@ -55,6 +56,25 @@ describe("frameworks/common", () => {
     } finally {
       SERVED["/crates/features.json"] = served;
     }
+  });
+});
+
+describe("hasOwnBinding", () => {
+  it.each([
+    ['import * as web3 from "@solana/web3.js";', true],
+    ['const web3 = require("@solana/web3.js");', true],
+    ["let web3;", true],
+    ["const web3x = 1;", false],
+    ["function f() {\n  const web3 = 1;\n}\nweb3.Keypair;", false],
+    ["function f() {\nconst web3 = 1;\n}\nweb3.Keypair;", false],
+    ['const s = "{";\nconst web3 = 1;', true],
+    ["// const web3 = 1;\nweb3.Keypair;", false],
+    ["console.log(web3.Keypair);", false],
+    ["const opening = /\\{/;\nconst web3 = 1;", true],
+    ["const re = /[}]/g;\nconst web3 = 1;", true],
+    ["const half = 1 / 2 / 3;\nconst web3 = 1;", true],
+  ])("detects the web3 binding in %j as %s", (content, expected) => {
+    expect(hasOwnBinding("web3", content)).toBe(expected);
   });
 });
 
