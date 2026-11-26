@@ -13,6 +13,7 @@ import {
   BaseKeyPanel,
   type BaseKeyPanelProps,
   KEY_PANEL_UNAVAILABLE,
+  readThemeTokens,
 } from "./KeyPanel";
 
 const ORIGIN = "http://127.0.0.1:3006";
@@ -272,5 +273,125 @@ describe("components/Wallet/KeyPanel", () => {
       />
     );
     expect(screen.getByText(KEY_PANEL_UNAVAILABLE)).toBeTruthy();
+  });
+
+  it("takes its look from a callout's action, or a dialog's primary button, when asked", () => {
+    const placeholderFor = (look: "callout" | "primary") => {
+      const { container, unmount } = render(
+        <BaseKeyPanel
+          action="export"
+          look={look}
+          publicKey={PUBLIC_KEY}
+          name="Wallet 1"
+          origin={ORIGIN}
+          connect={fakePanel().connect}
+          readTokens={readTokens}
+          onError={() => {}}
+        />
+      );
+      const found = container.querySelector(
+        "[data-slot=callout-action], [data-slot=button]"
+      );
+      const slot = found?.getAttribute("data-slot");
+      const variant = found?.getAttribute("data-variant") ?? undefined;
+      const hidden = found?.getAttribute("aria-hidden");
+      unmount();
+      return { slot, variant, hidden };
+    };
+
+    expect(placeholderFor("callout")).toEqual({
+      slot: "callout-action",
+      variant: undefined,
+      hidden: "true",
+    });
+    expect(placeholderFor("primary")).toEqual({
+      slot: "button",
+      variant: "default",
+      hidden: "true",
+    });
+  });
+
+  it("sends no border colour for a button with no edge", () => {
+    const probe = (border: string) => {
+      const element = document.createElement("span");
+      element.style.border = border;
+      document.body.append(element);
+      return element;
+    };
+    const hover = probe("0");
+    const ring = probe("1px solid red");
+
+    expect(
+      readThemeTokens({ button: probe("0 solid white"), hover, ring }).border
+    ).toBe("transparent");
+    expect(
+      readThemeTokens({ button: probe("1px solid white"), hover, ring }).border
+    ).toBe("rgb(255, 255, 255)");
+  });
+
+  it("sends the look again when the window's width changes it", async () => {
+    const { connect, received } = fakePanel();
+    let height = "32px";
+    render(
+      <BaseKeyPanel
+        action="export"
+        look="callout"
+        publicKey={PUBLIC_KEY}
+        name="Wallet 1"
+        origin={ORIGIN}
+        connect={connect}
+        readTokens={() => ({ height })}
+        onError={() => {}}
+      />
+    );
+    await waitFor(() =>
+      expect(received).toContainEqual({
+        type: "theme",
+        tokens: { height: "32px" },
+      })
+    );
+
+    height = "44px";
+    window.dispatchEvent(new Event("resize"));
+    await waitFor(() =>
+      expect(received).toContainEqual({
+        type: "theme",
+        tokens: { height: "44px" },
+      })
+    );
+  });
+
+  it("connects again when the key page restarts in its frame, as a moved frame does", async () => {
+    const { connect, srcs } = fakePanel();
+    render(
+      <BaseKeyPanel
+        action="export"
+        publicKey={PUBLIC_KEY}
+        name="Wallet 1"
+        origin={ORIGIN}
+        connect={connect}
+        readTokens={readTokens}
+        onError={() => {}}
+      />
+    );
+    await waitFor(() => expect(srcs).toHaveLength(1));
+    const frame = screen.getByTitle("Save keypair") as HTMLIFrameElement;
+    const ready = (from: { origin: string; source: Window | null }) =>
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "pg-wallet-keys:ready", version: 1 },
+          origin: from.origin,
+          source: from.source,
+        })
+      );
+
+    // Another window, or another origin, is not this panel's key page
+    ready({ origin: "https://elsewhere.test", source: frame.contentWindow });
+    ready({ origin: ORIGIN, source: window });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(srcs).toHaveLength(1);
+
+    ready({ origin: ORIGIN, source: frame.contentWindow });
+    await waitFor(() => expect(srcs).toHaveLength(2));
   });
 });

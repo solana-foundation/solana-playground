@@ -51,6 +51,19 @@ describe("CalloutAction", () => {
     expect(fill(lent().className)).toEqual(plainFill);
   });
 
+  it("has no fill and muted ink until hovered when quiet", () => {
+    render(<CalloutAction quiet>Not now</CalloutAction>);
+    const classes = screen
+      .getByRole("button", { name: "Not now" })
+      .className.split(" ");
+
+    expect(classes).toContain("bg-transparent");
+    expect(classes).toContain("text-muted-foreground");
+    expect(classes).toContain("hover:bg-(--action-rest)");
+    expect(classes).not.toContain("bg-(--action-rest)");
+    expect(classes).not.toContain("hover:bg-(--action-hover)");
+  });
+
   it("is a plain button by default, so it never submits a form", () => {
     render(<CalloutAction>Stop</CalloutAction>);
     expect(screen.getByRole("button", { name: "Stop" })).toHaveProperty(

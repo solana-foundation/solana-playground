@@ -2,9 +2,9 @@ import { useState } from "react";
 import styled, { css } from "styled-components";
 
 import { createLogger } from "@/shared/lib/logger";
-import { ModalFrame } from "@/widgets/overlays";
+import { ModalFrame, useModalId } from "@/widgets/overlays";
 
-import { PgWallet } from "../../../utils";
+import { PgView, PgWallet } from "../../../utils";
 import { useBusyPanels } from "../hooks";
 import { addExistingImportedKey, addNewImportedKey } from "../imported-key";
 import { KeyPanel } from "../KeyPanel";
@@ -13,16 +13,23 @@ const log = createLogger("wallet:key-file");
 
 /**
  * Settings' Import under the `key-origin` provider: the key page's panel reads
- * the file, and the dialog says what the import did
+ * the file and is the dialog's one action. An import closes the dialog and a
+ * toast says what it did; a failure stays in the dialog. A Done beside the
+ * panel only closed it, and read as the action (user feedback, 26 Nov).
  */
 export const ImportKey = () => {
+  const id = useModalId();
   const [text, setText] = useState("");
-  const { isBusy, onBusy } = useBusyPanels();
+  const { onBusy } = useBusyPanels();
   const handleImported = (publicKey: string, isNew: boolean) => {
     try {
-      setText(
-        isNew ? addNewImportedKey(publicKey) : addExistingImportedKey(publicKey)
-      );
+      const imported = isNew
+        ? addNewImportedKey(publicKey)
+        : addExistingImportedKey(publicKey);
+      PgView.closeModal(undefined, id);
+      PgView.setToast(() => <span>{imported}</span>, {
+        options: { name: "wallet-imported" },
+      });
     } catch (err) {
       log.error(err, { report: true });
       setText(
@@ -32,19 +39,16 @@ export const ImportKey = () => {
     }
   };
   return (
-    <ModalFrame
-      name="wallet-import"
-      title="Import keypair"
-      buttonProps={{ text: "Done", noCancel: true, disabled: isBusy }}
-    >
+    <ModalFrame name="wallet-import" title="Import keypair">
       <MainContent>
         <Desc>Pick a .json file saved from Playground or the Solana CLI.</Desc>
         <KeyPanel
           action="import"
+          look="primary"
           onImported={handleImported}
           onError={setText}
           onBusy={onBusy}
-          className="mt-4"
+          className="mt-6 self-end"
         />
         {text && <Desc>{text}</Desc>}
       </MainContent>
@@ -53,24 +57,17 @@ export const ImportKey = () => {
 };
 
 /**
- * Export under the `key-origin` provider, from Settings or Deploy's backup
- * line: the key page's panel saves the current account's file
+ * Settings' Export under the `key-origin` provider: the key page's panel saves
+ * the current account's file and is the dialog's one action; a save closes
+ * the dialog
  */
-export const ExportKey = ({
-  onExported,
-}: {
-  /** Called once the panel has saved the file */
-  onExported?: () => void;
-}) => {
+export const ExportKey = () => {
+  const id = useModalId();
   const [text, setText] = useState("");
-  const { isBusy, onBusy } = useBusyPanels();
+  const { onBusy } = useBusyPanels();
   const current = PgWallet.accounts[PgWallet.currentIndex];
   return (
-    <ModalFrame
-      name="wallet-export"
-      title="Export keypair"
-      buttonProps={{ text: "Done", noCancel: true, disabled: isBusy }}
-    >
+    <ModalFrame name="wallet-export" title="Export keypair">
       <MainContent>
         <Desc>
           Save {current?.name ?? "the wallet"}'s keypair to recover the wallet
@@ -79,15 +76,13 @@ export const ExportKey = ({
         {current && (
           <KeyPanel
             action="export"
+            look="primary"
             publicKey={current.publicKey}
             name={current.name}
             onError={setText}
-            onExported={() => {
-              setText("");
-              onExported?.();
-            }}
+            onExported={() => PgView.closeModal(undefined, id)}
             onBusy={onBusy}
-            className="mt-4"
+            className="mt-6 self-end"
           />
         )}
         {text && <Desc>{text}</Desc>}

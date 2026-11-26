@@ -419,10 +419,10 @@ test("wallet-signing: Export from Settings", async ({ page }) => {
     Keypair.fromSecretKey(Uint8Array.from(bytes as number[])).publicKey
   ).toEqual(new PublicKey(address));
 
+  // The save closes the dialog: the panel is its one action
+  await expect(dialog).toBeHidden();
   // Escape with the focus inside the panel closes the dialog, as it does
   // from the dialog's own document
-  await dialog.getByRole("button", { name: "Done" }).click();
-  await expect(dialog).toBeHidden();
   await openFromSettings(page, "Export");
   await expect(save).toBeEnabled(LONG);
   const focusedInPanel = () =>
@@ -455,11 +455,10 @@ test("wallet-signing: Import a key file", async ({ page }) => {
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify(Array.from(imported.secretKey))),
   });
-  await expect(dialog).toContainText(
-    `Imported ${importedAddress.slice(0, 4)}`,
-    LONG
-  );
-  await dialog.getByRole("button", { name: "Done" }).click();
+  // The import closes the dialog, and a toast says what it did
+  await expect(
+    page.getByText(`Imported ${importedAddress.slice(0, 4)}`)
+  ).toBeVisible(LONG);
   await expect(dialog).toBeHidden();
 
   // The account menu lists it

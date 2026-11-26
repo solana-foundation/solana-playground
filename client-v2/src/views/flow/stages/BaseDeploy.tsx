@@ -100,6 +100,8 @@ export interface BaseDeployProps {
    */
   fundFor?: (address: string) => (() => void) | undefined;
   onSaveKeypair: () => void;
+  /** Under the key origin, the key page's Save keypair for the backup line */
+  backupSave?: ReactNode;
   onDismissBackup: () => void;
   onStaleBuildAnswer: (deploy: boolean) => void;
   onInteract: () => void;
@@ -376,6 +378,7 @@ const DeployResult = ({
           cluster={latest.cluster}
           onSave={p.onSaveKeypair}
           onDismiss={p.onDismissBackup}
+          save={p.backupSave}
         />
       )}
     </div>

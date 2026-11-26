@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 
 import { walletOriginEnv } from "@/shared/config/client-env";
 import { createLogger } from "@/shared/lib/logger";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
+import { CalloutAction } from "@/shared/ui/callout";
 
 import {
   connectKeyPanelFor,
@@ -13,6 +14,7 @@ import {
 } from "../../utils/wallet/key-origin/client";
 import { keyOriginFor } from "../../utils/wallet/key-origin/origin";
 import {
+  isKeyReady,
   isPanelMessage,
   PANEL_LABEL,
   type PanelMessage,
@@ -79,7 +81,10 @@ export const readThemeTokens = ({
   return {
     bg: style.backgroundColor,
     fg: style.color,
-    border: style.borderTopColor,
+    // A button with no edge (a callout's action) has a colour on its border
+    // all the same; the key page draws a 1px border from it, so none is sent
+    border:
+      style.borderTopWidth === "0px" ? "transparent" : style.borderTopColor,
     radius: style.borderTopLeftRadius,
     font: style.fontFamily,
     fontSize: style.fontSize,
@@ -111,11 +116,33 @@ type PanelResults = {
   onError: (message: string) => void;
 };
 
+/**
+ * Which button of ours the key page's button looks like: the outline button
+ * by default, a dialog's one action (`primary`), or a callout's action
+ * (`callout`, drawn inside a `Callout` so it takes the callout's tone)
+ */
+export type KeyPanelLook = "outline" | "primary" | "callout";
+
+/** The `Button` each look but the callout's copies, and that button's hover */
+const BUTTON_LOOK: Record<
+  Exclude<KeyPanelLook, "callout">,
+  { variant: "outline" | "default"; hover: string }
+> = {
+  outline: {
+    variant: "outline",
+    hover: "bg-muted text-foreground dark:bg-input/50",
+  },
+  primary: {
+    variant: "default",
+    hover: "bg-primary/80 text-primary-foreground",
+  },
+};
+
 export type KeyPanelProps = PanelResults &
   (
     | { action: "import" }
     | { action: "export"; publicKey: string; name: string }
-  ) & { className?: string };
+  ) & { className?: string; look?: KeyPanelLook };
 
 export type BaseKeyPanelProps = KeyPanelProps & {
   /** The key origin; `null` when the build names none */
@@ -138,7 +165,14 @@ export type BaseKeyPanelProps = KeyPanelProps & {
  * the theme changes. Results go to the dialog through the callbacks.
  */
 export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
-  const { action, origin, connect, readTokens, className } = props;
+  const {
+    action,
+    origin,
+    connect,
+    readTokens,
+    className,
+    look = "outline",
+  } = props;
   const publicKey = props.action === "export" ? props.publicKey : undefined;
   const name = props.action === "export" ? props.name : undefined;
 
@@ -152,6 +186,8 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
   const nameRef = useRef(name);
   nameRef.current = name;
   const [isUnavailable, setIsUnavailable] = useState(!origin);
+  // Counts the key page's restarts, each of which needs a connection of its own
+  const [connection, reconnect] = useReducer((n: number) => n + 1, 0);
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -193,18 +229,32 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
     };
     let port: MessagePort | undefined;
     const stopped = new AbortController();
+    const handleRestart = (event: MessageEvent) => {
+      if (
+        event.source !== frame.contentWindow ||
+        event.origin !== origin ||
+        !isKeyReady(event.data)
+      ) {
+        return;
+      }
+      reconnect();
+    };
 
     const send = (message: PanelMessage) => port?.postMessage(message);
-    const observer = new MutationObserver(() => {
+    const resendTokens = () => {
       const next = readTokens(probes);
       if (JSON.stringify(next) === JSON.stringify(tokens)) return;
       tokens = next;
       send({ type: "theme", tokens });
-    });
+    };
+    const observer = new MutationObserver(resendTokens);
     observer.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ["class", "style", "data-theme"],
     });
+    // A callout's action is taller on a phone, so a width that crosses the
+    // breakpoint changes the look too
+    window.addEventListener("resize", resendTokens);
 
     connect(origin)(
       frame,
@@ -217,6 +267,11 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
         }
         port = connected;
         portRef.current = connected;
+        // A frame whose element moves in the document (a layout that puts
+        // the panel elsewhere at another width) reloads: the key page starts
+        // again and says it is ready, while the port reaches its old document
+        // only, and the button would stay disabled
+        window.addEventListener("message", handleRestart);
         // The theme may have changed while the panel loaded
         send({ type: "theme", tokens });
         // So may the name, typed meanwhile
@@ -279,6 +334,8 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
       isLive = false;
       stopped.abort();
       observer.disconnect();
+      window.removeEventListener("resize", resendTokens);
+      window.removeEventListener("message", handleRestart);
       port?.close();
       portRef.current = undefined;
       // Its "not busy" can no longer arrive
@@ -287,7 +344,7 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
       // load (the same URL again would be a fragment navigation, no load)
       frame.src = "about:blank";
     };
-  }, [origin, action, publicKey, connect, readTokens]);
+  }, [origin, action, publicKey, connect, readTokens, connection]);
 
   useEffect(() => {
     if (name !== undefined)
@@ -301,24 +358,49 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
       data-slot="key-panel"
       className={cn("relative inline-flex w-fit", className)}
     >
-      {/* Holds the button's place and gives the panel its look; never seen */}
-      <Button
-        ref={buttonRef}
-        type="button"
-        variant="outline"
-        tabIndex={-1}
-        aria-hidden
-        // Without the button's transition, its computed colours are the
-        // theme's at once, not the first frame of a fade
-        className="invisible transition-none"
-      >
-        {PANEL_LABEL[action]}
-      </Button>
-      <span
-        ref={hoverRef}
-        aria-hidden
-        className="pointer-events-none invisible absolute size-0 bg-muted text-foreground dark:bg-input/50"
-      />
+      {/* Holds the button's place and gives the panel its look; never seen.
+          Without the button's transition, its computed colours are the
+          theme's at once, not the first frame of a fade */}
+      {look === "callout" ? (
+        <>
+          <CalloutAction
+            ref={buttonRef}
+            tabIndex={-1}
+            aria-hidden
+            className="invisible transition-none"
+          >
+            {PANEL_LABEL[action]}
+          </CalloutAction>
+          <CalloutAction asChild>
+            <span
+              ref={hoverRef}
+              aria-hidden
+              className="pointer-events-none invisible absolute size-0 bg-(--action-hover)"
+            />
+          </CalloutAction>
+        </>
+      ) : (
+        <>
+          <Button
+            ref={buttonRef}
+            type="button"
+            variant={BUTTON_LOOK[look].variant}
+            tabIndex={-1}
+            aria-hidden
+            className="invisible transition-none"
+          >
+            {PANEL_LABEL[action]}
+          </Button>
+          <span
+            ref={hoverRef}
+            aria-hidden
+            className={cn(
+              "pointer-events-none invisible absolute size-0",
+              BUTTON_LOOK[look].hover
+            )}
+          />
+        </>
+      )}
       <span
         ref={ringRef}
         aria-hidden
