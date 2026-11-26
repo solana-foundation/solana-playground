@@ -39,8 +39,8 @@ The PR body is [`.github/pull_request_template.md`](../../../.github/pull_reques
 author. The skill works from that body and never from a structure of its own:
 
 - The checklist is the template's `## Checklist`, item for item; the table in "5. Walk the checklist" says how
-  to mark it. Where the template's comment says to delete an item that does not apply, strike it instead: a
-  struck item shows the reviewer it was considered, a deleted one does not.
+  to mark it. An item that does not apply is struck, as the template's comment says, never deleted: a struck
+  item shows the reviewer it was considered, a deleted one does not.
 - The filled sections are the author's statement of the PR's scope. Judge each item against them: what
   `## TLDR` and `## Blast radius` say the PR changes, what `## Not in this PR` says it leaves out, and what
   `## Evidence` already names.
