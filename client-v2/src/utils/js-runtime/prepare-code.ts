@@ -4,6 +4,7 @@ import {
   flattenDiagnosticMessageText,
   isImportDeclaration,
   isNamespaceImport,
+  isStringLiteral,
   ScriptKind,
   ScriptTarget,
   transpileModule,
@@ -24,10 +25,11 @@ const HIDDEN_GLOBALS = ["eval", "Function"];
 
 /**
  * A string literal with its line continuations (a backslash before a line
- * break) taken out: the same string on one line, so `hoistImports`, which
- * leaves each declaration's line breaks where it was, does not add more on
- * the first line. Escapes are matched in pairs, so an escaped backslash is
- * never read as the start of a continuation.
+ * break) taken out: the same string on one line, so the hoisted imports stay
+ * on the first line and every later line keeps its number (`hoistImports`
+ * leaves each declaration's own line breaks in place). Escapes are matched in
+ * pairs, so an escaped backslash is never read as the start of a
+ * continuation.
  *
  * @param literal a string literal as written in the source
  * @returns the literal without line continuations
@@ -46,13 +48,21 @@ const withoutLineContinuations = (literal: string) =>
  * @param index the declaration's place among the code's imports, which names
  * its module's binding
  * @returns a function of the declaration
+ * @throws {SyntaxError} naming the line, when the specifier is not a string
+ * literal: TypeScript's parser accepts any expression there and only its
+ * checker, which `transpileModule` does not run, rejects one
  */
 const importedFor = (index: number) => (declaration: ImportDeclaration) => {
-  // The specifier as the project wrote it: a string literal already, so it is
-  // copied rather than read and quoted again
-  const specifier = withoutLineContinuations(
-    declaration.moduleSpecifier.getText()
-  );
+  const { moduleSpecifier } = declaration;
+  if (!isStringLiteral(moduleSpecifier)) {
+    const { line } = moduleSpecifier
+      .getSourceFile()
+      .getLineAndCharacterOfPosition(moduleSpecifier.getStart());
+    throw new SyntaxError(`Line ${line + 1}: String literal expected.`);
+  }
+  // Copied as written, not read and quoted again with `JSON.stringify`, which
+  // CodeQL's js/bad-code-sanitization flags in code built for execution
+  const specifier = withoutLineContinuations(moduleSpecifier.getText());
   const imported = `await __pgImport(${specifier})`;
   const clause = declaration.importClause;
   if (!clause) return `${imported};`;
@@ -254,6 +264,15 @@ if (import.meta.vitest) {
       expect(() =>
         prepareCode('import * as ns from "a\\\nb";\nconst x = ;')
       ).toThrow(/^Line 3: /);
+    });
+
+    it("throws a SyntaxError naming the line of an import whose specifier is not a string", () => {
+      expect(() =>
+        prepareCode('const p = "a";\nimport x from p;\nseen.push(x);')
+      ).toThrow(/^Line 2: String literal expected\.$/);
+      expect(() => prepareCode("import x from `a`;")).toThrow(
+        /^Line 1: String literal expected\.$/
+      );
     });
 
     it("loads an import whose specifier spans two lines", async () => {

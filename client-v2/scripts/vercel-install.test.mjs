@@ -95,6 +95,8 @@ function scratchTree() {
 
 /**
  * Sources the script and runs `body`; build_wasm_packages writes a pkg whose marker says it was built here.
+ * The script's path reaches bash as `$1`, never inside the command string, which CodeQL's
+ * js/shell-command-injection-from-environment flags.
  * @param {{ VERCEL_ENV?: string, CACHE_SEAL_KEY?: string }} env
  */
 function run(tree, body, env) {
