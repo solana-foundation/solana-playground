@@ -57,7 +57,7 @@ const BUSY_LIMIT_MS = 60_000;
 
 /** The elements the panel's look is read from */
 export type ThemeProbes = {
-  /** A hidden design-system outline button with the panel's label */
+  /** A hidden button of the panel's look (outline, primary or callout action) with its label */
   button: HTMLElement;
   /** Coloured as that button is on hover */
   hover: HTMLElement;
@@ -161,8 +161,10 @@ export type BaseKeyPanelProps = KeyPanelProps & {
 /**
  * The key page's import or export panel, in place of the button it replaces:
  * a hidden design-system button holds the layout, and the key page's frame
- * lies over it, drawn from that button's computed look and told again when
- * the theme changes. Results go to the dialog through the callbacks.
+ * lies over it, drawn from that button's computed look (`look`: an outline
+ * or primary button, or a callout's action) and told again when the theme or
+ * the window's width changes it. Results go to the caller, a dialog or the
+ * deploy card, through the callbacks.
  */
 export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
   const {
@@ -371,12 +373,13 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
           >
             {PANEL_LABEL[action]}
           </CalloutAction>
-          <CalloutAction asChild>
-            <span
-              ref={hoverRef}
-              aria-hidden
-              className="pointer-events-none invisible absolute size-0 bg-(--action-hover)"
-            />
+          {/* The class goes through CalloutAction's `cn`, so the hover fill
+              replaces the rest fill; Slot only joins a child's class */}
+          <CalloutAction
+            asChild
+            className="pointer-events-none invisible absolute size-0 bg-(--action-hover)"
+          >
+            <span ref={hoverRef} aria-hidden />
           </CalloutAction>
         </>
       ) : (

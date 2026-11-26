@@ -311,6 +311,26 @@ describe("components/Wallet/KeyPanel", () => {
     });
   });
 
+  it("reads a callout action's hover from a probe holding only the hover fill", () => {
+    const { container } = render(
+      <BaseKeyPanel
+        action="export"
+        look="callout"
+        publicKey={PUBLIC_KEY}
+        name="Wallet 1"
+        origin={ORIGIN}
+        connect={fakePanel().connect}
+        readTokens={readTokens}
+        onError={() => {}}
+      />
+    );
+    const probes = container.querySelectorAll("[data-slot=callout-action]");
+    const hover = probes[probes.length - 1].className.split(" ");
+
+    expect(hover).toContain("bg-(--action-hover)");
+    expect(hover).not.toContain("bg-(--action-rest)");
+  });
+
   it("sends no border colour for a button with no edge", () => {
     const probe = (border: string) => {
       const element = document.createElement("span");

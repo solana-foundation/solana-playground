@@ -46,11 +46,29 @@ import { markIfToldByStage } from "./stage-failure";
 
 const log = createLogger("flow:deploy");
 
-/** In its own chunk, as the wallet's key dialogs load it */
+/** In its own chunk, as the wallet's key dialogs load it. A chunk that does
+ * not load (a deploy replaced it, or the network dropped) leaves a button that
+ * says so on its click, rather than taking the deploy card down with it */
 const KeyPanel = lazy(() =>
-  import("../../../components/Wallet/KeyPanel").then((m) => ({
-    default: m.KeyPanel,
-  }))
+  import("../../../components/Wallet/KeyPanel").then(
+    (m) => ({ default: m.KeyPanel }),
+    (error: unknown) => {
+      log.error(error, { context: { what: "load the key panel" } });
+      return {
+        default: ({ onError }: { onError: (message: string) => void }) => (
+          <CalloutAction
+            onClick={() =>
+              onError(
+                "The key storage did not load. Reload the page and try again."
+              )
+            }
+          >
+            Save keypair
+          </CalloutAction>
+        ),
+      };
+    }
+  )
 );
 
 /** This workspace's deployments, newest first */
