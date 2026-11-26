@@ -47,7 +47,7 @@ export interface TutorialDataParam {
    *
    * Thumbnails are displayed at 4:3 aspect ratio(278x216).
    *
-   * Defaults to `/tutorials/<tutorial-name>/thumbnail.*`.
+   * Defaults to `/tutorials/<tutorial-name>/thumbnail.*` when that folder holds one.
    */
   thumbnail?: string;
   /**
@@ -85,7 +85,7 @@ export interface TutorialDataParam {
 /** Tutorial data with optional fields filled with defaults. */
 export type TutorialData = RequiredKey<
   TutorialDataParam,
-  "thumbnail" | "pageCount" | "unixTimestamp" | "importComponent"
+  "pageCount" | "unixTimestamp" | "importComponent"
 >;
 
 export interface TutorialMetadata {

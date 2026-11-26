@@ -19,7 +19,10 @@ export const createTutorial = (tutorial: TutorialDataParam) => {
   const customTutorial =
     CUSTOM_TUTORIALS[PgCommon.toKebabFromTitle(tutorial.name)];
   tutorial.thumbnail ??= customTutorial.thumbnail;
-  tutorial.thumbnail = getTutorialPath(tutorial) + tutorial.thumbnail;
+  // A custom tutorial with pages in `src/` has no asset folder, so no thumbnail to point at
+  if (tutorial.thumbnail !== undefined) {
+    tutorial.thumbnail = getTutorialPath(tutorial) + tutorial.thumbnail;
+  }
 
   tutorial.pageCount ??= customTutorial.pageCount;
 
