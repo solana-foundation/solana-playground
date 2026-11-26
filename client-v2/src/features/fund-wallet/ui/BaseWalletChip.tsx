@@ -1,5 +1,7 @@
 import { ArrowUpRight, Wallet } from "lucide-react";
+import { useRef } from "react";
 
+import { clusterName, CLUSTERS } from "@/entities/cluster";
 import type { AirdropRefusal } from "@/shared/lib/faucet-limit";
 import {
   NETWORK_UNREACHABLE,
@@ -8,10 +10,16 @@ import {
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { shortAddress } from "@/shared/lib/short-address";
 import { shortKey } from "@/shared/lib/short-key";
+import { solAmount } from "@/shared/lib/sol-amount";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import { CopyButton } from "@/shared/ui/copy-button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/shared/ui/popover";
+import {
+  Popover,
+  PopoverClose,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/shared/ui/popover";
 import { Separator } from "@/shared/ui/separator";
 import { Spinner } from "@/shared/ui/spinner";
 import { Tag } from "@/shared/ui/tag";
@@ -87,14 +95,15 @@ export interface BaseWalletChipProps {
   onDisconnect?: () => void;
   /** A deploy from the connected wallet runs: it cannot be disconnected yet */
   isDisconnectHeld?: boolean;
+  /** Opens the Playground wallet's own window, where its accounts are added
+   * and switched; an extension's accounts live in the extension. Its button
+   * sits beside Connect a wallet, so it shows only while Connect does
+   * (`onConnect` and `onConnectOpen` set, nothing being connected). It gets
+   * the chip, so the window can open right above it */
+  onManage?: (chip: HTMLElement | null) => void;
+  /** The Playground account that pays, named once there are two or more */
+  account?: string;
 }
-
-const fmt = (sol: number) => `${Number(sol.toFixed(4))} SOL`;
-
-const clusterName = (cluster: string) =>
-  cluster === "mainnet"
-    ? "Mainnet"
-    : cluster.charAt(0).toUpperCase() + cluster.slice(1);
 
 /**
  * The deploying wallet at the console bar's end: address and balance, there
@@ -127,15 +136,20 @@ const BaseWalletChip = ({
   onConnect,
   onDisconnect,
   isDisconnectHeld = false,
+  onManage,
+  account,
 }: BaseWalletChipProps) => {
+  const chip = useRef<HTMLButtonElement>(null);
+  const manage = onManage && (() => onManage(chip.current));
   const short = shortAddress(address);
-  const shown = balance === undefined ? "…" : fmt(balance);
+  const shown = balance === undefined ? "…" : solAmount(balance);
   const isEmpty = balance === 0;
   const hasTwoBelow = state === "refused" || state === "away";
   return (
     <Popover onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
         <button
+          ref={chip}
           type="button"
           data-wallet-chip
           aria-label={`Wallet ${short}${
@@ -172,9 +186,16 @@ const BaseWalletChip = ({
                 />
               )}
               {owner ? owner.name : "Playground wallet"}
+              {!owner && account && (
+                <span className="text-muted-foreground">· {account}</span>
+              )}
             </span>
             {cluster && (
-              <Tag variant={cluster === "mainnet" ? "warning" : "neutral"}>
+              <Tag
+                variant={
+                  cluster === CLUSTERS.mainnet.cluster ? "warning" : "neutral"
+                }
+              >
                 {clusterName(cluster)}
               </Tag>
             )}
@@ -217,6 +238,7 @@ const BaseWalletChip = ({
               connect={connect}
               onConnectOpen={onConnectOpen}
               onConnect={onConnect}
+              onManage={manage}
             />
           )}
         </div>
@@ -264,7 +286,7 @@ const BaseWalletChip = ({
           {state === "received" && (
             <p role="status" className="text-[0.8125rem] text-success">
               {received
-                ? `Got ${fmt(received)}. You're ready to deploy`
+                ? `Got ${solAmount(received)}. You're ready to deploy`
                 : "Airdrop landed. You're ready to deploy"}
             </p>
           )}
@@ -345,32 +367,48 @@ const BaseWalletChip = ({
 };
 
 /**
- * Connecting an extension, under the Playground wallet: one button, then the
- * installed wallets, a wait for the one picked, or its decline. There is no
- * Cancel while waiting: an extension's request cannot be withdrawn, and a late
- * answer still lands, so closing the popover is the way out.
+ * The Playground wallet's own window, where its accounts are added and
+ * switched. The chip and the account menu opened two different wallets, and
+ * only one of them could switch (Sergey, 23 Nov)
+ */
+const AccountsButton = ({ onManage }: { onManage: () => void }) => (
+  <PopoverClose asChild>
+    <Button variant="secondary" size="sm" onClick={onManage}>
+      Accounts
+    </Button>
+  </PopoverClose>
+);
+
+/**
+ * Connecting an extension, under the Playground wallet: Connect a wallet
+ * (with Accounts beside it when `onManage` is set), then the installed
+ * wallets, a wait for the one picked, or its decline. There is no Cancel
+ * while waiting: an extension's request cannot be withdrawn, and a late answer
+ * still lands, so closing the popover is the way out.
  */
 const ConnectBlock = ({
   wallets,
   connect,
   onConnectOpen,
   onConnect,
+  onManage,
 }: {
   wallets: ChipWallet[];
   connect: ConnectState;
   onConnectOpen: () => void;
   onConnect: (name: string) => void;
+  onManage?: () => void;
 }) => {
   if (connect.kind === "idle") {
+    // Which wallet pays is this block's question, so the Playground
+    // accounts sit beside the extensions, not under the top-up (Almaz, 23 Nov)
     return (
-      <Button
-        variant="secondary"
-        size="sm"
-        className="mt-3 w-full"
-        onClick={onConnectOpen}
-      >
-        Connect a wallet
-      </Button>
+      <div className={cn("mt-3 grid gap-2", onManage && "grid-cols-2")}>
+        {onManage && <AccountsButton onManage={onManage} />}
+        <Button variant="secondary" size="sm" onClick={onConnectOpen}>
+          Connect a wallet
+        </Button>
+      </div>
     );
   }
   return (

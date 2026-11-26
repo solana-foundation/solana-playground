@@ -1,4 +1,11 @@
-import { FC, useCallback, useEffect, useRef, useState } from "react";
+import {
+  FC,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { Rnd } from "react-rnd";
 import styled, { css } from "styled-components";
 
@@ -32,6 +39,7 @@ import ErrorBoundary from "../ErrorBoundary";
 import FadeIn from "../FadeIn";
 import Img from "../Img";
 import Input from "../Input";
+import { forgetWalletAnchor, onWalletAnchor, walletAnchor } from "./anchor";
 import Balance from "./Balance";
 import { useDarken } from "./hooks";
 import Send from "./Send";
@@ -45,17 +53,66 @@ const Wallet = () => {
 
   if (!show || !wallet) return null;
 
+  return <FloatingWallet />;
+};
+
+/** Space between the wallet chip and the window opened above it */
+const ANCHOR_GAP = 8;
+
+const FloatingWallet = () => {
+  const rnd = useRef<Rnd>(null);
+  // The window stays where it opened until the user drags it, or until the
+  // chip asks again, which brings it back above the chip
+  const [anchor, setAnchor] = useState(walletAnchor);
+  const isDragged = useRef(false);
+  useEffect(() => {
+    const stop = onWalletAnchor((next) => {
+      isDragged.current = false;
+      setAnchor(next);
+    });
+    return () => {
+      stop();
+      forgetWalletAnchor();
+    };
+  }, []);
+
   const tabHeight = document
     .getElementById(PgView.ids.TABS)
     ?.getBoundingClientRect().height;
+  const top = tabHeight ?? 32;
+
+  // Opened from the chip, the window sits right above it, right edges
+  // aligned like the chip's popover (Almaz, 25 Nov). Its height is known only
+  // once it renders and grows as the balance and transactions load, so its
+  // bottom stays pinned above the chip until the user drags it.
+  useLayoutEffect(() => {
+    const el = rnd.current?.getSelfElement();
+    if (!anchor || !el) return;
+    const place = () => {
+      if (isDragged.current) return;
+      rnd.current?.updatePosition({
+        x: Math.max(12, anchor.right - WALLET_WIDTH),
+        y: Math.max(top, anchor.top - el.offsetHeight - ANCHOR_GAP),
+      });
+    };
+    place();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(place);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [anchor, top]);
 
   return (
     <>
       <WalletBound id={WALLET_BOUND_ID} />
       <Rnd
+        ref={rnd}
+        onDragStart={() => {
+          isDragged.current = true;
+        }}
         default={{
           x: window.innerWidth - (WALLET_WIDTH + 12),
-          y: tabHeight ?? 32,
+          y: top,
           width: "fit-content",
           height: "fit-content",
         }}
@@ -129,6 +186,8 @@ const WalletTopWrapper = styled.div`
 
 export const WalletName = () => {
   const wallet = useWallet();
+  // The account items are disabled while a deploy holds the accounts
+  useRenderOnChange(PgWallet.onDidChangeSwitchHeld);
   const { darken, lighten } = useDarken();
 
   const getAccountDisplayName = useCallback((account: WalletType) => {
@@ -170,6 +229,8 @@ export const WalletName = () => {
           {PgWallet.accounts.map((acc, i) => (
             <DropdownMenuItem
               key={"pg-" + i}
+              // A running deploy holds the accounts (`PgWallet.holdSwitch`)
+              disabled={PgWallet.isSwitchHeld}
               onSelect={() => PgWallet.switch(i)}
             >
               <MenuItemText>
@@ -181,12 +242,8 @@ export const WalletName = () => {
           {PgWallet.getConnectedStandardWallets().map((standardWallet) => (
             <DropdownMenuItem
               key={"standard-" + standardWallet.name}
-              onSelect={() => {
-                PgWallet.update({
-                  state: "sol",
-                  standardName: standardWallet.name,
-                });
-              }}
+              disabled={PgWallet.isSwitchHeld}
+              onSelect={() => PgWallet.selectStandard(standardWallet.name)}
             >
               {/* An image, which the item does not size as it does its icons */}
               <Img

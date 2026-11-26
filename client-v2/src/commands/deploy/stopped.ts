@@ -41,9 +41,8 @@ export const unclosedBufferLineFor =
     )}\` to reclaim its SOL.`;
 
 /**
- * The words for an amount a kept buffer holds, to two decimals as the session
- * footer's `formatBalance` shows a wallet's; under 0.005 SOL reads "less than
- * 0.01 SOL", and an unread balance "its SOL"
+ * The words for an amount a kept buffer holds, to two decimals; under 0.005 SOL
+ * reads "less than 0.01 SOL", and an unread balance "its SOL"
  */
 const heldWords = (sol: number | undefined) => {
   if (sol === undefined) return "its SOL";

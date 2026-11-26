@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { FC, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -12,6 +18,7 @@ import { AirdropRefusedError } from "../../commands/airdrop/report";
 import { toggleWallet } from "../../commands/connect/connect-wallet";
 import { FaucetRefusedToast } from "../../features/fund-wallet";
 import { PgConnection, PgView, PgWallet } from "../../utils";
+import { AccountsHeldError } from "../../utils/wallet/accounts-held";
 import { KeypairFileError } from "../../utils/wallet/keypair-file";
 import type { Faucet } from "./hooks";
 import Settings from "./Settings";
@@ -37,6 +44,11 @@ vi.mock("../../utils", () => ({
     import: vi.fn(),
     export: vi.fn(),
     hasKeysInPage: vi.fn(() => true),
+    isSwitchHeld: false,
+    onDidChangeSwitchHeld: (cb: (isHeld?: boolean) => void) => {
+      holdListeners.add(cb);
+      return { dispose: () => void holdListeners.delete(cb) };
+    },
   },
   PgConnection: { cluster: "devnet", getAirdropAmount: () => 5 },
 }));
@@ -47,7 +59,16 @@ vi.mock("./Modals/KeyFile", () => ({
   ExportKey: () => undefined,
 }));
 
-vi.mock("../../hooks", () => ({ useCopy: () => [false, vi.fn()] }));
+vi.mock("../../hooks", async () => ({
+  useCopy: () => [false, vi.fn()],
+  useRenderOnChange: (
+    await vi.importActual<typeof import("../../hooks/useRenderOnChange")>(
+      "../../hooks/useRenderOnChange"
+    )
+  ).useRenderOnChange,
+}));
+/** Who listens for the deploy's hold on the accounts */
+const holdListeners = vi.hoisted(() => new Set<(isHeld?: boolean) => void>());
 const airdropHook = vi.hoisted(() => ({
   airdrop: vi.fn(),
   faucet: "none" as Faucet,
@@ -150,6 +171,49 @@ const openMenu = async () => {
 };
 
 describe("wallet Settings menu", () => {
+  it("disables Add, Remove and Import once a deploy holds the accounts, with the window already open", async () => {
+    const wallet = PgWallet as unknown as { isSwitchHeld: boolean };
+    render(<Host />);
+    act(() => {
+      wallet.isSwitchHeld = true;
+      for (const cb of holdListeners) cb(true);
+    });
+    try {
+      await openMenu();
+      for (const name of [/^Add$/, /Remove/, /Import/]) {
+        expect(
+          screen.getByRole("menuitem", { name }).getAttribute("data-disabled")
+        ).not.toBeNull();
+      }
+      expect(
+        screen
+          .getByRole("menuitem", { name: /Rename/ })
+          .getAttribute("data-disabled")
+      ).toBeNull();
+    } finally {
+      wallet.isSwitchHeld = false;
+    }
+  });
+
+  it("enables Add, Remove and Import again once the deploy lets go of the accounts", async () => {
+    const wallet = PgWallet as unknown as { isSwitchHeld: boolean };
+    render(<Host />);
+    act(() => {
+      wallet.isSwitchHeld = true;
+      for (const cb of holdListeners) cb(true);
+    });
+    act(() => {
+      wallet.isSwitchHeld = false;
+      for (const cb of holdListeners) cb(false);
+    });
+    await openMenu();
+    for (const name of [/^Add$/, /Remove/, /Import/]) {
+      expect(
+        screen.getByRole("menuitem", { name }).getAttribute("data-disabled")
+      ).toBeNull();
+    }
+  });
+
   it("focuses the rename input after Rename, not the trigger", async () => {
     render(<Host />);
     await openMenu();
@@ -381,6 +445,20 @@ describe("wallet Settings menu", () => {
     await waitFor(() => expect(PgView.setToast).toHaveBeenCalledTimes(1));
     expect(vi.mocked(PgView.setToast).mock.calls[0][1]).toEqual({
       options: { name: "wallet-import-not-keypair" },
+    });
+    expect(told).toEqual([]);
+  });
+
+  it("says accounts are held when a deploy began after Import opened the picker", async () => {
+    vi.mocked(PgWallet.import).mockRejectedValueOnce(new AccountsHeldError());
+    render(<Host />);
+    await openMenu();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: /Import/ }));
+
+    await waitFor(() => expect(PgView.setToast).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(PgView.setToast).mock.calls[0][1]).toEqual({
+      options: { name: "wallet-accounts-held" },
     });
     expect(told).toEqual([]);
   });
