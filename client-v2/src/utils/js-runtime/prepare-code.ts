@@ -1,13 +1,10 @@
-import type {
-  CompilerOptions,
-  ImportDeclaration,
-  StringLiteral,
-} from "typescript";
+import type { CompilerOptions, ImportDeclaration } from "typescript";
 import {
   createSourceFile,
   flattenDiagnosticMessageText,
   isImportDeclaration,
   isNamespaceImport,
+  isStringLiteral,
   ScriptKind,
   ScriptTarget,
   transpileModule,
@@ -27,6 +24,30 @@ const TRANSPILE_OPTIONS: CompilerOptions = {
 const HIDDEN_GLOBALS = ["eval", "Function"];
 
 /**
+ * Any character but the line breaks TypeScript counts when it numbers lines
+ * (LF, CR, U+2028 and U+2029). Blanking the rest of a declaration keeps each
+ * break where it was: a lone CR left beside the next line's LF would join it
+ * into one CRLF and lose a line.
+ */
+const NOT_LINE_BREAK = /[^\n\r\u2028\u2029]/g;
+
+/**
+ * A string literal with its line continuations (a backslash before a line
+ * break) taken out: the same string on one line, so the hoisted imports stay
+ * on the first line and every later line keeps its number (`hoistImports`
+ * leaves each declaration's own line breaks in place). Escapes are matched in
+ * pairs, so an escaped backslash is never read as the start of a
+ * continuation.
+ *
+ * @param literal a string literal as written in the source
+ * @returns the literal without line continuations
+ */
+const withoutLineContinuations = (literal: string) =>
+  literal.replace(/\\(\r\n|[\s\S])/g, (escape, escaped: string) =>
+    /^(?:\r\n|[\n\r\u2028\u2029])$/.test(escaped) ? "" : escape
+  );
+
+/**
  * What an import declaration becomes: its package, awaited from the sandbox
  * (`__pgImport`, answered with the sandbox's own copy, `sandbox/runtime.ts`),
  * bound to the names it imports. A type-only import binds nothing at run time
@@ -35,10 +56,22 @@ const HIDDEN_GLOBALS = ["eval", "Function"];
  * @param index the declaration's place among the code's imports, which names
  * its module's binding
  * @returns a function of the declaration
+ * @throws {SyntaxError} naming the line, when the specifier is not a string
+ * literal: TypeScript's parser accepts any expression there and only its
+ * checker, which `transpileModule` does not run, rejects one
  */
 const importedFor = (index: number) => (declaration: ImportDeclaration) => {
-  const path = (declaration.moduleSpecifier as StringLiteral).text;
-  const imported = `await __pgImport(${JSON.stringify(path)})`;
+  const { moduleSpecifier } = declaration;
+  if (!isStringLiteral(moduleSpecifier)) {
+    const { line } = moduleSpecifier
+      .getSourceFile()
+      .getLineAndCharacterOfPosition(moduleSpecifier.getStart());
+    throw new SyntaxError(`Line ${line + 1}: String literal expected.`);
+  }
+  // Copied as written, not read and quoted again with `JSON.stringify`, which
+  // CodeQL's js/bad-code-sanitization flags in code built for execution
+  const specifier = withoutLineContinuations(moduleSpecifier.getText());
+  const imported = `await __pgImport(${specifier})`;
   const clause = declaration.importClause;
   if (!clause) return `${imported};`;
   if (clause.isTypeOnly) return "";
@@ -97,7 +130,7 @@ const hoistImports = (code: string) => {
     const text = rest.slice(start, declaration.end);
     rest =
       rest.slice(0, start) +
-      "\n".repeat(text.split("\n").length - 1) +
+      text.replace(NOT_LINE_BREAK, " ") +
       rest.slice(declaration.end);
   }
   return `${hoisted.join(" ")} ${rest}`;
@@ -233,6 +266,51 @@ if (import.meta.vitest) {
       expect(() =>
         prepareCode('const a = 1;\nimport * as ns from "a";\nconst x = ;')
       ).toThrow(/^Line 3: /);
+    });
+
+    it.each([
+      ["a line feed", "\n"],
+      ["a carriage return and line feed", "\r\n"],
+      ["a lone carriage return", "\r"],
+      ["a line separator", "\u2028"],
+      ["a paragraph separator", "\u2029"],
+    ])(
+      "loads an import whose specifier is continued after %s, and keeps the line numbers",
+      async (_, lineBreak) => {
+        const declaration = `import * as ns from "a\\${lineBreak}b";`;
+        expect(() => prepareCode(`${declaration}\nconst x = ;`)).toThrow(
+          /^Line 3: /
+        );
+        const seen = await runPrepared(`${declaration}\nseen.push(ns.x);`, {
+          ab: { x: 1 },
+        });
+        expect(seen).toEqual([1]);
+      }
+    );
+
+    it("reads an escaped backslash before a line continuation as a backslash", async () => {
+      const seen = await runPrepared(
+        'import * as ns from "a\\\\\\\nb";\nseen.push(ns.x);',
+        { "a\\b": { x: 1 } }
+      );
+      expect(seen).toEqual([1]);
+    });
+
+    it("loads an import whose specifier holds an escape", async () => {
+      const seen = await runPrepared(
+        'import * as ns from "a\\\\b";\nimport * as hex from "\\x63";\nseen.push(ns.x, hex.x);',
+        { "a\\b": { x: 1 }, c: { x: 2 } }
+      );
+      expect(seen).toEqual([1, 2]);
+    });
+
+    it("throws a SyntaxError naming the line of an import whose specifier is not a string", () => {
+      expect(() =>
+        prepareCode('const p = "a";\nimport x from p;\nseen.push(x);')
+      ).toThrow(/^Line 2: String literal expected\.$/);
+      expect(() => prepareCode("import x from `a`;")).toThrow(
+        /^Line 1: String literal expected\.$/
+      );
     });
 
     it("runs TypeScript with top-level await", async () => {
