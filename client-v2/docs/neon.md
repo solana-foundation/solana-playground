@@ -24,8 +24,10 @@ option is off, a preview the Git integration deploys runs with the project's Pre
 
 A push cancels the deploy it supersedes; a close cancels a deploy still running. PRs from forks and runs that
 Dependabot triggers get no deploy secrets and are skipped, and a Dependabot PR never gets a preview, even
-labelled by a human. The build runs on the runner, as `deploy-client-to-vercel-preview` does, and
-`vercel-install.sh` takes the wasm packages from Remote Cache with the runner's `VERCEL_TOKEN`.
+labelled by a human. The build runs on the runner, as `deploy-client-to-vercel-preview` does, but in a job with
+no credential: the `prepare` job fetches the wasm packages from Remote Cache with `VERCEL_TOKEN` and hands them
+over, and a package it could not fetch is rebuilt in the build and not stored (Tokens in
+[deploy-client-vercel.md](deploy-client-vercel.md#tokens)).
 
 The deployment gets only `DATABASE_URL` from the workflow. The app reads no other `DATABASE_*` variable, so the
 integration's project-level ones are unused there. A preview the Git integration deploys does read the Preview-scoped
