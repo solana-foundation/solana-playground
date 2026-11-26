@@ -93,7 +93,7 @@
       }
     },
     "thumbnail": {
-      "description": "The card's 4:3 image: a file next to tutorial.json (`thumbnail.jpg`), a path under `/tutorials/` or a full URL.",
+      "description": "A 4:3 image no screen shows today (client-v2 draws the brand cover instead); still required. A file next to tutorial.json (`thumbnail.jpg`), a path under `/tutorials/` or a full URL.",
       "type": "string",
       "minLength": 1
     },
