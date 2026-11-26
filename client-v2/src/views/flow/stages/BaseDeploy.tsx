@@ -99,9 +99,8 @@ export interface BaseDeployProps {
    * when the Fund dialog funds that wallet, else `undefined` and no button
    */
   fundFor?: (address: string) => (() => void) | undefined;
-  onSaveKeypair: () => void;
-  /** Under the key origin, the key page's Save keypair for the backup line */
-  backupSave?: ReactNode;
+  /** The backup line's Save keypair (`BaseBackupLine`'s `save`) */
+  backupSave: ReactNode;
   onDismissBackup: () => void;
   onStaleBuildAnswer: (deploy: boolean) => void;
   onInteract: () => void;
@@ -376,9 +375,8 @@ const DeployResult = ({
       {p.view.kind === "idle" && p.view.backup && (
         <BaseBackupLine
           cluster={latest.cluster}
-          onSave={p.onSaveKeypair}
-          onDismiss={p.onDismissBackup}
           save={p.backupSave}
+          onDismiss={p.onDismissBackup}
         />
       )}
     </div>

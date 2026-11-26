@@ -169,6 +169,16 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
       }
     : undefined;
 
+  const saveKeypair = () => {
+    try {
+      PgWallet.export();
+    } catch (error) {
+      reportButtonFailure("save the keypair")(error);
+      return;
+    }
+    PgStageDeploy.answerBackup(true);
+  };
+
   // Under the key origin the page holds no key to save: the key page's own
   // button sits in the backup line and saves the file on its click, and only
   // a saved file answers the line. A dialog around it was one more step, and
@@ -176,7 +186,7 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
   const account = PgWallet.hasKeysInPage()
     ? undefined
     : PgWallet.accounts[PgWallet.currentIndex];
-  const backupSave = account && (
+  const backupSave = account ? (
     <Suspense fallback={<CalloutAction disabled>Save keypair</CalloutAction>}>
       <KeyPanel
         action="export"
@@ -191,17 +201,9 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
         }
       />
     </Suspense>
+  ) : (
+    <CalloutAction onClick={saveKeypair}>Save keypair</CalloutAction>
   );
-
-  const saveKeypair = () => {
-    try {
-      PgWallet.export();
-    } catch (error) {
-      reportButtonFailure("save the keypair")(error);
-      return;
-    }
-    PgStageDeploy.answerBackup(true);
-  };
 
   // A record's cluster is whatever the browser stored; an explorer that
   // cannot open it gets no link rather than one to mainnet
@@ -256,7 +258,6 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
           void signInThenDeploy().catch(reportButtonFailure("deploy"))
         }
         fundFor={fundFor("deploy-card")}
-        onSaveKeypair={saveKeypair}
         backupSave={backupSave}
         onDismissBackup={() => PgStageDeploy.answerBackup(false)}
         onStaleBuildAnswer={(answer) => PgStageDeploy.answerStaleBuild(answer)}

@@ -11,23 +11,17 @@ import {
 
 export interface BaseBackupLineProps {
   cluster: string | null;
-  onSave: () => void;
-  onDismiss: () => void;
   /**
-   * The key page's own Save keypair, under the key origin, where the page
-   * holds no key to save: it saves on its own click, in place of the button
-   * that calls `onSave`
+   * The Save keypair button, a `CalloutAction`: one that saves the key the
+   * page holds, or under the key origin the key page's own, which saves on
+   * its own click
    */
-  save?: ReactNode;
+  save: ReactNode;
+  onDismiss: () => void;
 }
 
 /** Under a deploy result: the program is tied to this browser's Playground wallet */
-const BaseBackupLine = ({
-  cluster,
-  onSave,
-  onDismiss,
-  save,
-}: BaseBackupLineProps) => (
+const BaseBackupLine = ({ cluster, save, onDismiss }: BaseBackupLineProps) => (
   <Callout variant="info" aria-label="Keypair backup">
     <KeyRound />
     <CalloutDescription>
@@ -36,7 +30,7 @@ const BaseBackupLine = ({
       from another browser.
     </CalloutDescription>
     <CalloutActions>
-      {save ?? <CalloutAction onClick={onSave}>Save keypair</CalloutAction>}
+      {save}
       <CalloutAction quiet onClick={onDismiss}>
         Not now
       </CalloutAction>

@@ -51,6 +51,7 @@ describe("components/Wallet/KeyPanel", () => {
     const { container } = render(
       <BaseKeyPanel
         action="export"
+        onExported={() => {}}
         publicKey={PUBLIC_KEY}
         name="Wallet 1"
         origin={ORIGIN}
@@ -82,6 +83,7 @@ describe("components/Wallet/KeyPanel", () => {
       origin: ORIGIN,
       connect,
       readTokens,
+      onExported: () => {},
       onError: () => {},
     };
     const { rerender } = render(<BaseKeyPanel {...props} name="Wallet 1" />);
@@ -134,6 +136,7 @@ describe("components/Wallet/KeyPanel", () => {
     const { unmount } = render(
       <BaseKeyPanel
         action="import"
+        onImported={() => {}}
         origin={ORIGIN}
         connect={connect}
         readTokens={readTokens}
@@ -167,6 +170,7 @@ describe("components/Wallet/KeyPanel", () => {
       render(
         <BaseKeyPanel
           action="import"
+          onImported={() => {}}
           origin={ORIGIN}
           connect={connect}
           readTokens={readTokens}
@@ -198,6 +202,7 @@ describe("components/Wallet/KeyPanel", () => {
       render(
         <BaseKeyPanel
           action="import"
+          onImported={() => {}}
           origin={ORIGIN}
           connect={connect}
           readTokens={readTokens}
@@ -217,6 +222,7 @@ describe("components/Wallet/KeyPanel", () => {
     render(
       <BaseKeyPanel
         action="import"
+        onImported={() => {}}
         origin={ORIGIN}
         connect={() => () => () =>
           Promise.reject(new KeyFrameUnavailable("timeout"))}
@@ -239,6 +245,7 @@ describe("components/Wallet/KeyPanel", () => {
       render(
         <BaseKeyPanel
           action="import"
+          onImported={() => {}}
           origin={ORIGIN}
           connect={() => () => () =>
             Promise.reject(new KeyFrameUnavailable("timeout"))}
@@ -265,6 +272,7 @@ describe("components/Wallet/KeyPanel", () => {
     render(
       <BaseKeyPanel
         action="import"
+        onImported={() => {}}
         // eslint-disable-next-line unicorn/no-null -- the origin lookup's "none"
         origin={null}
         connect={fakePanel().connect}
@@ -280,6 +288,7 @@ describe("components/Wallet/KeyPanel", () => {
       const { container, unmount } = render(
         <BaseKeyPanel
           action="export"
+          onExported={() => {}}
           look={look}
           publicKey={PUBLIC_KEY}
           name="Wallet 1"
@@ -315,6 +324,7 @@ describe("components/Wallet/KeyPanel", () => {
     const { container } = render(
       <BaseKeyPanel
         action="export"
+        onExported={() => {}}
         look="callout"
         publicKey={PUBLIC_KEY}
         name="Wallet 1"
@@ -358,6 +368,7 @@ describe("components/Wallet/KeyPanel", () => {
     render(
       <BaseKeyPanel
         action="export"
+        onExported={() => {}}
         look="callout"
         publicKey={PUBLIC_KEY}
         name="Wallet 1"
@@ -389,6 +400,7 @@ describe("components/Wallet/KeyPanel", () => {
     render(
       <BaseKeyPanel
         action="export"
+        onExported={() => {}}
         publicKey={PUBLIC_KEY}
         name="Wallet 1"
         origin={ORIGIN}
@@ -416,5 +428,108 @@ describe("components/Wallet/KeyPanel", () => {
 
     ready({ origin: ORIGIN, source: frame.contentWindow });
     await waitFor(() => expect(srcs).toHaveLength(2));
+  });
+  describe("when the key page restarts", () => {
+    const readyFrom = (source: Window | null) =>
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "pg-wallet-keys:ready", version: 1 },
+          origin: ORIGIN,
+          source,
+        })
+      );
+    const frameOf = () =>
+      screen.getByTitle("Save keypair") as HTMLIFrameElement;
+    const exportPanel = (
+      connect: BaseKeyPanelProps["connect"],
+      results: { onError?: (m: string) => void; onBusy?: (b: boolean) => void }
+    ) =>
+      render(
+        <BaseKeyPanel
+          action="export"
+          publicKey={PUBLIC_KEY}
+          name="Wallet 1"
+          origin={ORIGIN}
+          connect={connect}
+          readTokens={readTokens}
+          onExported={() => {}}
+          onError={results.onError ?? (() => {})}
+          onBusy={results.onBusy}
+        />
+      );
+
+    it("says a save it was in the middle of did not finish", async () => {
+      const { connect, panel, srcs } = fakePanel();
+      const onError = vi.fn();
+      const onBusy = vi.fn();
+      exportPanel(connect, { onError, onBusy });
+      await waitFor(() => expect(srcs).toHaveLength(1));
+
+      panel.postMessage({ type: "busy", busy: true });
+      await waitFor(() => expect(onBusy).toHaveBeenCalledWith(true));
+      readyFrom(frameOf().contentWindow);
+
+      await waitFor(() => expect(srcs).toHaveLength(2));
+      expect(onError).toHaveBeenCalledWith(
+        "The key page restarted before it finished. Try again."
+      );
+      expect(onBusy.mock.calls).toEqual([[true], [false]]);
+    });
+
+    it("says nothing when it was not in the middle of a task", async () => {
+      const { connect, srcs } = fakePanel();
+      const onError = vi.fn();
+      exportPanel(connect, { onError });
+      await waitFor(() => expect(srcs).toHaveLength(1));
+
+      readyFrom(frameOf().contentWindow);
+      await waitFor(() => expect(srcs).toHaveLength(2));
+      expect(onError).not.toHaveBeenCalled();
+    });
+
+    it("connects once for a ready the key page sends twice", async () => {
+      const { connect, srcs } = fakePanel();
+      exportPanel(connect, {});
+      await waitFor(() => expect(srcs).toHaveLength(1));
+
+      const frame = frameOf().contentWindow;
+      readyFrom(frame);
+      readyFrom(frame);
+      await waitFor(() => expect(srcs).toHaveLength(2));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(srcs).toHaveLength(2);
+    });
+
+    it("leaves a ready that comes before the first connection to it", async () => {
+      const channel = new MessageChannel();
+      const srcs: string[] = [];
+      let connected: (port: MessagePort) => void = () => {};
+      const connect: BaseKeyPanelProps["connect"] = () => () => (src) => {
+        srcs.push(src);
+        return new Promise((resolve) => (connected = resolve));
+      };
+      exportPanel(connect, {});
+      await waitFor(() => expect(srcs).toHaveLength(1));
+
+      // The key page's first ready answers the connection under way
+      readyFrom(frameOf().contentWindow);
+      connected(channel.port1);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(srcs).toHaveLength(1);
+    });
+
+    it("hears no ready once it is gone", async () => {
+      const { connect, srcs } = fakePanel();
+      const onError = vi.fn();
+      const { unmount } = exportPanel(connect, { onError });
+      await waitFor(() => expect(srcs).toHaveLength(1));
+      const frame = frameOf().contentWindow;
+
+      unmount();
+      readyFrom(frame);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(srcs).toHaveLength(1);
+      expect(onError).not.toHaveBeenCalled();
+    });
   });
 });

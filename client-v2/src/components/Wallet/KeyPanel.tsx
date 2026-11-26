@@ -100,18 +100,11 @@ export const readThemeTokens = ({
 
 type PanelResults = {
   /**
-   * The panel stored the key in this file, by its public key; `isNew` is
-   * `false` when the key page already held it
-   */
-  onImported?: (publicKey: string, isNew: boolean) => void;
-  /**
    * The panel started or finished a task (a file read, a save). Called on
    * each change only, and with `false` when the panel goes mid-task, so
    * calls pair up (`useBusyPanels`)
    */
   onBusy?: (busy: boolean) => void;
-  /** The browser was handed the key file */
-  onExported?: () => void;
   /** What went wrong, in words the dialog can show; never key bytes */
   onError: (message: string) => void;
 };
@@ -119,7 +112,8 @@ type PanelResults = {
 /**
  * Which button of ours the key page's button looks like: the outline button
  * by default, a dialog's one action (`primary`), or a callout's action
- * (`callout`, drawn inside a `Callout` so it takes the callout's tone)
+ * (`callout`). The callout's action takes its tone from the `Callout` around
+ * it, so place that look inside one: outside, it has the neutral tone only
  */
 export type KeyPanelLook = "outline" | "primary" | "callout";
 
@@ -138,11 +132,32 @@ const BUTTON_LOOK: Record<
   },
 };
 
+/**
+ * What the panel does, with the result that ends it. An import's result is
+ * what every caller acts on, so it is required. A save's is optional: a
+ * dialog with a way on of its own (Remove's, a new wallet's) needs none, while
+ * a caller whose one action is this button (the Export dialog, the deploy
+ * card) closes or answers on it
+ */
+type PanelAction =
+  | {
+      action: "import";
+      /**
+       * The panel stored the key in this file, by its public key; `isNew` is
+       * `false` when the key page already held it
+       */
+      onImported: (publicKey: string, isNew: boolean) => void;
+    }
+  | {
+      action: "export";
+      publicKey: string;
+      name: string;
+      /** The browser was handed the key file */
+      onExported?: () => void;
+    };
+
 export type KeyPanelProps = PanelResults &
-  (
-    | { action: "import" }
-    | { action: "export"; publicKey: string; name: string }
-  ) & { className?: string; look?: KeyPanelLook };
+  PanelAction & { className?: string; look?: KeyPanelLook };
 
 export type BaseKeyPanelProps = KeyPanelProps & {
   /** The key origin; `null` when the build names none */
@@ -183,7 +198,7 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
   const hoverRef = useRef<HTMLSpanElement>(null);
   const ringRef = useRef<HTMLSpanElement>(null);
   const portRef = useRef<MessagePort | undefined>(undefined);
-  const resultsRef = useRef<PanelResults>(props);
+  const resultsRef = useRef<KeyPanelProps>(props);
   resultsRef.current = props;
   const nameRef = useRef(name);
   nameRef.current = name;
@@ -239,6 +254,12 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
       ) {
         return;
       }
+      // A task under way died with the page it ran in; its result never comes
+      if (isBusy) {
+        resultsRef.current.onError(
+          "The key page restarted before it finished. Try again."
+        );
+      }
       reconnect();
     };
 
@@ -290,10 +311,12 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
           const results = resultsRef.current;
           switch (data.type) {
             case "imported":
-              results.onImported?.(data.publicKey, data.isNew);
+              if (results.action === "import") {
+                results.onImported(data.publicKey, data.isNew);
+              }
               break;
             case "exported":
-              results.onExported?.();
+              if (results.action === "export") results.onExported?.();
               break;
             case "error":
               results.onError(data.message);

@@ -87,7 +87,7 @@ const props = (state: {
   onDeploy: vi.fn(),
   onAirdrop: vi.fn(),
   onSignIn: vi.fn(),
-  onSaveKeypair: vi.fn(),
+  backupSave: <button type="button">Save keypair</button>,
   onDismissBackup: vi.fn(),
   onStaleBuildAnswer: vi.fn(),
   onInteract: vi.fn(),
@@ -769,8 +769,9 @@ describe("BaseDeploy", () => {
     render(<BaseDeploy {...p} />);
 
     const line = screen.getByLabelText("Keypair backup");
-    fireEvent.click(within(line).getByRole("button", { name: "Save keypair" }));
-    expect(p.onSaveKeypair).toHaveBeenCalledOnce();
+    expect(
+      within(line).getByRole("button", { name: "Save keypair" })
+    ).toBeTruthy();
   });
 
   /** The prototype's first deploy: the pill, the IDL actions and the CLI guide under it */
