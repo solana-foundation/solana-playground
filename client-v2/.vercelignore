@@ -2,3 +2,4 @@
 # `GET /api/projects.test` would run a case that writes to the database.
 # `yarn test-api` runs them in CI; the deployment never needs them.
 api/**/*.test.mjs
+api/**/*.test.ts

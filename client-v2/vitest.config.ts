@@ -30,9 +30,10 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     setupFiles: ["src/setupTests.ts"],
-    // CRA's `testMatch`, so the same files are collected: not `e2e/`
+    // Client tests and API SDK-mocking tests: not `e2e/`
     // (Playwright), not `*.test.mjs` (`node --test`).
     include: [
+      "api/**/*.test.ts",
       "src/**/__tests__/**/*.{js,jsx,ts,tsx,mts}",
       "src/**/*.{spec,test}.{js,jsx,ts,tsx,mts}",
     ],
