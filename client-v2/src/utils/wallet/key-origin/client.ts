@@ -741,9 +741,14 @@ if (import.meta.vitest) {
       expect(post).not.toHaveBeenCalled();
     });
 
-    it("rejects on another protocol version", async () => {
+    it.each([
+      ["a later build", KEY_PROTOCOL_VERSION + 1],
+      // Some version-1 key pages lack `keep`: one would drop the request and
+      // leave the read waiting out the request timeout
+      ["version 1", 1],
+    ])("rejects a key page of %s at the handshake", async (_, version) => {
       const { connected, target, handed } = start();
-      readyWith(2)(target, ORIGIN);
+      readyWith(version)(target, ORIGIN);
       await expect(connected).rejects.toMatchObject({ reason: "version" });
       expect(handed).toHaveLength(0);
       expect(document.querySelector("iframe")).toBeNull();

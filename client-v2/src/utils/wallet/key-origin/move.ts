@@ -7,7 +7,7 @@ import { publicKeyOf } from "../signer-provider";
 import type { SerializedWalletState } from "../types";
 import type { KeyMove } from "../wallet-storage";
 import type { KeyFrame } from "./client";
-import { publicKeysOf } from "./protocol";
+import { keptOf, publicKeysOf } from "./protocol";
 
 /**
  * The key page did not confirm every key it was sent. Its message names the
@@ -140,16 +140,17 @@ export const moveKeysWith =
 /**
  * Hand the text of a wallet the page could not read to the key page, as it
  * is: it may hold keys in a shape nothing here parses. Resolves once the key
- * page stored it; only then may the page drop its copies.
+ * page confirmed it stored it, with a `null` reply; only then may the page
+ * drop its copies.
  *
  * @param frame the connection to the key page
  * @returns a function of the text
- * @throws any error the key page answers with
+ * @throws any error the key page answers with, or a reply other than `null`
  */
 export const keepTextWith =
   (frame: KeyFrame) =>
   async (text: string): Promise<void> => {
-    await frame.request({ type: "keep", text });
+    keptOf(await frame.request({ type: "keep", text }));
   };
 
 /**
@@ -576,6 +577,40 @@ if (import.meta.vitest) {
         expect(local.items.get(WALLET_LOCAL_KEY)).toBe(text);
         expect(local.items.get("wallet.unreadable")).toBe(text);
       });
+
+      it.each([
+        ["no result", undefined],
+        ["public keys", ["11111111111111111111111111111111"]],
+        ["a string", "kept"],
+      ])(
+        "keeps an unparseable wallet in place when the key page answers keep with %s instead of null",
+        async (_, result) => {
+          const text = "{not json";
+          const local = memoryLocal(text);
+          const record = walletOf(accountsOf(1));
+          const store = memoryStore(record);
+          const { frame } = fakeKeyPage();
+          const unconfirmed: KeyFrame = {
+            request: <T>(body: Parameters<KeyFrame["request"]>[0]) =>
+              body.type === "keep"
+                ? Promise.resolve(result as T)
+                : frame.request<T>(body),
+            close: () => {},
+          };
+
+          const read = await walletStorageWith(store)(local).readMovingKeys(
+            keyMoveWith(async () => unconfirmed)
+          );
+
+          expect(read).toEqual({
+            kind: "wallet",
+            wallet: keyless(record),
+            setAside: 0,
+          });
+          expect(local.items.get(WALLET_LOCAL_KEY)).toBe(text);
+          expect(local.items.get("wallet.unreadable")).toBe(text);
+        }
+      );
 
       it("leaves a pre-accounts wallet, which another tab is upgrading, in place", async () => {
         const text = JSON.stringify({ sk: realKey().kp });

@@ -1,5 +1,13 @@
-/** Version of the protocol between the app page and the key page */
-export const KEY_PROTOCOL_VERSION = 1;
+/**
+ * Version of the protocol between the app page and the key page. Bumped
+ * whenever a request is added or its shape changes: a key page of another
+ * build drops a request it does not know, and the app waits out the request
+ * timeout, then takes the key page for dead and fails every pending request;
+ * with the version bumped, the handshake fails at once instead.
+ *
+ * 2: `keep`, which some version-1 key pages (fork builds before it) lack
+ */
+export const KEY_PROTOCOL_VERSION = 2;
 
 /** `Omit` that keeps each member of a union apart */
 export type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
@@ -28,7 +36,7 @@ export type KeyRequest = { id: number } & (
  */
 export type KeyReply = {
   id: number;
-} & ( // eslint-disable-next-line unicorn/no-null -- `forget` answers "nothing" on the wire
+} & ( // eslint-disable-next-line unicorn/no-null -- `forget` and `keep` answer "nothing" on the wire
   | { ok: true; result: string[] | string | Uint8Array | null }
   | { ok: false; error: string }
 );
@@ -138,6 +146,16 @@ export const signatureOf = resultFor(isSignature)("sign");
 
 /** An `accounts` or `adopt` reply's result: every public key the key page holds */
 export const publicKeysOf = resultFor(isPublicKeys)("adopt");
+
+// eslint-disable-next-line unicorn/no-null -- the wire's "nothing"
+const isNothing = (x: unknown): x is null => x === null;
+
+/**
+ * A `keep` reply's result: `null` once the key page stored the text. Anything
+ * else is no confirmation. Today's key page answers only `null` or an error,
+ * so this guards the drop of the app's copy against a key page that changes.
+ */
+export const keptOf = resultFor(isNothing)("keep");
 
 /**
  * @param x a message received from another window
@@ -324,6 +342,8 @@ if (import.meta.vitest) {
       expect(createdKeyOf("pk")).toBe("pk");
       expect(signatureOf(signature)).toBe(signature);
       expect(publicKeysOf(["a", "b"])).toEqual(["a", "b"]);
+      // eslint-disable-next-line unicorn/no-null -- the wire's "nothing"
+      expect(keptOf(null)).toBeNull();
       const wrong: Array<[(x: unknown) => unknown, unknown]> = [
         [createdKeyOf, ["pk"]],
         [createdKeyOf, new Uint8Array(64)],
@@ -335,6 +355,10 @@ if (import.meta.vitest) {
         [publicKeysOf, "a"],
         [publicKeysOf, new Uint8Array(64)],
         [publicKeysOf, [1]],
+        [keptOf, undefined],
+        [keptOf, ""],
+        [keptOf, 0],
+        [keptOf, []],
       ];
       for (const [check, result] of wrong) {
         expect(() => check(result)).toThrow("a reply of the wrong shape");
