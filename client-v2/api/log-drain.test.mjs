@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { Readable } from "node:stream";
+import { PassThrough, Readable } from "node:stream";
 import { after, afterEach, beforeEach, mock, test } from "node:test";
 
 import {
@@ -223,5 +223,39 @@ test("drops receiver requests identified by the proxy path", async () => {
       .statusCode,
     204
   );
+  assert.equal(pushes.length, 0);
+});
+
+// @vercel/node's addHelpers for a Content-Type it does not parse: readBody ends the stream, restoreBody replays it.
+const callAfterVercelHelpers = async (body) => {
+  const req = Readable.from([Buffer.from(body)]);
+  await req.toArray();
+  const replay = new PassThrough();
+  const on = replay.on.bind(replay);
+  const originalOn = req.on.bind(req);
+  req.read = replay.read.bind(replay);
+  req.on = req.addListener = (name, cb) =>
+    name === "data" || name === "end" ? on(name, cb) : originalOn(name, cb);
+  replay.end(Buffer.from(body));
+  assert.ok(req.destroyed, "fixture must match the request the helper leaves");
+  req.method = "POST";
+  req.headers = {
+    "content-type": "application/x-ndjson",
+    "x-vercel-drain-secret": process.env.VERCEL_DRAIN_SECRET,
+  };
+  const res = { statusCode: 0, setHeader() {}, end() {} };
+  await handler(req, res);
+  return res;
+};
+
+test("reads an NDJSON batch that Vercel's helpers already consumed", async () => {
+  const body = [event("/a"), event("/b")].map(JSON.stringify).join("\n");
+  assert.equal((await callAfterVercelHelpers(body)).statusCode, 204);
+  assert.equal(pushes.length, 1);
+  assert.equal(JSON.parse(pushes[0].init.body).streams[0].values.length, 2);
+});
+
+test("rejects a malformed NDJSON batch that Vercel's helpers already consumed", async () => {
+  assert.equal((await callAfterVercelHelpers("not json\n")).statusCode, 400);
   assert.equal(pushes.length, 0);
 });
