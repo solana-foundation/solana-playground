@@ -112,9 +112,29 @@ const die = (text) => {
   process.exit(1);
 };
 
+// Variables a git hook exports to point git at its own repository. They outrank `git -C`, so with
+// GIT_DIR set `git -C <dir> rev-parse --show-toplevel` answers <dir>. Every call here names its
+// repository with -C, so the children never inherit them.
+const REPO_VARS = [
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_INDEX_FILE",
+  "GIT_COMMON_DIR",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_PREFIX",
+];
+
+/** The environment for a child process, without the variables that pin git to one repository. */
+export const repoEnv = () =>
+  Object.fromEntries(
+    Object.entries(env).filter(([name]) => !REPO_VARS.includes(name))
+  );
+
 const spawn = (cmd, args, stdio) => {
   const result = spawnSync(cmd, args, {
     encoding: "utf8",
+    env: repoEnv(),
     maxBuffer: 256 * 1024 * 1024,
     stdio,
   });
@@ -144,6 +164,9 @@ const tryRead = (cmd, args) => {
 };
 
 const git = (cwd, ...args) => run("git", ["-C", cwd, ...args]);
+
+/** The top of the working tree that holds `dir`. */
+export const topLevel = (dir) => git(dir, "rev-parse", "--show-toplevel");
 
 const short = (repo, rev) => git(repo, "rev-parse", "--short=8", rev);
 
@@ -561,6 +584,7 @@ const blobAt = (repo, rev, file) => {
     "git",
     ["-C", repo, "cat-file", "blob", `${rev}:${file}`],
     {
+      env: repoEnv(),
       maxBuffer: 256 * 1024 * 1024,
       stdio: ["ignore", "pipe", "ignore"],
     }
@@ -776,12 +800,11 @@ const assets = async (wt, toArg) => {
   console.log(`\n${ASSETS_COMMIT}: ${next}; nothing is committed`);
 };
 
-const worktreeArg = (arg) =>
-  git(arg || process.cwd(), "rev-parse", "--show-toplevel");
+const worktreeArg = (arg) => topLevel(arg || process.cwd());
 
 const main = async (args) => {
   const usage = `usage: ${self()} message <from> <to> | synced-to <subject> | prepare | commit [<worktree>] | publish [<worktree>] | assets <worktree> [<upstream commit>]`;
-  const repo = () => git(process.cwd(), "rev-parse", "--show-toplevel");
+  const repo = () => topLevel(process.cwd());
   switch (args[0]) {
     case "message":
       if (args.length !== 3) die(`usage: ${self()} message <from> <to>`);
