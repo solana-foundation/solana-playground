@@ -435,8 +435,8 @@ no other event is added or renamed.
 
 The build SHALL include a Markdown tutorial from `client-v2/public/tutorials/` only when
 `client-v2/src/tutorials/markdown-tutorials.json` lists its folder name, and SHALL take the tutorial's date from
-that entry's `added`. A listed name whose folder or `data.json` is missing SHALL fail the build with a message that
-names it.
+that entry's `added`. A listed name whose folder or `data.json` is missing, or whose `added` is not a whole number,
+SHALL fail the build with a message that names it.
 
 #### Scenario: A listed tutorial shows with its date (manual)
 
@@ -455,6 +455,12 @@ names it.
 
 - **WHEN** `markdown-tutorials.json` lists a name that has no folder under `public/tutorials/`
 - **THEN** the production build fails, and its error names that entry and the missing `data.json` path
+
+#### Scenario: An entry without a date fails the build (manual)
+
+- **WHEN** `markdown-tutorials.json` lists a name whose entry has no `added`, or an `added` that is not a whole
+  number
+- **THEN** the production build fails, and its error names that entry and `added`
 
 ### Requirement: An upstream sync imports only the listed assets
 

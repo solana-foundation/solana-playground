@@ -539,7 +539,15 @@ module.exports = {
           /** The markdown tutorials `src/tutorials/markdown-tutorials.json` enables */
           MARKDOWN_TUTORIALS: JSON.stringify(
             Object.entries(MARKDOWN_TUTORIAL_LIST).map(
-              ([tutorialName, { added }]) => {
+              ([tutorialName, entry]) => {
+                const added = entry?.added;
+                if (!Number.isInteger(added)) {
+                  throw new Error(
+                    `src/tutorials/markdown-tutorials.json: "${tutorialName}" needs "added", ` +
+                      "its date in whole unix seconds"
+                  );
+                }
+
                 const tutorialDir = path.join(
                   "public",
                   "tutorials",
