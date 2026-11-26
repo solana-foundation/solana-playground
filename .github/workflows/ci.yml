@@ -15,7 +15,42 @@ permissions:
   contents: read
 
 jobs:
+  # Finds which of `server/` and `wasm/` a pull request changes, so `checks` skips the jobs of an unchanged area; the workflow files count as a change to both, so a change to the jobs runs them.
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      server: ${{ steps.diff.outputs.server }}
+      wasm: ${{ steps.diff.outputs.wasm }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        if: github.event_name == 'pull_request'
+        with:
+          persist-credentials: false
+          fetch-depth: 2 # the merge commit and its first parent, the base branch's head: both sides of the diff
+
+      - name: Compare the changed files with the server and wasm paths
+        id: diff
+        if: github.event_name == 'pull_request'
+        run: |
+          workflows=(.github/workflows/ci.yml .github/workflows/reusable-checks.yml)
+          for area in server wasm; do
+            changed=$(git diff --name-only HEAD^1 HEAD -- "$area" "${workflows[@]}")
+            echo "$area and workflow files changed:"
+            echo "${changed:-none}"
+            if [ -n "$changed" ]; then
+              echo "$area=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "$area=false" >> "$GITHUB_OUTPUT"
+            fi
+          done
+
   checks:
+    needs: changes
     uses: ./.github/workflows/reusable-checks.yml # zizmor: ignore[self-repository] act rejects the $/ form, and both resolve to this commit
     with:
       build: false
+      # Only `false` skips: a push to `master` and a manual run leave the outputs empty, so every job runs.
+      server: ${{ needs.changes.outputs.server != 'false' }}
+      wasm: ${{ needs.changes.outputs.wasm != 'false' }}

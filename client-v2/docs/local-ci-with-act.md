@@ -42,7 +42,7 @@ Drop the `$(grep ...)` part on an x86-64 host.
 | Job | Command, from `client-v2` |
 | --- | --- |
 | `build` of `reusable-client-v2.yml` | `act --trust-project-actrc workflow_call -C .. -W .github/workflows/reusable-client-v2.yml -j build --input use-wasm-stubs=true` |
-| all of `ci.yml` | `act --trust-project-actrc pull_request -C .. -W .github/workflows/ci.yml` |
+| all of `ci.yml` | `act --trust-project-actrc workflow_dispatch -C .. -W .github/workflows/ci.yml` |
 | `cicd.yml` | `act --trust-project-actrc workflow_dispatch -C .. -W .github/workflows/cicd.yml` |
 
 `--input use-wasm-stubs=true`, when the stubs were asked for, skips the `wasm` job, as `client-v2-with-stubs.yml` does, and no stub job runs `wasm-pack`, so the arm64 overrides apply. The input has no default: a run without it fails before any job starts. Without `-W`, `-j checks` also matches the `checks` jobs of `ci.yml` and `cicd.yml`.
