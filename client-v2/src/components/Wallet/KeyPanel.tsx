@@ -254,8 +254,12 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
       ) {
         return;
       }
+      // Once per restart: a second ready before the reconnect commits finds
+      // no listener and no task
+      window.removeEventListener("message", handleRestart);
       // A task under way died with the page it ran in; its result never comes
       if (isBusy) {
+        setBusy(false);
         resultsRef.current.onError(
           "The key page restarted before it finished. Try again."
         );

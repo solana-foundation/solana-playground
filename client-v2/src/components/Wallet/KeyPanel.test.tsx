@@ -500,6 +500,24 @@ describe("components/Wallet/KeyPanel", () => {
       expect(srcs).toHaveLength(2);
     });
 
+    it("says a dropped task once for a ready the key page sends twice", async () => {
+      const { connect, panel, srcs } = fakePanel();
+      const onError = vi.fn();
+      const onBusy = vi.fn();
+      exportPanel(connect, { onError, onBusy });
+      await waitFor(() => expect(srcs).toHaveLength(1));
+
+      panel.postMessage({ type: "busy", busy: true });
+      await waitFor(() => expect(onBusy).toHaveBeenCalledWith(true));
+      const frame = frameOf().contentWindow;
+      readyFrom(frame);
+      readyFrom(frame);
+
+      await waitFor(() => expect(srcs).toHaveLength(2));
+      expect(onError).toHaveBeenCalledOnce();
+      expect(onBusy.mock.calls).toEqual([[true], [false]]);
+    });
+
     it("leaves a ready that comes before the first connection to it", async () => {
       const channel = new MessageChannel();
       const srcs: string[] = [];
