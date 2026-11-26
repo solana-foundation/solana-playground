@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 
 import { walletOriginEnv } from "@/shared/config/client-env";
 import { createLogger } from "@/shared/lib/logger";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
+import { CalloutAction } from "@/shared/ui/callout";
 
 import {
   connectKeyPanelFor,
@@ -13,6 +14,7 @@ import {
 } from "../../utils/wallet/key-origin/client";
 import { keyOriginFor } from "../../utils/wallet/key-origin/origin";
 import {
+  isKeyReady,
   isPanelMessage,
   PANEL_LABEL,
   type PanelMessage,
@@ -53,9 +55,18 @@ const RING_PX = 3;
  */
 const BUSY_LIMIT_MS = 60_000;
 
+/**
+ * How long the frame outlives a save. The key page says "exported" as it
+ * clicks the file's link, before the browser has taken the download; a caller
+ * that unmounts the panel at once (the Export dialog closes, the deploy card
+ * answers its backup line) removes the frame, and Chromium cancels the
+ * download with it.
+ */
+const EXPORT_HANDOFF_MS = 1_000;
+
 /** The elements the panel's look is read from */
 export type ThemeProbes = {
-  /** A hidden design-system outline button with the panel's label */
+  /** A hidden button of the panel's look (outline, primary or callout action) with its label */
   button: HTMLElement;
   /** Coloured as that button is on hover */
   hover: HTMLElement;
@@ -79,7 +90,10 @@ export const readThemeTokens = ({
   return {
     bg: style.backgroundColor,
     fg: style.color,
-    border: style.borderTopColor,
+    // A button with no edge (a callout's action) has a colour on its border
+    // all the same; the key page draws a 1px border from it, so none is sent
+    border:
+      style.borderTopWidth === "0px" ? "transparent" : style.borderTopColor,
     radius: style.borderTopLeftRadius,
     font: style.fontFamily,
     fontSize: style.fontSize,
@@ -95,27 +109,64 @@ export const readThemeTokens = ({
 
 type PanelResults = {
   /**
-   * The panel stored the key in this file, by its public key; `isNew` is
-   * `false` when the key page already held it
-   */
-  onImported?: (publicKey: string, isNew: boolean) => void;
-  /**
    * The panel started or finished a task (a file read, a save). Called on
    * each change only, and with `false` when the panel goes mid-task, so
    * calls pair up (`useBusyPanels`)
    */
   onBusy?: (busy: boolean) => void;
-  /** The browser was handed the key file */
-  onExported?: () => void;
   /** What went wrong, in words the dialog can show; never key bytes */
   onError: (message: string) => void;
 };
 
+/**
+ * Which button of ours the key page's button looks like: the outline button
+ * by default, a dialog's one action (`primary`), or a callout's action
+ * (`callout`). The callout's action takes its tone from the `Callout` around
+ * it, so place that look inside one: outside, it has the neutral tone only
+ */
+export type KeyPanelLook = "outline" | "primary" | "callout";
+
+/** The `Button` each look but the callout's copies, and that button's hover */
+const BUTTON_LOOK: Record<
+  Exclude<KeyPanelLook, "callout">,
+  { variant: "outline" | "default"; hover: string }
+> = {
+  outline: {
+    variant: "outline",
+    hover: "bg-muted text-foreground dark:bg-input/50",
+  },
+  primary: {
+    variant: "default",
+    hover: "bg-primary/80 text-primary-foreground",
+  },
+};
+
+/**
+ * What the panel does, with the result that ends it. An import's result is
+ * what every caller acts on, so it is required. A save's is optional: a
+ * dialog with a way on of its own (Remove's, a new wallet's) needs none, while
+ * a caller whose one action is this button (the Export dialog, the deploy
+ * card) closes or answers on it
+ */
+type PanelAction =
+  | {
+      action: "import";
+      /**
+       * The panel stored the key in this file, by its public key; `isNew` is
+       * `false` when the key page already held it
+       */
+      onImported: (publicKey: string, isNew: boolean) => void;
+    }
+  | {
+      action: "export";
+      publicKey: string;
+      name: string;
+      /** The browser was handed the key file */
+      onExported?: () => void;
+    };
+
 export type KeyPanelProps = PanelResults &
-  (
-    | { action: "import" }
-    | { action: "export"; publicKey: string; name: string }
-  ) & { className?: string };
+  PanelAction & { className?: string; look?: KeyPanelLook };
 
 export type BaseKeyPanelProps = KeyPanelProps & {
   /** The key origin; `null` when the build names none */
@@ -134,11 +185,20 @@ export type BaseKeyPanelProps = KeyPanelProps & {
 /**
  * The key page's import or export panel, in place of the button it replaces:
  * a hidden design-system button holds the layout, and the key page's frame
- * lies over it, drawn from that button's computed look and told again when
- * the theme changes. Results go to the dialog through the callbacks.
+ * lies over it, drawn from that button's computed look (`look`: an outline
+ * or primary button, or a callout's action) and told again when the theme or
+ * the window's width changes it. Results go to the caller, a dialog or the
+ * deploy card, through the callbacks.
  */
 export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
-  const { action, origin, connect, readTokens, className } = props;
+  const {
+    action,
+    origin,
+    connect,
+    readTokens,
+    className,
+    look = "outline",
+  } = props;
   const publicKey = props.action === "export" ? props.publicKey : undefined;
   const name = props.action === "export" ? props.name : undefined;
 
@@ -147,11 +207,17 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
   const hoverRef = useRef<HTMLSpanElement>(null);
   const ringRef = useRef<HTMLSpanElement>(null);
   const portRef = useRef<MessagePort | undefined>(undefined);
-  const resultsRef = useRef<PanelResults>(props);
+  const resultsRef = useRef<KeyPanelProps>(props);
   resultsRef.current = props;
   const nameRef = useRef(name);
   nameRef.current = name;
+  // A save told late (EXPORT_HANDOFF_MS); kept across the key page's restarts,
+  // dropped with the panel
+  const exportedRef = useRef<number | undefined>(undefined);
+  useEffect(() => () => clearTimeout(exportedRef.current), []);
   const [isUnavailable, setIsUnavailable] = useState(!origin);
+  // Counts the key page's restarts, each of which needs a connection of its own
+  const [connection, reconnect] = useReducer((n: number) => n + 1, 0);
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -193,18 +259,42 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
     };
     let port: MessagePort | undefined;
     const stopped = new AbortController();
+    const handleRestart = (event: MessageEvent) => {
+      if (
+        event.source !== frame.contentWindow ||
+        event.origin !== origin ||
+        !isKeyReady(event.data)
+      ) {
+        return;
+      }
+      // Once per restart: a second ready before the reconnect commits finds
+      // no listener and no task
+      window.removeEventListener("message", handleRestart);
+      // A task under way died with the page it ran in; its result never comes
+      if (isBusy) {
+        setBusy(false);
+        resultsRef.current.onError(
+          "The key page restarted before it finished. Try again."
+        );
+      }
+      reconnect();
+    };
 
     const send = (message: PanelMessage) => port?.postMessage(message);
-    const observer = new MutationObserver(() => {
+    const resendTokens = () => {
       const next = readTokens(probes);
       if (JSON.stringify(next) === JSON.stringify(tokens)) return;
       tokens = next;
       send({ type: "theme", tokens });
-    });
+    };
+    const observer = new MutationObserver(resendTokens);
     observer.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ["class", "style", "data-theme"],
     });
+    // A callout's action is taller on a phone, so a width that crosses the
+    // breakpoint changes the look too
+    window.addEventListener("resize", resendTokens);
 
     connect(origin)(
       frame,
@@ -217,6 +307,11 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
         }
         port = connected;
         portRef.current = connected;
+        // A frame whose element moves in the document (a layout that puts
+        // the panel elsewhere at another width) reloads: the key page starts
+        // again and says it is ready, while the port reaches its old document
+        // only, and the button would stay disabled
+        window.addEventListener("message", handleRestart);
         // The theme may have changed while the panel loaded
         send({ type: "theme", tokens });
         // So may the name, typed meanwhile
@@ -233,10 +328,16 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
           const results = resultsRef.current;
           switch (data.type) {
             case "imported":
-              results.onImported?.(data.publicKey, data.isNew);
+              if (results.action === "import") {
+                results.onImported(data.publicKey, data.isNew);
+              }
               break;
             case "exported":
-              results.onExported?.();
+              clearTimeout(exportedRef.current);
+              exportedRef.current = window.setTimeout(() => {
+                const latest = resultsRef.current;
+                if (latest.action === "export") latest.onExported?.();
+              }, EXPORT_HANDOFF_MS);
               break;
             case "error":
               results.onError(data.message);
@@ -279,6 +380,8 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
       isLive = false;
       stopped.abort();
       observer.disconnect();
+      window.removeEventListener("resize", resendTokens);
+      window.removeEventListener("message", handleRestart);
       port?.close();
       portRef.current = undefined;
       // Its "not busy" can no longer arrive
@@ -287,7 +390,7 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
       // load (the same URL again would be a fragment navigation, no load)
       frame.src = "about:blank";
     };
-  }, [origin, action, publicKey, connect, readTokens]);
+  }, [origin, action, publicKey, connect, readTokens, connection]);
 
   useEffect(() => {
     if (name !== undefined)
@@ -301,24 +404,50 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
       data-slot="key-panel"
       className={cn("relative inline-flex w-fit", className)}
     >
-      {/* Holds the button's place and gives the panel its look; never seen */}
-      <Button
-        ref={buttonRef}
-        type="button"
-        variant="outline"
-        tabIndex={-1}
-        aria-hidden
-        // Without the button's transition, its computed colours are the
-        // theme's at once, not the first frame of a fade
-        className="invisible transition-none"
-      >
-        {PANEL_LABEL[action]}
-      </Button>
-      <span
-        ref={hoverRef}
-        aria-hidden
-        className="pointer-events-none invisible absolute size-0 bg-muted text-foreground dark:bg-input/50"
-      />
+      {/* Holds the button's place and gives the panel its look; never seen.
+          Without the button's transition, its computed colours are the
+          theme's at once, not the first frame of a fade */}
+      {look === "callout" ? (
+        <>
+          <CalloutAction
+            ref={buttonRef}
+            tabIndex={-1}
+            aria-hidden
+            className="invisible transition-none"
+          >
+            {PANEL_LABEL[action]}
+          </CalloutAction>
+          {/* The class goes through CalloutAction's `cn`, so the hover fill
+              replaces the rest fill; Slot only joins a child's class */}
+          <CalloutAction
+            asChild
+            className="pointer-events-none invisible absolute size-0 bg-(--action-hover)"
+          >
+            <span ref={hoverRef} aria-hidden />
+          </CalloutAction>
+        </>
+      ) : (
+        <>
+          <Button
+            ref={buttonRef}
+            type="button"
+            variant={BUTTON_LOOK[look].variant}
+            tabIndex={-1}
+            aria-hidden
+            className="invisible transition-none"
+          >
+            {PANEL_LABEL[action]}
+          </Button>
+          <span
+            ref={hoverRef}
+            aria-hidden
+            className={cn(
+              "pointer-events-none invisible absolute size-0",
+              BUTTON_LOOK[look].hover
+            )}
+          />
+        </>
+      )}
       <span
         ref={ringRef}
         aria-hidden

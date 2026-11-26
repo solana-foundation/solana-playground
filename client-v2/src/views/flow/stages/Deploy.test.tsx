@@ -57,8 +57,8 @@ const mocks = vi.hoisted(() => ({
   signIn: vi.fn(),
   signInFor: vi.fn(),
   automaticAirdrop: false,
-  setModal: vi.fn(),
-  ExportKey: () => undefined,
+  /** The key page's panel, as the backup line sees it: what it was given */
+  keyPanel: vi.fn(),
   /** The network the deploy's endpoint answers for, read before any send */
   endpointCluster: "devnet",
   /** Runs while the network is read, as a user acting during a slow read */
@@ -93,11 +93,19 @@ vi.mock("../../../utils", async () => ({
       },
     },
   },
-  PgView: { setModal: mocks.setModal },
+  PgView: {},
   PgWallet: mocks.wallet,
 }));
-vi.mock("../../../components/Wallet/Modals/KeyFile", () => ({
-  ExportKey: mocks.ExportKey,
+// The key page's own Save keypair, which saves on its click and says so
+vi.mock("../../../components/Wallet/KeyPanel", () => ({
+  KeyPanel: (props: { onExported: () => void }) => {
+    mocks.keyPanel(props);
+    return (
+      <button type="button" onClick={props.onExported}>
+        Save keypair
+      </button>
+    );
+  },
 }));
 // The real check reads the endpoint's genesis hash; here the endpoint
 // answers for `mocks.endpointCluster`
@@ -211,6 +219,7 @@ afterEach(() => {
   // eslint-disable-next-line unicorn/no-null -- `PgWallet.current` is `null` while no wallet is current
   mocks.wallet.current = null;
   mocks.wallet.accounts = [];
+  mocks.wallet.currentIndex = -1;
   mocks.wallet.hasKeysInPage.mockReturnValue(true);
   mocks.endpointCluster = "devnet";
   mocks.duringNetworkRead = undefined;
@@ -661,8 +670,15 @@ describe("Deploy stage", () => {
     expect(events()).toContain("deploy_backup_saved");
   });
 
-  it("saves the keypair through the key panel under the key origin", async () => {
+  it("saves the keypair with the key page's own button in the line under the key origin", async () => {
     mocks.wallet.hasKeysInPage.mockReturnValue(false);
+    mocks.wallet.accounts = [
+      {
+        name: "Wallet 1",
+        publicKey: "KeyOrigin1111111111111111111111111111111111",
+      },
+    ];
+    mocks.wallet.currentIndex = 0;
     mocks.wallet.current = {
       isPg: true,
       publicKey: {
@@ -691,21 +707,18 @@ describe("Deploy stage", () => {
       )
     );
 
-    await act(async () =>
-      fireEvent.click(screen.getByRole("button", { name: "Save keypair" }))
+    const save = await screen.findByRole("button", { name: "Save keypair" });
+    expect(mocks.keyPanel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "export",
+        look: "callout",
+        publicKey: "KeyOrigin1111111111111111111111111111111111",
+        name: "Wallet 1",
+      })
     );
+    // No dialog in between: the panel's own click saves the file
+    await act(async () => fireEvent.click(save));
     expect(mocks.wallet.export).not.toHaveBeenCalled();
-    expect(mocks.setModal).toHaveBeenCalledWith(mocks.ExportKey, {
-      onExported: expect.any(Function),
-    });
-    // Opening the dialog is not a backup; saving the file is
-    expect(screen.getByLabelText("Keypair backup")).toBeTruthy();
-
-    const [, props] = mocks.setModal.mock.calls[0] as [
-      unknown,
-      { onExported: () => void }
-    ];
-    await act(async () => props.onExported());
     expect(screen.queryByLabelText("Keypair backup")).toBeNull();
     expect(events()).toContain("deploy_backup_saved");
   });

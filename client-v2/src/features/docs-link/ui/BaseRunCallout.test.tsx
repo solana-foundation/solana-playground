@@ -174,4 +174,19 @@ describe("BaseRunCallout", () => {
     expect(handlers.onCheckAgain).toHaveBeenCalledTimes(1);
     expect(handlers.onNotNow).toHaveBeenCalledTimes(1);
   });
+
+  it("draws Not now quiet on the top-up card, so Check again reads as the action", () => {
+    callout({
+      kind: "funding",
+      address: "Wa11et",
+      balance: 0,
+      needed: 0.02,
+      previous: { kind: "idle" },
+    });
+    const classes = (name: string) =>
+      screen.getByRole("button", { name }).className.split(" ");
+
+    expect(classes("Not now")).toContain("bg-transparent");
+    expect(classes("Check again")).not.toContain("bg-transparent");
+  });
 });

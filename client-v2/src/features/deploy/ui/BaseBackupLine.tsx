@@ -1,4 +1,5 @@
 import { KeyRound } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { networkInSentence, UNKNOWN_NETWORK } from "@/constants";
 import {
@@ -10,16 +11,17 @@ import {
 
 export interface BaseBackupLineProps {
   cluster: string | null;
-  onSave: () => void;
+  /**
+   * The Save keypair button, a `CalloutAction`: one that saves the key the
+   * page holds, or under the key origin the key page's own, which saves on
+   * its own click
+   */
+  save: ReactNode;
   onDismiss: () => void;
 }
 
 /** Under a deploy result: the program is tied to this browser's Playground wallet */
-const BaseBackupLine = ({
-  cluster,
-  onSave,
-  onDismiss,
-}: BaseBackupLineProps) => (
+const BaseBackupLine = ({ cluster, save, onDismiss }: BaseBackupLineProps) => (
   <Callout variant="info" aria-label="Keypair backup">
     <KeyRound />
     <CalloutDescription>
@@ -28,8 +30,10 @@ const BaseBackupLine = ({
       from another browser.
     </CalloutDescription>
     <CalloutActions>
-      <CalloutAction onClick={onSave}>Save keypair</CalloutAction>
-      <CalloutAction onClick={onDismiss}>Not now</CalloutAction>
+      {save}
+      <CalloutAction quiet onClick={onDismiss}>
+        Not now
+      </CalloutAction>
     </CalloutActions>
   </Callout>
 );

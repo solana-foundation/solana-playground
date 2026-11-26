@@ -741,7 +741,7 @@ function PlaygroundComponents() {
         </div>
       </Block>
 
-      <Block id="callout" title="Callout" source="playground" registry="callout" note="A note in a page or a form: a tint and a hairline, calm enough to read past. Alert speaks for the whole page. A callout speaks for the place it sits. Its actions are CalloutAction, which has no surface of its own and takes the callout's tone, never a Button." className="block">
+      <Block id="callout" title="Callout" source="playground" registry="callout" note="A note in a page or a form: a tint and a hairline, calm enough to read past. Alert speaks for the whole page. A callout speaks for the place it sits. Its actions are CalloutAction, which has no surface of its own and takes the callout's tone, never a Button. A quiet action is the way past the callout, such as Not now: no fill and muted ink until hovered." className="block">
         <div className="grid max-w-xl gap-3">
           <Callout variant="info">
             <Info />
@@ -778,6 +778,13 @@ function PlaygroundComponents() {
             <CalloutActions>
               <CalloutAction>Sign in with GitHub</CalloutAction>
               <CalloutAction>Add an API key</CalloutAction>
+            </CalloutActions>
+          </Callout>
+          <Callout variant="info">
+            <CalloutDescription>Save this program&apos;s keypair to deploy it again from another browser.</CalloutDescription>
+            <CalloutActions>
+              <CalloutAction>Save keypair</CalloutAction>
+              <CalloutAction quiet>Not now</CalloutAction>
             </CalloutActions>
           </Callout>
         </div>

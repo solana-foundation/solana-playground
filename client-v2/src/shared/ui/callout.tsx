@@ -91,12 +91,15 @@ function CalloutActions({ className, ...props }: React.ComponentProps<"div">) {
    their order, the first the way out the callout expects. Thumb sized on a
    phone. `asChild` lends the look to another button, an AsyncButton that
    waits on its click; the edge, nudge and hovers a Button brings are cleared
-   here, and hover reads one property so dark mode has no fill of its own. */
+   here, and hover reads one property so dark mode has no fill of its own.
+   `quiet` is the way past the callout, such as Not now: no fill and the muted
+   ink until hovered, so the action beside it reads as the one expected. */
 function CalloutAction({
   className,
   asChild = false,
+  quiet = false,
   ...props
-}: React.ComponentProps<"button"> & { asChild?: boolean }) {
+}: React.ComponentProps<"button"> & { asChild?: boolean; quiet?: boolean }) {
   const Comp = asChild ? Slot.Root : "button";
   return (
     <Comp
@@ -104,6 +107,8 @@ function CalloutAction({
       data-slot="callout-action"
       className={cn(
         "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border-0 bg-clip-border px-3 text-[0.8rem] font-act whitespace-nowrap text-current transition-colors outline-none [--action-rest:color-mix(in_oklab,var(--foreground)_8%,transparent)] [--action-hover:color-mix(in_oklab,var(--foreground)_14%,transparent)] group-data-[variant=info]/callout:[--action-rest:color-mix(in_oklab,var(--brand-purple)_15%,transparent)] group-data-[variant=info]/callout:[--action-hover:color-mix(in_oklab,var(--brand-purple)_25%,transparent)] group-data-[variant=warning]/callout:[--action-rest:color-mix(in_oklab,var(--warning)_15%,transparent)] group-data-[variant=warning]/callout:[--action-hover:color-mix(in_oklab,var(--warning)_25%,transparent)] group-data-[variant=success]/callout:[--action-rest:color-mix(in_oklab,var(--success)_15%,transparent)] group-data-[variant=success]/callout:[--action-hover:color-mix(in_oklab,var(--success)_25%,transparent)] group-data-[variant=error]/callout:[--action-rest:color-mix(in_oklab,var(--error)_15%,transparent)] group-data-[variant=error]/callout:[--action-hover:color-mix(in_oklab,var(--error)_25%,transparent)] bg-(--action-rest) hover:bg-(--action-hover) dark:hover:bg-(--action-hover) hover:text-current active:not-aria-[haspopup]:translate-y-0 focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 max-md:h-11 max-md:text-sm [&_svg]:size-3.5",
+        quiet &&
+          "bg-transparent text-muted-foreground hover:bg-(--action-rest) hover:text-foreground dark:hover:bg-(--action-rest)",
         className
       )}
       {...props}

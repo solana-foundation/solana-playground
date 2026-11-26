@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 
 import { NETWORKS } from "@/constants";
 import { payingAccountName } from "@/entities/wallet";
@@ -11,6 +11,7 @@ import { IdlBuildGuide } from "@/features/idl-build-guide";
 import { ProgramKeypair } from "@/features/program-keypair";
 import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { CalloutAction } from "@/shared/ui/callout";
 import { requestConsole } from "@/widgets/layout-shell";
 import { pickNetwork } from "@/widgets/settings-page";
 import { useNetworkHold } from "@/widgets/status";
@@ -42,9 +43,15 @@ import IdlActions, {
   openInteract,
   useIdlName,
 } from "./IdlActions";
+import { loadKeyPanel } from "./lazy-key-panel";
 import { markIfToldByStage } from "./stage-failure";
 
 const log = createLogger("flow:deploy");
+
+/** In its own chunk, apart from the deploy stage's */
+const KeyPanel = lazy(
+  loadKeyPanel(() => import("../../../components/Wallet/KeyPanel"))
+);
 
 /** This workspace's deployments, newest first */
 const readHistory = () =>
@@ -150,19 +157,6 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
   const payer = wallet ? payerFor(wallet) : undefined;
 
   const saveKeypair = () => {
-    // Under the key origin the page holds no key to save: the key page's panel
-    // saves the file, and only a saved file answers the backup line
-    if (!PgWallet.hasKeysInPage()) {
-      void (async () => {
-        const { ExportKey } = await import(
-          "../../../components/Wallet/Modals/KeyFile"
-        );
-        await PgView.setModal(ExportKey, {
-          onExported: () => PgStageDeploy.answerBackup(true),
-        });
-      })().catch(reportButtonFailure("save the keypair"));
-      return;
-    }
     try {
       PgWallet.export();
     } catch (error) {
@@ -171,6 +165,32 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
     }
     PgStageDeploy.answerBackup(true);
   };
+
+  // Under the key origin the page holds no key to save: the key page's own
+  // button sits in the backup line and saves the file on its click, and only
+  // a saved file answers the line. A dialog around it was one more step, and
+  // its Done read as the save (user feedback, 26 Nov).
+  const account = PgWallet.hasKeysInPage()
+    ? undefined
+    : PgWallet.accounts[PgWallet.currentIndex];
+  const backupSave = account ? (
+    <Suspense fallback={<CalloutAction disabled>Save keypair</CalloutAction>}>
+      <KeyPanel
+        action="export"
+        look="callout"
+        publicKey={account.publicKey}
+        name={account.name}
+        onExported={() => PgStageDeploy.answerBackup(true)}
+        onError={(message) =>
+          PgView.setToast(() => <span>{message}</span>, {
+            options: { name: "keypair-save-failed" },
+          })
+        }
+      />
+    </Suspense>
+  ) : (
+    <CalloutAction onClick={saveKeypair}>Save keypair</CalloutAction>
+  );
 
   // A record's cluster is whatever the browser stored; an explorer that
   // cannot open it gets no link rather than one to mainnet
@@ -225,7 +245,7 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
           void signInThenDeploy().catch(reportButtonFailure("deploy"))
         }
         fundFor={fundFor("deploy-card")}
-        onSaveKeypair={saveKeypair}
+        backupSave={backupSave}
         onDismissBackup={() => PgStageDeploy.answerBackup(false)}
         onStaleBuildAnswer={(answer) => PgStageDeploy.answerStaleBuild(answer)}
         onInteract={() => PgFlow.setStage("interact")}

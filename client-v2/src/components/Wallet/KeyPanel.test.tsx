@@ -13,6 +13,7 @@ import {
   BaseKeyPanel,
   type BaseKeyPanelProps,
   KEY_PANEL_UNAVAILABLE,
+  readThemeTokens,
 } from "./KeyPanel";
 
 const ORIGIN = "http://127.0.0.1:3006";
@@ -50,6 +51,7 @@ describe("components/Wallet/KeyPanel", () => {
     const { container } = render(
       <BaseKeyPanel
         action="export"
+        onExported={() => {}}
         publicKey={PUBLIC_KEY}
         name="Wallet 1"
         origin={ORIGIN}
@@ -81,6 +83,7 @@ describe("components/Wallet/KeyPanel", () => {
       origin: ORIGIN,
       connect,
       readTokens,
+      onExported: () => {},
       onError: () => {},
     };
     const { rerender } = render(<BaseKeyPanel {...props} name="Wallet 1" />);
@@ -133,6 +136,7 @@ describe("components/Wallet/KeyPanel", () => {
     const { unmount } = render(
       <BaseKeyPanel
         action="import"
+        onImported={() => {}}
         origin={ORIGIN}
         connect={connect}
         readTokens={readTokens}
@@ -157,6 +161,38 @@ describe("components/Wallet/KeyPanel", () => {
     expect(onBusy.mock.calls).toEqual([[true], [false], [true], [false]]);
   });
 
+  it("tells of a save only once the browser has had time to take the file", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const { connect, panel, srcs } = fakePanel();
+      const onExported = vi.fn();
+      render(
+        <BaseKeyPanel
+          action="export"
+          publicKey={PUBLIC_KEY}
+          name="Wallet 1"
+          origin={ORIGIN}
+          connect={connect}
+          readTokens={readTokens}
+          onExported={onExported}
+          onError={() => {}}
+        />
+      );
+      await waitFor(() => expect(srcs).toHaveLength(1));
+      panel.postMessage({ type: "exported" });
+      // The message is taken, but the caller (which may unmount the frame
+      // and cancel the download with it) is not told yet
+      await vi.advanceTimersByTimeAsync(50);
+      expect(onExported).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(onExported).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("gives up on a panel that stays busy, and says so", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
@@ -166,6 +202,7 @@ describe("components/Wallet/KeyPanel", () => {
       render(
         <BaseKeyPanel
           action="import"
+          onImported={() => {}}
           origin={ORIGIN}
           connect={connect}
           readTokens={readTokens}
@@ -197,6 +234,7 @@ describe("components/Wallet/KeyPanel", () => {
       render(
         <BaseKeyPanel
           action="import"
+          onImported={() => {}}
           origin={ORIGIN}
           connect={connect}
           readTokens={readTokens}
@@ -216,6 +254,7 @@ describe("components/Wallet/KeyPanel", () => {
     render(
       <BaseKeyPanel
         action="import"
+        onImported={() => {}}
         origin={ORIGIN}
         connect={() => () => () =>
           Promise.reject(new KeyFrameUnavailable("timeout"))}
@@ -238,6 +277,7 @@ describe("components/Wallet/KeyPanel", () => {
       render(
         <BaseKeyPanel
           action="import"
+          onImported={() => {}}
           origin={ORIGIN}
           connect={() => () => () =>
             Promise.reject(new KeyFrameUnavailable("timeout"))}
@@ -264,6 +304,7 @@ describe("components/Wallet/KeyPanel", () => {
     render(
       <BaseKeyPanel
         action="import"
+        onImported={() => {}}
         // eslint-disable-next-line unicorn/no-null -- the origin lookup's "none"
         origin={null}
         connect={fakePanel().connect}
@@ -272,5 +313,273 @@ describe("components/Wallet/KeyPanel", () => {
       />
     );
     expect(screen.getByText(KEY_PANEL_UNAVAILABLE)).toBeTruthy();
+  });
+
+  it("takes its look from a callout's action, or a dialog's primary button, when asked", () => {
+    const placeholderFor = (look: "callout" | "primary") => {
+      const { container, unmount } = render(
+        <BaseKeyPanel
+          action="export"
+          onExported={() => {}}
+          look={look}
+          publicKey={PUBLIC_KEY}
+          name="Wallet 1"
+          origin={ORIGIN}
+          connect={fakePanel().connect}
+          readTokens={readTokens}
+          onError={() => {}}
+        />
+      );
+      const found = container.querySelector(
+        "[data-slot=callout-action], [data-slot=button]"
+      );
+      const slot = found?.getAttribute("data-slot");
+      const variant = found?.getAttribute("data-variant") ?? undefined;
+      const hidden = found?.getAttribute("aria-hidden");
+      unmount();
+      return { slot, variant, hidden };
+    };
+
+    expect(placeholderFor("callout")).toEqual({
+      slot: "callout-action",
+      variant: undefined,
+      hidden: "true",
+    });
+    expect(placeholderFor("primary")).toEqual({
+      slot: "button",
+      variant: "default",
+      hidden: "true",
+    });
+  });
+
+  it("reads a callout action's hover from a probe holding only the hover fill", () => {
+    const { container } = render(
+      <BaseKeyPanel
+        action="export"
+        onExported={() => {}}
+        look="callout"
+        publicKey={PUBLIC_KEY}
+        name="Wallet 1"
+        origin={ORIGIN}
+        connect={fakePanel().connect}
+        readTokens={readTokens}
+        onError={() => {}}
+      />
+    );
+    const probes = container.querySelectorAll("[data-slot=callout-action]");
+    const hover = probes[probes.length - 1].className.split(" ");
+
+    expect(hover).toContain("bg-(--action-hover)");
+    expect(hover).not.toContain("bg-(--action-rest)");
+  });
+
+  it("sends no border colour for a button with no edge", () => {
+    const probe = (border: string) => {
+      const element = document.createElement("span");
+      element.style.border = border;
+      document.body.append(element);
+      return element;
+    };
+    const hover = probe("0");
+    const ring = probe("1px solid red");
+
+    expect(
+      readThemeTokens({ button: probe("0 solid white"), hover, ring }).border
+    ).toBe("transparent");
+    // An edged button sends its edge's colour as the browser computes it
+    const edged = probe("1px solid white");
+    expect(readThemeTokens({ button: edged, hover, ring }).border).toBe(
+      getComputedStyle(edged).borderTopColor
+    );
+    expect(getComputedStyle(edged).borderTopColor).not.toBe("transparent");
+  });
+
+  it("sends the look again when the window's width changes it", async () => {
+    const { connect, received } = fakePanel();
+    let height = "32px";
+    render(
+      <BaseKeyPanel
+        action="export"
+        onExported={() => {}}
+        look="callout"
+        publicKey={PUBLIC_KEY}
+        name="Wallet 1"
+        origin={ORIGIN}
+        connect={connect}
+        readTokens={() => ({ height })}
+        onError={() => {}}
+      />
+    );
+    await waitFor(() =>
+      expect(received).toContainEqual({
+        type: "theme",
+        tokens: { height: "32px" },
+      })
+    );
+
+    height = "44px";
+    window.dispatchEvent(new Event("resize"));
+    await waitFor(() =>
+      expect(received).toContainEqual({
+        type: "theme",
+        tokens: { height: "44px" },
+      })
+    );
+  });
+
+  it("connects again when the key page restarts in its frame, as a moved frame does", async () => {
+    const { connect, srcs } = fakePanel();
+    render(
+      <BaseKeyPanel
+        action="export"
+        onExported={() => {}}
+        publicKey={PUBLIC_KEY}
+        name="Wallet 1"
+        origin={ORIGIN}
+        connect={connect}
+        readTokens={readTokens}
+        onError={() => {}}
+      />
+    );
+    await waitFor(() => expect(srcs).toHaveLength(1));
+    const frame = screen.getByTitle("Save keypair") as HTMLIFrameElement;
+    const ready = (from: { origin: string; source: Window | null }) =>
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "pg-wallet-keys:ready", version: 1 },
+          origin: from.origin,
+          source: from.source,
+        })
+      );
+
+    // Another window, or another origin, is not this panel's key page
+    ready({ origin: "https://elsewhere.test", source: frame.contentWindow });
+    ready({ origin: ORIGIN, source: window });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(srcs).toHaveLength(1);
+
+    ready({ origin: ORIGIN, source: frame.contentWindow });
+    await waitFor(() => expect(srcs).toHaveLength(2));
+  });
+  describe("when the key page restarts", () => {
+    const readyFrom = (source: Window | null) =>
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "pg-wallet-keys:ready", version: 1 },
+          origin: ORIGIN,
+          source,
+        })
+      );
+    const frameOf = () =>
+      screen.getByTitle("Save keypair") as HTMLIFrameElement;
+    const exportPanel = (
+      connect: BaseKeyPanelProps["connect"],
+      results: { onError?: (m: string) => void; onBusy?: (b: boolean) => void }
+    ) =>
+      render(
+        <BaseKeyPanel
+          action="export"
+          publicKey={PUBLIC_KEY}
+          name="Wallet 1"
+          origin={ORIGIN}
+          connect={connect}
+          readTokens={readTokens}
+          onExported={() => {}}
+          onError={results.onError ?? (() => {})}
+          onBusy={results.onBusy}
+        />
+      );
+
+    it("says a save it was in the middle of did not finish", async () => {
+      const { connect, panel, srcs } = fakePanel();
+      const onError = vi.fn();
+      const onBusy = vi.fn();
+      exportPanel(connect, { onError, onBusy });
+      await waitFor(() => expect(srcs).toHaveLength(1));
+
+      panel.postMessage({ type: "busy", busy: true });
+      await waitFor(() => expect(onBusy).toHaveBeenCalledWith(true));
+      readyFrom(frameOf().contentWindow);
+
+      await waitFor(() => expect(srcs).toHaveLength(2));
+      expect(onError).toHaveBeenCalledWith(
+        "The key page restarted before it finished. Try again."
+      );
+      expect(onBusy.mock.calls).toEqual([[true], [false]]);
+    });
+
+    it("says nothing when it was not in the middle of a task", async () => {
+      const { connect, srcs } = fakePanel();
+      const onError = vi.fn();
+      exportPanel(connect, { onError });
+      await waitFor(() => expect(srcs).toHaveLength(1));
+
+      readyFrom(frameOf().contentWindow);
+      await waitFor(() => expect(srcs).toHaveLength(2));
+      expect(onError).not.toHaveBeenCalled();
+    });
+
+    it("connects once for a ready the key page sends twice", async () => {
+      const { connect, srcs } = fakePanel();
+      exportPanel(connect, {});
+      await waitFor(() => expect(srcs).toHaveLength(1));
+
+      const frame = frameOf().contentWindow;
+      readyFrom(frame);
+      readyFrom(frame);
+      await waitFor(() => expect(srcs).toHaveLength(2));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(srcs).toHaveLength(2);
+    });
+
+    it("says a dropped task once for a ready the key page sends twice", async () => {
+      const { connect, panel, srcs } = fakePanel();
+      const onError = vi.fn();
+      const onBusy = vi.fn();
+      exportPanel(connect, { onError, onBusy });
+      await waitFor(() => expect(srcs).toHaveLength(1));
+
+      panel.postMessage({ type: "busy", busy: true });
+      await waitFor(() => expect(onBusy).toHaveBeenCalledWith(true));
+      const frame = frameOf().contentWindow;
+      readyFrom(frame);
+      readyFrom(frame);
+
+      await waitFor(() => expect(srcs).toHaveLength(2));
+      expect(onError).toHaveBeenCalledOnce();
+      expect(onBusy.mock.calls).toEqual([[true], [false]]);
+    });
+
+    it("leaves a ready that comes before the first connection to it", async () => {
+      const channel = new MessageChannel();
+      const srcs: string[] = [];
+      let connected: (port: MessagePort) => void = () => {};
+      const connect: BaseKeyPanelProps["connect"] = () => () => (src) => {
+        srcs.push(src);
+        return new Promise((resolve) => (connected = resolve));
+      };
+      exportPanel(connect, {});
+      await waitFor(() => expect(srcs).toHaveLength(1));
+
+      // The key page's first ready answers the connection under way
+      readyFrom(frameOf().contentWindow);
+      connected(channel.port1);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(srcs).toHaveLength(1);
+    });
+
+    it("hears no ready once it is gone", async () => {
+      const { connect, srcs } = fakePanel();
+      const onError = vi.fn();
+      const { unmount } = exportPanel(connect, { onError });
+      await waitFor(() => expect(srcs).toHaveLength(1));
+      const frame = frameOf().contentWindow;
+
+      unmount();
+      readyFrom(frame);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(srcs).toHaveLength(1);
+      expect(onError).not.toHaveBeenCalled();
+    });
   });
 });
