@@ -353,9 +353,11 @@ export const authEnv = () => ({
   GITHUB_CLIENT_ID: read("GITHUB_CLIENT_ID"),
   GITHUB_CLIENT_SECRET: read("GITHUB_CLIENT_SECRET"),
   // The OAuth proxy: no secret leaves it off; only a Vercel preview with a URL
-  // naming another deployment completes a proxied sign-in
+  // naming another deployment completes a proxied sign-in, and only a
+  // deployment with the host flag (the staging sign-in app) is the host
   AUTH_OAUTH_PROXY_URL: read("AUTH_OAUTH_PROXY_URL"),
   AUTH_OAUTH_PROXY_SECRET: read("AUTH_OAUTH_PROXY_SECRET"),
+  AUTH_OAUTH_PROXY_HOST: read("AUTH_OAUTH_PROXY_HOST"),
   VERCEL_ENV: read("VERCEL_ENV"),
 });
 

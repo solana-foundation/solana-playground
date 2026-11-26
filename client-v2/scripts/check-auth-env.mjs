@@ -1,0 +1,103 @@
+// Fails a Vercel build whose sign-in environment mixes roles (HOO-2816).
+//
+// Previews sign in through a staging app, the OAuth proxy's host, never
+// through production: production holds no AUTH_OAUTH_PROXY_* variable, the
+// host says so with AUTH_OAUTH_PROXY_HOST=true, and a preview never does. One
+// value is never two secrets: AUTH_SECRET signs a deployment's cookies, the
+// proxy secret seals what the host hands a preview, and every preview holds
+// the latter. How it is deployed: docs/deploy-client-vercel.md, "Sign-in on
+// previews". Only vercel.json's buildCommand (scripts/vercel-build.sh) runs
+// it. Names only, never values: the build log is readable by the team.
+
+/** Set and non-empty, for a variable whose value is read */
+const value = (name) => process.env[name] || undefined;
+
+// Vercel's build machine sets CI; a local `vercel build` does not, and pulls a
+// Sensitive variable as "". So "" means unset on Vercel and held locally, as
+// `isSet` in check-agent-env.mjs treats it.
+const isOnVercel = !!process.env.CI;
+/** Whether a variable is held, for one that may be Sensitive */
+const isHeld = (name) =>
+  isOnVercel ? !!process.env[name] : process.env[name] !== undefined;
+
+const isPreview = process.env.VERCEL_ENV === "preview";
+const hostFlag = value("AUTH_OAUTH_PROXY_HOST");
+const hasProxyURL = isHeld("AUTH_OAUTH_PROXY_URL");
+const hasProxySecret = isHeld("AUTH_OAUTH_PROXY_SECRET");
+
+const problems = [];
+
+if (hostFlag !== undefined && hostFlag !== "true") {
+  problems.push(
+    'AUTH_OAUTH_PROXY_HOST is set but not exactly "true"; unset it, or set it ' +
+      "to true on the staging sign-in host only."
+  );
+}
+const isHost = hostFlag === "true";
+
+if (isPreview) {
+  if (isHost) {
+    problems.push(
+      "AUTH_OAUTH_PROXY_HOST is set on a preview. Only the staging sign-in " +
+        "host sets it; a preview points AUTH_OAUTH_PROXY_URL at that host."
+    );
+  }
+  // Without the URL a preview sends GitHub its own callback, which the
+  // host's OAuth app rejects, and sign-in fails with nothing said here
+  if (hasProxySecret && !hasProxyURL) {
+    problems.push(
+      "AUTH_OAUTH_PROXY_SECRET is set on a preview without " +
+        "AUTH_OAUTH_PROXY_URL; set the URL to the staging sign-in host's " +
+        "origin, or unset both."
+    );
+  }
+} else if (isHost) {
+  if (!hasProxySecret) {
+    problems.push(
+      "AUTH_OAUTH_PROXY_HOST=true without AUTH_OAUTH_PROXY_SECRET: the host " +
+        "cannot seal what it hands a preview."
+    );
+  }
+  // The host's callback and the origin the profile is sealed for come from it
+  if (!value("AUTH_BASE_URL")) {
+    problems.push(
+      "AUTH_OAUTH_PROXY_HOST=true without AUTH_BASE_URL: set it to the " +
+        "staging sign-in host's own origin, the one previews name in " +
+        "AUTH_OAUTH_PROXY_URL."
+    );
+  }
+  if (hasProxyURL) {
+    problems.push(
+      "AUTH_OAUTH_PROXY_URL is set on the sign-in host. Only a preview names " +
+        "the host; unset it here."
+    );
+  }
+} else {
+  const held = [
+    hasProxyURL && "AUTH_OAUTH_PROXY_URL",
+    hasProxySecret && "AUTH_OAUTH_PROXY_SECRET",
+  ].filter(Boolean);
+  if (held.length) {
+    problems.push(
+      `${held.join(" and ")} set on a deployment that is not the staging ` +
+        "sign-in host. Production holds no AUTH_OAUTH_PROXY_* variable: " +
+        "previews sign in through the staging app, never through production. " +
+        "Delete them here."
+    );
+  }
+}
+
+// Compared only when both are readable: a local pull hides Sensitive values
+const proxySecretValue = value("AUTH_OAUTH_PROXY_SECRET");
+if (proxySecretValue && proxySecretValue === value("AUTH_SECRET")) {
+  problems.push(
+    "AUTH_SECRET equals AUTH_OAUTH_PROXY_SECRET. Every preview holds the " +
+      "proxy secret, so it must never sign a deployment's cookies; generate " +
+      "each with `openssl rand -base64 32`."
+  );
+}
+
+if (problems.length) {
+  for (const problem of problems) console.error(`check-auth-env: ${problem}`);
+  process.exit(1);
+}

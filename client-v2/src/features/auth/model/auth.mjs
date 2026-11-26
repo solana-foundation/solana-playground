@@ -87,24 +87,40 @@ export const deploymentOrigins = () => {
  * Better Auth's OAuth proxy, so every preview signs in through one GitHub app:
  * a preview sends GitHub to the host's callback (`AUTH_OAUTH_PROXY_URL`), and
  * the host hands the profile back encrypted with `AUTH_OAUTH_PROXY_SECRET`.
- * How it is deployed: `docs/deploy-client-vercel.md`, "Sign-in on previews".
+ * The host is a staging app of its own, never production, so a preview holds
+ * no secret of production's sign-in (HOO-2816). How it is deployed:
+ * `docs/deploy-client-vercel.md`, "Sign-in on previews".
  *
- * Off without the secret. Only a Vercel preview whose proxy URL names another
- * origin completes a proxied sign-in; every other deployment is the host and
- * drops the plugin's endpoints, which turn an encrypted payload into a
- * session. The secret sits in every preview's environment, so on the host they
- * would let whoever holds one sign in as anyone. The role is decided that way
- * round so a production deployment given the proxy URL by mistake still drops
- * them.
+ * Off without the secret. Two roles, each decided by the deployment itself:
+ *
+ * - A Vercel preview whose proxy URL names another origin completes a
+ *   proxied sign-in.
+ * - A deployment outside a preview with `AUTH_OAUTH_PROXY_HOST=true` is the
+ *   host, and drops the plugin's endpoints, which turn an encrypted payload
+ *   into a session: the secret sits in every preview's environment, so on the
+ *   host they would let whoever holds one sign in as anyone.
+ *
+ * Any other deployment installs no proxy at all, so production handed the
+ * secret or a preview's settings by mistake neither completes nor hosts a
+ * proxied sign-in; `scripts/check-auth-env.mjs` fails its build too. A
+ * preview whose proxy URL is one of its own hostnames keeps the plugin
+ * without its endpoints, as it would otherwise complete a payload it forged
+ * for itself.
  *
  * Exported for tests.
  *
  * @returns {object[]} the plugins to install, empty when the proxy is off
  */
 export const oauthProxyPlugins = () => {
-  const { AUTH_OAUTH_PROXY_URL, AUTH_OAUTH_PROXY_SECRET, VERCEL_ENV } =
-    authEnv();
+  const {
+    AUTH_OAUTH_PROXY_URL,
+    AUTH_OAUTH_PROXY_SECRET,
+    AUTH_OAUTH_PROXY_HOST,
+    VERCEL_ENV,
+  } = authEnv();
   if (!AUTH_OAUTH_PROXY_SECRET) return [];
+  const isPreviewDeployment = VERCEL_ENV === "preview";
+  if (!isPreviewDeployment && AUTH_OAUTH_PROXY_HOST !== "true") return [];
 
   const base = resolveBaseURL();
   const fixed = typeof base === "string" ? base : undefined;
@@ -127,7 +143,7 @@ export const oauthProxyPlugins = () => {
     );
   };
   const isPreview =
-    VERCEL_ENV === "preview" &&
+    isPreviewDeployment &&
     AUTH_OAUTH_PROXY_URL !== undefined &&
     proxiesElsewhere();
   return [isPreview ? plugin : { ...plugin, endpoints: {} }];
@@ -216,9 +232,23 @@ export const missingConfig = () => {
     ...SIGN_IN_ENV.filter((name) => !present[name]),
     // A proxy URL alone leaves the proxy off, and the preview then sends GitHub
     // its own callback, which GitHub rejects with nothing said here
-    proxyURL && !env.AUTH_OAUTH_PROXY_SECRET ? "AUTH_OAUTH_PROXY_SECRET" : null,
-    // Unparseable, it would throw from `getAuth` on every request
-    proxyURL && !URL.canParse(proxyURL) ? "AUTH_OAUTH_PROXY_URL" : null,
+    // A host flag that is not exactly "true" makes no host: say so
+    env.AUTH_OAUTH_PROXY_HOST !== undefined &&
+    env.AUTH_OAUTH_PROXY_HOST !== "true"
+      ? "AUTH_OAUTH_PROXY_HOST"
+      : undefined,
+    // So does the host flag alone: the staging app then hosts nothing
+    (proxyURL || env.AUTH_OAUTH_PROXY_HOST === "true") &&
+    !env.AUTH_OAUTH_PROXY_SECRET
+      ? "AUTH_OAUTH_PROXY_SECRET"
+      : undefined,
+    // Unparseable, it would throw from `getAuth` on every request. Absent on
+    // a preview holding the secret, the preview sends GitHub its own
+    // callback, which the host's OAuth app rejects
+    (proxyURL && !URL.canParse(proxyURL)) ||
+    (!proxyURL && env.AUTH_OAUTH_PROXY_SECRET && env.VERCEL_ENV === "preview")
+      ? "AUTH_OAUTH_PROXY_URL"
+      : undefined,
   ].filter(Boolean);
 };
 
