@@ -1,6 +1,7 @@
 import { ArrowUpRight, Wallet } from "lucide-react";
 import { useRef } from "react";
 
+import { clusterName, CLUSTERS } from "@/entities/cluster";
 import type { AirdropRefusal } from "@/shared/lib/faucet-limit";
 import {
   NETWORK_UNREACHABLE,
@@ -104,11 +105,6 @@ export interface BaseWalletChipProps {
   account?: string;
 }
 
-const clusterName = (cluster: string) =>
-  cluster === "mainnet"
-    ? "Mainnet"
-    : cluster.charAt(0).toUpperCase() + cluster.slice(1);
-
 /**
  * The deploying wallet at the console bar's end: address and balance, there
  * for everyone, signed in or not, next to the builds and deploys it pays for
@@ -195,7 +191,11 @@ const BaseWalletChip = ({
               )}
             </span>
             {cluster && (
-              <Tag variant={cluster === "mainnet" ? "warning" : "neutral"}>
+              <Tag
+                variant={
+                  cluster === CLUSTERS.mainnet.cluster ? "warning" : "neutral"
+                }
+              >
                 {clusterName(cluster)}
               </Tag>
             )}

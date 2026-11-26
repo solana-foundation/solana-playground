@@ -239,6 +239,20 @@ describe("Wallet window", () => {
     expect(screen.getByTestId("wallet-window").style.zIndex).toBe("30");
   });
 
+  /**
+   * Where the chip sits: any spot inside jsdom's 1024x768 viewport, far
+   * enough from its edges that nothing clamps. No device size stands behind
+   * these numbers; the window lands 320px (its width) left of `right` and
+   * the 8px gap above `top`.
+   */
+  const CHIP = { right: 900, top: 600 };
+  const chipAt = () => {
+    const chip = document.createElement("button");
+    chip.getBoundingClientRect = () => CHIP as DOMRect;
+    return chip;
+  };
+  const ABOVE_CHIP = { x: CHIP.right - 320, y: CHIP.top - 8 };
+
   const renderWallet = () =>
     render(
       <ThemeProvider theme={theme}>
@@ -247,15 +261,14 @@ describe("Wallet window", () => {
     );
 
   it("opens right above the chip, right edges aligned, when the chip asks", () => {
-    const chip = document.createElement("button");
-    chip.getBoundingClientRect = () => ({ right: 900, top: 600 } as DOMRect);
+    const chip = chipAt();
     showWalletAbove(chip);
     wallets.show = true;
     renderWallet();
 
-    // 320 wide; jsdom gives the window no height, so its bottom is the
-    // chip's top less the 8px gap
-    expect(rnd.moves.at(-1)).toEqual({ x: 580, y: 592 });
+    // jsdom gives the window no height, so its bottom is the chip's top
+    // less the gap
+    expect(rnd.moves.at(-1)).toEqual(ABOVE_CHIP);
   });
 
   it("moves an already open window above the chip when the chip asks", () => {
@@ -263,16 +276,14 @@ describe("Wallet window", () => {
     renderWallet();
     rnd.moves = [];
 
-    const chip = document.createElement("button");
-    chip.getBoundingClientRect = () => ({ right: 900, top: 600 } as DOMRect);
+    const chip = chipAt();
     act(() => showWalletAbove(chip));
 
-    expect(rnd.moves.at(-1)).toEqual({ x: 580, y: 592 });
+    expect(rnd.moves.at(-1)).toEqual(ABOVE_CHIP);
   });
 
   it("forgets the chip once closed, so another open keeps its usual place", () => {
-    const chip = document.createElement("button");
-    chip.getBoundingClientRect = () => ({ right: 900, top: 600 } as DOMRect);
+    const chip = chipAt();
     showWalletAbove(chip);
     wallets.show = true;
     renderWallet().unmount();
