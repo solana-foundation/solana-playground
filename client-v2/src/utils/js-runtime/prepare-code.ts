@@ -23,6 +23,21 @@ const TRANSPILE_OPTIONS: CompilerOptions = {
 const HIDDEN_GLOBALS = ["eval", "Function"];
 
 /**
+ * A string literal with its line continuations (a backslash before a line
+ * break) taken out: the same string on one line, so `hoistImports`, which
+ * leaves each declaration's line breaks where it was, does not add more on
+ * the first line. Escapes are matched in pairs, so an escaped backslash is
+ * never read as the start of a continuation.
+ *
+ * @param literal a string literal as written in the source
+ * @returns the literal without line continuations
+ */
+const withoutLineContinuations = (literal: string) =>
+  literal.replace(/\\(\r\n|[\s\S])/g, (escape, escaped: string) =>
+    /^(?:\r\n|[\n\r\u2028\u2029])$/.test(escaped) ? "" : escape
+  );
+
+/**
  * What an import declaration becomes: its package, awaited from the sandbox
  * (`__pgImport`, answered with the sandbox's own copy, `sandbox/runtime.ts`),
  * bound to the names it imports. A type-only import binds nothing at run time
@@ -35,7 +50,10 @@ const HIDDEN_GLOBALS = ["eval", "Function"];
 const importedFor = (index: number) => (declaration: ImportDeclaration) => {
   // The specifier as the project wrote it: a string literal already, so it is
   // copied rather than read and quoted again
-  const imported = `await __pgImport(${declaration.moduleSpecifier.getText()})`;
+  const specifier = withoutLineContinuations(
+    declaration.moduleSpecifier.getText()
+  );
+  const imported = `await __pgImport(${specifier})`;
   const clause = declaration.importClause;
   if (!clause) return `${imported};`;
   if (clause.isTypeOnly) return "";
@@ -230,6 +248,20 @@ if (import.meta.vitest) {
       expect(() =>
         prepareCode('const a = 1;\nimport * as ns from "a";\nconst x = ;')
       ).toThrow(/^Line 3: /);
+    });
+
+    it("keeps the code's line numbers when an import's specifier spans two lines", () => {
+      expect(() =>
+        prepareCode('import * as ns from "a\\\nb";\nconst x = ;')
+      ).toThrow(/^Line 3: /);
+    });
+
+    it("loads an import whose specifier spans two lines", async () => {
+      const seen = await runPrepared(
+        'import * as ns from "a\\\r\nb";\nseen.push(ns.x);',
+        { ab: { x: 1 } }
+      );
+      expect(seen).toEqual([1]);
     });
 
     it("runs TypeScript with top-level await", async () => {
