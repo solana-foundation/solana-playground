@@ -50,7 +50,7 @@ describe("BaseIntroCard", () => {
     render(
       <BaseIntroCard
         name={definition.name}
-        thumbnail={definition.thumbnail}
+        cover={<span data-testid="cover" />}
         minutes={definition.minutes}
         stepCount={definition.steps.length}
         promise={definition.intro.promise}
@@ -69,6 +69,12 @@ describe("BaseIntroCard", () => {
     expect(screen.getByText(HOW_IT_GOES)).toBeTruthy();
     expect(screen.getAllByRole("button")).toHaveLength(1);
     expect(screen.getByRole("button", { name: /Start step 1/ })).toBeTruthy();
+  });
+
+  it("wears the cover it is given, not upstream's thumbnail", () => {
+    const { container } = intro();
+    expect(container.querySelector("img")).toBeNull();
+    expect(screen.getByTestId("cover")).toBeTruthy();
   });
 
   it("starts on the button, and on Enter while nothing has focus", async () => {

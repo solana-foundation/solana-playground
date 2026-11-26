@@ -1,15 +1,26 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { DefaultTheme, ThemeProvider } from "styled-components";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
 
+import { showWalletAbove } from "./anchor";
 import Wallet, { WalletName } from "./Wallet";
 
 // The utils barrel needs build-time globals the unit runner does not define.
 const wallets = vi.hoisted(() => ({
   switch: vi.fn(),
   update: vi.fn(),
+  selectStandard: vi.fn(),
+  /** A deploy holds the accounts */
+  held: false,
+  /** Who listens for the hold; `onHold` is the wallet's subscription */
+  holdListeners: new Set<(isHeld?: boolean) => void>(),
+  noSubscription: () => ({ dispose: () => undefined }),
+  onHold: (cb: (isHeld?: boolean) => void) => {
+    wallets.holdListeners.add(cb);
+    return { dispose: () => void wallets.holdListeners.delete(cb) };
+  },
   standard: [] as { name: string; icon: string }[],
   isPg: true,
   show: false,
@@ -39,19 +50,36 @@ vi.mock("../../utils", () => ({
       })),
     switch: wallets.switch,
     update: wallets.update,
+    selectStandard: wallets.selectStandard,
+    get isSwitchHeld() {
+      return wallets.held;
+    },
+    onDidChangeSwitchHeld: wallets.onHold,
   },
 }));
-vi.mock("../../hooks", () => ({
-  useWallet: () => ({
-    name: "first",
-    isPg: wallets.isPg,
-    icon: "",
-    publicKey: { toBase58: () => "key-first" },
-  }),
-  useKeybind: vi.fn(),
-  useOnClickOutside: vi.fn(),
-  useRenderOnChange: () => wallets.show,
-}));
+vi.mock("../../hooks", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../hooks/useRenderOnChange")
+  >("../../hooks/useRenderOnChange");
+  return {
+    useWallet: () => ({
+      name: "first",
+      isPg: wallets.isPg,
+      icon: "",
+      publicKey: { toBase58: () => "key-first" },
+    }),
+    useKeybind: vi.fn(),
+    useOnClickOutside: vi.fn(),
+    // The real hook for the hold, so a test sees the window re-render on it;
+    // every other subscription reads the fake `show`
+    useRenderOnChange: (onChange: unknown) => {
+      actual.useRenderOnChange(
+        onChange === wallets.onHold ? wallets.onHold : wallets.noSubscription
+      );
+      return wallets.show;
+    },
+  };
+});
 vi.mock("./hooks", () => ({
   useDarken: () => ({ darken: vi.fn(), lighten: vi.fn() }),
 }));
@@ -62,11 +90,21 @@ vi.mock("./Balance", () => ({ default: () => null }));
 vi.mock("./Send", () => ({ default: () => null }));
 vi.mock("./Settings", () => ({ default: () => null }));
 vi.mock("./Transactions", () => ({ default: () => null }));
-vi.mock("react-rnd", () => ({
-  Rnd: ({ style }: { style?: React.CSSProperties }) => (
-    <div data-testid="wallet-window" style={style} />
-  ),
-}));
+/** Where the window was moved to after it opened */
+const rnd = vi.hoisted(() => ({ moves: [] as { x: number; y: number }[] }));
+vi.mock("react-rnd", async () => {
+  const { forwardRef, useImperativeHandle, useRef } = await import("react");
+  return {
+    Rnd: forwardRef(({ style }: { style?: React.CSSProperties }, ref) => {
+      const el = useRef<HTMLDivElement>(null);
+      useImperativeHandle(ref, () => ({
+        getSelfElement: () => el.current,
+        updatePosition: (to: { x: number; y: number }) => rnd.moves.push(to),
+      }));
+      return <div ref={el} data-testid="wallet-window" style={style} />;
+    }),
+  };
+});
 vi.mock("../FadeIn", () => ({ default: () => null }));
 vi.mock("../ErrorBoundary", () => ({ default: () => null }));
 vi.mock("../Input", () => ({ default: () => null }));
@@ -92,6 +130,7 @@ beforeEach(() => {
   wallets.standard = [];
   wallets.isPg = true;
   wallets.show = false;
+  rnd.moves = [];
 });
 
 const renderName = () =>
@@ -133,11 +172,49 @@ describe("WalletName accounts menu", () => {
       screen.getByRole("menuitem", { name: "Phantom - (key-Phantom)" })
     );
 
-    expect(wallets.update).toHaveBeenCalledWith({
-      state: "sol",
-      standardName: "Phantom",
-    });
+    expect(wallets.selectStandard).toHaveBeenCalledWith("Phantom");
     expect(wallets.switch).not.toHaveBeenCalled();
+  });
+
+  it("disables every account once a deploy holds them, with the window already open", async () => {
+    wallets.standard = [{ name: "Phantom", icon: "phantom.svg" }];
+    renderName();
+    act(() => {
+      wallets.held = true;
+      for (const cb of wallets.holdListeners) cb(true);
+    });
+    try {
+      const trigger = screen.getByText("first - (key-first)");
+      trigger.focus();
+      fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+      await screen.findByRole("menu");
+      for (const item of screen.getAllByRole("menuitem")) {
+        expect(item.getAttribute("data-disabled")).not.toBeNull();
+      }
+    } finally {
+      wallets.held = false;
+    }
+  });
+
+  it("enables the accounts again once the deploy lets go of them", async () => {
+    renderName();
+    act(() => {
+      wallets.held = true;
+      for (const cb of wallets.holdListeners) cb(true);
+    });
+    act(() => {
+      wallets.held = false;
+      for (const cb of wallets.holdListeners) cb(false);
+    });
+    const trigger = screen.getByText("first - (key-first)");
+    trigger.focus();
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    await screen.findByRole("menu");
+    const items = screen.getAllByRole("menuitem");
+    expect(items.length).toBeGreaterThan(0);
+    for (const item of items) {
+      expect(item.getAttribute("data-disabled")).toBeNull();
+    }
   });
 
   it("draws a standard wallet's icon at the menu's icon size", async () => {
@@ -160,6 +237,60 @@ describe("Wallet window", () => {
     );
 
     expect(screen.getByTestId("wallet-window").style.zIndex).toBe("30");
+  });
+
+  /**
+   * Where the chip sits: any spot inside jsdom's 1024x768 viewport, far
+   * enough from its edges that nothing clamps. No device size stands behind
+   * these numbers; the window lands 320px (its width) left of `right` and
+   * the 8px gap above `top`.
+   */
+  const CHIP = { right: 900, top: 600 };
+  const chipAt = () => {
+    const chip = document.createElement("button");
+    chip.getBoundingClientRect = () => CHIP as DOMRect;
+    return chip;
+  };
+  const ABOVE_CHIP = { x: CHIP.right - 320, y: CHIP.top - 8 };
+
+  const renderWallet = () =>
+    render(
+      <ThemeProvider theme={theme}>
+        <Wallet />
+      </ThemeProvider>
+    );
+
+  it("opens right above the chip, right edges aligned, when the chip asks", () => {
+    const chip = chipAt();
+    showWalletAbove(chip);
+    wallets.show = true;
+    renderWallet();
+
+    // jsdom gives the window no height, so its bottom is the chip's top
+    // less the gap
+    expect(rnd.moves.at(-1)).toEqual(ABOVE_CHIP);
+  });
+
+  it("moves an already open window above the chip when the chip asks", () => {
+    wallets.show = true;
+    renderWallet();
+    rnd.moves = [];
+
+    const chip = chipAt();
+    act(() => showWalletAbove(chip));
+
+    expect(rnd.moves.at(-1)).toEqual(ABOVE_CHIP);
+  });
+
+  it("forgets the chip once closed, so another open keeps its usual place", () => {
+    const chip = chipAt();
+    showWalletAbove(chip);
+    wallets.show = true;
+    renderWallet().unmount();
+    rnd.moves = [];
+
+    renderWallet();
+    expect(rnd.moves).toEqual([]);
   });
 });
 

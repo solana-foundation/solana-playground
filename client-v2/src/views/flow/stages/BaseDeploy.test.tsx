@@ -636,17 +636,17 @@ describe("BaseDeploy", () => {
         })}
       />
     );
-    expect(screen.getByLabelText("Who pays").textContent).toBe(
-      `From Phantom · ${shortKey(
-        WALLET
-      )} · 4.20 SOLPhantom asks twice: to send SOL for the deploy, then to deploy.`
+    // The payer is one line and the note a block line under it
+    const [line, note] = screen.getByLabelText("Who pays").childNodes;
+    expect(line.textContent).toBe(
+      `From Phantom · ${shortKey(WALLET)} · 4.2 SOL`
     );
-    // The note is a line of its own, so the payer stays one line
-    expect(
+    expect(note).toBe(
       screen.getByText(
         "Phantom asks twice: to send SOL for the deploy, then to deploy."
-      ).tagName
-    ).toBe("SPAN");
+      )
+    );
+    expect((note as HTMLElement).className).toContain("block");
   });
 
   it("names the wallet that pays, or the Playground wallet before the first deploy", () => {
@@ -654,7 +654,7 @@ describe("BaseDeploy", () => {
       <BaseDeploy {...props({ built: true, history: [] })} />
     );
     expect(screen.getByLabelText("Who pays").textContent).toBe(
-      `From your Playground wallet · ${shortKey(WALLET)} · 4.20 SOL`
+      `From your Playground wallet · ${shortKey(WALLET)} · 4.2 SOL`
     );
     expect(screen.getByText(/^Deploying sends/).textContent).toBe(
       "Deploying sends the compiled program to devnet."
@@ -670,7 +670,25 @@ describe("BaseDeploy", () => {
       />
     );
     expect(screen.getByLabelText("Who pays").textContent).toBe(
-      `From your wallet · ${shortKey(WALLET)} · 4.20 SOL`
+      `From your wallet · ${shortKey(WALLET)} · 4.2 SOL`
+    );
+
+    rerender(
+      <BaseDeploy
+        {...props({
+          built: true,
+          history: [],
+          payer: {
+            address: WALLET,
+            balance: 4.2,
+            playground: true,
+            account: "Wallet 2",
+          },
+        })}
+      />
+    );
+    expect(screen.getByLabelText("Who pays").textContent).toBe(
+      `From Wallet 2 · ${shortKey(WALLET)} · 4.2 SOL`
     );
 
     rerender(

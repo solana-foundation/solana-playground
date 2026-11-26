@@ -157,6 +157,8 @@ vi.mock("@/entities/tutorial", async () => {
     docForLink: docs.docForLink,
     requestDoc: docs.requestDoc,
     requestCode: docs.requestCode,
+    TutorialCover: (await import("@/entities/tutorial/ui/art/TutorialCover"))
+      .default,
   };
 });
 // The listed tutorials, for the finish card's "Next: <tutorial>"
@@ -167,6 +169,8 @@ vi.mock("@/utils/tutorial", () => ({
   },
 }));
 
+// The mocked barrel above hands back the real cover, the one the widget draws
+import { TutorialCover } from "@/entities/tutorial";
 import { onCodeRequest } from "@/entities/tutorial/model/docs";
 import { tutorialTelemetry } from "@/entities/tutorial/model/telemetry";
 import {
@@ -760,6 +764,46 @@ describe("TutorialConversation", () => {
     store.state = started;
     act(() => notify(started));
     expect(editorHolds.held).toBe(0);
+  });
+
+  it("opens on an intro card wearing the tutorial's cover, not upstream's thumbnail", () => {
+    // A fresh save opens on the intro, drawn by the real view
+    store.state = {
+      context: { definition, slug: "hello-anchor", judge: () => true },
+      engine: INITIAL_ENGINE_STATE,
+      loadFailed: false,
+      loadedAt: 0,
+      probing: [],
+    };
+    store.view.mockImplementation(() =>
+      viewOf(definition, INITIAL_ENGINE_STATE, {
+        now: 0,
+        loadedAt: 0,
+        probing: [],
+      })
+    );
+    render(
+      <TutorialConversation onAllTutorials={vi.fn()} onOpenMenu={vi.fn()} />
+    );
+
+    const card = screen.getByRole("region", { name: definition.name });
+    expect(card.querySelector("img")).toBeNull();
+    // Hello Anchor's cover: the anchor on Anchor's deep ground, 40 square
+    const icon = card.querySelector("svg.lucide-anchor");
+    expect(icon).not.toBeNull();
+    const cover = icon?.parentElement;
+    expect(cover?.classList.contains("size-10")).toBe(true);
+    // The ground follows the framework: a native tutorial's would differ
+    const { container: native } = render(
+      <TutorialCover name={definition.name} framework="Native" />
+    );
+    const { container: anchor } = render(
+      <TutorialCover name={definition.name} framework="Anchor" />
+    );
+    const groundOf = (box: HTMLElement) =>
+      box.querySelector<HTMLElement>("span")?.style.backgroundColor;
+    expect(cover?.style.backgroundColor).toBe(groundOf(anchor));
+    expect(cover?.style.backgroundColor).not.toBe(groundOf(native));
   });
 
   it("frees the editor when the tutorial closes on its intro card", () => {

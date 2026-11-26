@@ -108,7 +108,7 @@ SHALL reject:
 ### Requirement: The loader lists a definition beside the other tutorials
 
 The catalog SHALL list each valid definition beside upstream's tutorials, with
-its thumbnail, description and the meta line "<level> · <framework>". The
+its cover, description and the meta line "<level> · <framework>". The
 minutes and the step count show on the intro card, not on the catalog card.
 For a conversation tutorial this replaces `tutorials-gallery-stand`'s caption
 "<framework> · by <first author>", and its Start here banner reads "Continue ·

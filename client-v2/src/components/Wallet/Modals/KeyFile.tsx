@@ -2,6 +2,7 @@ import { useState } from "react";
 import styled, { css } from "styled-components";
 
 import { createLogger } from "@/shared/lib/logger";
+import { isPlainRefusal } from "@/shared/lib/plain-refusal";
 import { ModalFrame, useModalId } from "@/widgets/overlays";
 
 import { PgView, PgWallet } from "../../../utils";
@@ -31,6 +32,11 @@ export const ImportKey = () => {
         options: { name: "wallet-imported" },
       });
     } catch (err) {
+      // Accounts held by a running deploy: say so, it is not a failure
+      if (isPlainRefusal(err)) {
+        setText(err.message);
+        return;
+      }
       log.error(err, { report: true });
       setText(
         "Could not import the keypair: " +

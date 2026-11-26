@@ -1,4 +1,6 @@
 /* eslint-disable max-params, unicorn/no-null -- tutorial flow v2 predates these rules; cleanup tracked from SF#94 */
+import type { ReactNode } from "react";
+
 import type {
   ActBeat,
   Ask,
@@ -97,6 +99,8 @@ export interface TurnViewProps {
   signedIn?: boolean;
   /** The workspace's program id, which an act's `{program}` names; null before a build */
   programId?: string | null;
+  /** The tutorial's cover, for the intro card */
+  cover?: ReactNode;
   on: TurnHandlers;
 }
 
@@ -214,6 +218,7 @@ const TurnView = ({
   nextTutorial,
   programId = null,
   signedIn = false,
+  cover,
   on,
 }: TurnViewProps) => {
   const showQuote = (quote: Quote) => on.showLine(quote.file, quote.line);
@@ -223,7 +228,7 @@ const TurnView = ({
       return (
         <BaseIntroCard
           name={definition.name}
-          thumbnail={definition.thumbnail}
+          cover={cover}
           minutes={definition.minutes}
           stepCount={definition.steps.length}
           promise={definition.intro.promise}

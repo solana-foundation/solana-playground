@@ -67,6 +67,8 @@ vi.mock("@/utils", () => ({
       { name: "Phantom", icon: "data:," },
       { name: "Solflare", icon: "data:," },
     ],
+    accounts: [{}],
+    show: false,
   },
   PgConnection: {
     get cluster() {
@@ -78,6 +80,7 @@ vi.mock("@/utils", () => ({
 }));
 
 import { PgDeployRun } from "@/commands/deploy/run";
+import { PgWallet } from "@/utils";
 
 import { onDidRequestFundDialog } from "../model/open";
 import WalletChip from "./WalletChip";
@@ -100,6 +103,8 @@ afterEach(() => {
   connectStandard.make.mockReset();
   connectStandard.drop.mockReset();
   current.wallet = { isPg: true, publicKey: { toBase58: () => ADDRESS } };
+  PgWallet.accounts = [{}] as typeof PgWallet.accounts;
+  PgWallet.show = false;
   balanceNow.sol = 0;
   clusterNow.name = "devnet";
   airdropAmount.sol = 5;
@@ -253,9 +258,34 @@ describe("features/fund-wallet/ui/WalletChip", () => {
       expect(
         screen.queryByRole("button", { name: "Connect a wallet" })
       ).toBeNull();
+      expect(screen.queryByRole("button", { name: "Accounts" })).toBeNull();
     } finally {
       act(() => PgDeployRun.reset());
     }
+  });
+
+  it("opens the floating wallet from Accounts", () => {
+    renderChip(() => false);
+    fireEvent.click(screen.getByRole("button", { name: /^Wallet 7xKX…gAsU/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Accounts" }));
+    expect(PgWallet.show).toBe(true);
+  });
+
+  it("names the paying Playground account only once there are two", () => {
+    current.wallet = {
+      isPg: true,
+      name: "Wallet 2",
+      publicKey: { toBase58: () => ADDRESS },
+    };
+    const one = renderChip(() => false);
+    fireEvent.click(screen.getByRole("button", { name: /^Wallet 7xKX…gAsU/ }));
+    expect(screen.queryByText("· Wallet 2")).toBeNull();
+    one.unmount();
+
+    PgWallet.accounts = [{}, {}] as typeof PgWallet.accounts;
+    renderChip(() => false);
+    fireEvent.click(screen.getByRole("button", { name: /^Wallet 7xKX…gAsU/ }));
+    expect(screen.getByText("· Wallet 2")).toBeTruthy();
   });
 
   it("says the network is unreachable, with no web faucet, when the airdrop could not reach it", async () => {

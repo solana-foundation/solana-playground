@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 
 import { NETWORKS } from "@/constants";
+import { payingAccountName } from "@/entities/wallet";
 import { isSignInFailure, PgSession } from "@/features/auth";
 import type { GuideFrom } from "@/features/cli-deploy";
 import { CliDeployGuide } from "@/features/cli-deploy";
@@ -141,14 +142,19 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
     programSize: upgradable ? onChain?.programDataLen : undefined,
   };
 
-  const payer: DeployPayer | undefined = wallet
-    ? {
-        address: wallet.publicKey.toBase58(),
-        balance: typeof balance === "number" ? balance : undefined,
-        playground: wallet.isPg === true,
-        name: wallet.isPg ? undefined : wallet.name,
-      }
-    : undefined;
+  const payerFor = (w: NonNullable<typeof wallet>): DeployPayer => {
+    const address = w.publicKey.toBase58();
+    const paid = typeof balance === "number" ? balance : undefined;
+    return w.isPg
+      ? {
+          address,
+          balance: paid,
+          playground: true,
+          account: payingAccountName(w, PgWallet.accounts.length),
+        }
+      : { address, balance: paid, playground: false, name: w.name };
+  };
+  const payer = wallet ? payerFor(wallet) : undefined;
 
   const saveKeypair = () => {
     try {
