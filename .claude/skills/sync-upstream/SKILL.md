@@ -99,8 +99,7 @@ upstream lacks is reported. `data.json` is written last, so an import that stops
 next run.
 
 The optimiser's output is the same only for the svgo and sharp versions `client-v2/package.json` pins. A change
-that bumps either one runs `node scripts/optimise-image.mjs` over every image in `client-v2/public/`,
-`client-v2/src/tutorials/`, and `client-v2/src/frameworks/` in the same change; otherwise this command reports every image as changed by the
+that bumps either one runs `node scripts/optimise-image.mjs` over every image in its `OPTIMISED_FOLDERS` in the same change; otherwise this command reports every image as changed by the
 fork.
 
 It reports each tutorial folder upstream added with a `data.json` (names starting with `_` excluded) and

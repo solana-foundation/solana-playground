@@ -1,4 +1,4 @@
-// The output depends on the pinned svgo and sharp, so a bump of either re-optimises every image in `public/`.
+// The output depends on the pinned svgo and sharp, so a bump of either re-optimises every image in `OPTIMISED_FOLDERS`.
 // Usage: node scripts/optimise-image.mjs <file>...   rewrites each file in place
 
 import fs from "node:fs/promises";
@@ -6,7 +6,10 @@ import path from "node:path";
 import sharp from "sharp";
 import { optimize } from "svgo";
 
-/** mozjpeg quality for every JPEG; a change re-encodes every JPEG in `public/` */
+/** The folders, relative to `client-v2/`, whose images `optimise-image.test.mjs` requires to be optimised already */
+export const OPTIMISED_FOLDERS = ["public", "src/tutorials", "src/frameworks"];
+
+/** mozjpeg quality for every JPEG; a change re-encodes every JPEG in `OPTIMISED_FOLDERS` */
 export const JPEG_QUALITY = 80;
 
 /** Share of its size a JPEG re-encode must save; a second pass saves less, so an optimised JPEG stays a fixed point */
