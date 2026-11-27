@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, it } from "node:test";
 
 import {
+  blobAt,
   dataJsonLast,
   GUARDS,
   isForkOwned,
@@ -14,12 +16,18 @@ import {
   message,
   parseImportList,
   parseSyncedTo,
+  REPO_VARS,
   repoEnv,
   topLevel,
   wholeImportReport,
 } from "./sync-upstream.mjs";
 
-const repo = topLevel(import.meta.dirname);
+// Found without the code under test, so a regression fails its own case instead of the whole file
+const repo = execFileSync(
+  "git",
+  ["-C", import.meta.dirname, "rev-parse", "--show-toplevel"],
+  { encoding: "utf8", env: repoEnv() }
+).trim();
 
 const MERGED = "a7a8a1f9ed2e9a2cebafd4b59427fe61ab99702a";
 
@@ -35,30 +43,76 @@ const withoutHistory = ["86460da5", "6ec9b806", MERGED].every(hasCommit)
 
 describe("sync-upstream", () => {
   // A git hook (pre-push runs this suite) exports GIT_DIR, which outranks `git -C`
-  it("finds the repository from inside a git hook", () => {
-    const gitDir = execFileSync(
-      "git",
-      ["-C", repo, "rev-parse", "--absolute-git-dir"],
-      { encoding: "utf8", env: repoEnv() }
-    ).trim();
+  describe("inside a git hook", () => {
     const script = pathToFileURL(
       path.join(import.meta.dirname, "sync-upstream.mjs")
     ).href;
-    const result = spawnSync(
-      process.execPath,
-      [
-        "--input-type=module",
-        "-e",
-        `const { topLevel } = await import(${JSON.stringify(script)});
-         console.log(topLevel(${JSON.stringify(import.meta.dirname)}));`,
-      ],
-      {
-        encoding: "utf8",
-        env: { ...process.env, GIT_DIR: gitDir, GIT_INDEX_FILE: "index" },
+    // Runs `call` in a child whose environment points git at an empty repository
+    const underHook = (call) => {
+      const other = mkdtempSync(path.join(os.tmpdir(), "sync-upstream-hook-"));
+      try {
+        execFileSync("git", ["init", "--quiet", other], { env: repoEnv() });
+        const result = spawnSync(
+          process.execPath,
+          [
+            "--input-type=module",
+            "-e",
+            `const m = await import(${JSON.stringify(script)});
+             console.log(JSON.stringify(${call}));`,
+          ],
+          {
+            encoding: "utf8",
+            env: {
+              ...process.env,
+              GIT_DIR: path.join(other, ".git"),
+              GIT_WORK_TREE: other,
+              GIT_INDEX_FILE: path.join(other, ".git", "index"),
+            },
+          }
+        );
+        assert.equal(result.status, 0, result.stderr);
+        return JSON.parse(result.stdout);
+      } finally {
+        rmSync(other, { recursive: true, force: true });
       }
-    );
-    assert.equal(result.stderr, "");
-    assert.equal(result.stdout.trim(), repo);
+    };
+
+    it("finds the repository it is given", () => {
+      assert.equal(
+        underHook(`m.topLevel(${JSON.stringify(import.meta.dirname)})`),
+        repo
+      );
+    });
+
+    it("reads a blob from the repository it is given", () => {
+      const file = path.relative(repo, import.meta.filename);
+      assert.equal(
+        underHook(
+          `m.blobAt(${JSON.stringify(repo)}, "HEAD", ${JSON.stringify(
+            file
+          )})?.toString("utf8").length`
+        ),
+        execFileSync("git", ["-C", repo, "show", `HEAD:${file}`], {
+          encoding: "utf8",
+          env: repoEnv(),
+        }).length
+      );
+    });
+  });
+
+  it("strips every variable that pins git to a repository, and nothing else", () => {
+    const saved = { ...process.env };
+    try {
+      for (const name of REPO_VARS) process.env[name] = "x";
+      const childEnv = repoEnv();
+      for (const name of REPO_VARS) assert.equal(childEnv[name], undefined);
+      assert.equal(childEnv.PATH, saved.PATH);
+      assert.equal(process.env.GIT_DIR, "x");
+    } finally {
+      for (const name of REPO_VARS)
+        if (name in saved) process.env[name] = saved[name];
+        else delete process.env[name];
+    }
   });
 
   it("writes the merge subject", { skip: withoutHistory }, () => {

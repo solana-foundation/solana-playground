@@ -112,17 +112,27 @@ const die = (text) => {
   process.exit(1);
 };
 
-// Variables a git hook exports to point git at its own repository. They outrank `git -C`, so with
-// GIT_DIR set `git -C <dir> rev-parse --show-toplevel` answers <dir>. Every call here names its
-// repository with -C, so the children never inherit them.
-const REPO_VARS = [
+// What git itself clears before it works in another repository (`git rev-parse --local-env-vars`).
+// A git hook exports some of them, GIT_DIR above all, and they outrank `git -C`: with GIT_DIR set
+// and GIT_WORK_TREE unset, `git -C <dir> rev-parse --show-toplevel` answers <dir>. No child here
+// should see the hook's repository: git calls name theirs with -C, `git clone` makes its own, and
+// gh finds its own from the working directory.
+export const REPO_VARS = [
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_CONFIG",
+  "GIT_CONFIG_PARAMETERS",
+  "GIT_CONFIG_COUNT",
+  "GIT_OBJECT_DIRECTORY",
   "GIT_DIR",
   "GIT_WORK_TREE",
+  "GIT_IMPLICIT_WORK_TREE",
+  "GIT_GRAFT_FILE",
   "GIT_INDEX_FILE",
-  "GIT_COMMON_DIR",
-  "GIT_OBJECT_DIRECTORY",
-  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_NO_REPLACE_OBJECTS",
+  "GIT_REPLACE_REF_BASE",
   "GIT_PREFIX",
+  "GIT_SHALLOW_FILE",
+  "GIT_COMMON_DIR",
 ];
 
 /** The environment for a child process, without the variables that pin git to one repository. */
@@ -579,7 +589,7 @@ const publish = (repo, wt) => {
 };
 
 /** A blob's bytes at `rev`, or `undefined` when the path is absent there. */
-const blobAt = (repo, rev, file) => {
+export const blobAt = (repo, rev, file) => {
   const result = spawnSync(
     "git",
     ["-C", repo, "cat-file", "blob", `${rev}:${file}`],
