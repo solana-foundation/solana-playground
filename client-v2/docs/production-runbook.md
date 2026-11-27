@@ -145,7 +145,7 @@ All Unmasked in Doppler: none is a secret, and `migrate-production-db` reads the
 | `GITHUB_CLIENT_ID` | The production OAuth app's Client ID (step 5) | Unmasked | Step 6 |
 | `GITHUB_CLIENT_SECRET` | The production OAuth app's client secret (step 5) | Masked | Step 6 |
 | `AUTH_OAUTH_PROXY_SECRET`, `AUTH_OAUTH_PROXY_URL` | Never on Production: they let previews sign in through production, and this project has no previews | | |
-| `CRON_SECRET` | `openssl rand -base64 32`, generated for production and used nowhere else. Vercel Cron sends it to `/api/retention` once a day. Unset, the route answers `503` and no expired data is removed ([Retention and account deletion](#retention-and-account-deletion)) | Masked | Step 6 |
+| `CRON_SECRET` | `openssl rand -base64 32`, generated for production and used nowhere else. Vercel Cron sends it to `/api/retention` once a day and to `/api/stale-turns` every 6 hours. Unset, both routes answer `503`: no expired data is removed ([Retention and account deletion](#retention-and-account-deletion)), and turns that never settled stay `started` ([The assistant's spend](#the-assistants-spend)) | Masked | Step 6 |
 
 ### Assistant default backend (Nous Research)
 
@@ -800,6 +800,11 @@ merges after that. Migrations are written so the code already deployed keeps wor
   credits are added, and Sentry receives the `api:agent` error `upstream credit balance is empty`.
 - **A leaked key:** create a new one in Nous with the same limits, replace it in `<DOPPLER_CONFIG>` (the sync
   redeploys), check the new deployment is Current, then revoke the old one.
+- **Turns that never settled:** every 6 hours Vercel Cron calls `GET /api/stale-turns` with `CRON_SECRET`
+  (`client-v2/vercel.json`, `crons`). It ends each turn still `started` an hour after its reserve as `unfinished`,
+  charged its reservation, so no user's budget changes. A `200` carries `{"staleTurns":n}`; a `500` means the sweep
+  failed, and Sentry has the `api:stale-turns` error. `503` and `401` mean what they mean for the retention job
+  ([Retention and account deletion](#retention-and-account-deletion)).
 
 ### Retention and account deletion
 

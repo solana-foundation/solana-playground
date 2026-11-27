@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { after, before, beforeEach, describe, it } from "node:test";
 import pg from "pg";
 
@@ -9,6 +10,8 @@ import {
   reserve,
   secondsToReset,
   settle,
+  settleStaleTurns,
+  STALE_TURN_AGE,
   toMicro,
   utcDay,
 } from "./ledger.mjs";
@@ -16,6 +19,16 @@ import {
 const PRICES = { input: 0.15, output: 0.5 };
 
 describe("ledger arithmetic", () => {
+  it("takes a turn as stale only well past the agent route's maxDuration", () => {
+    // A sweep that ended a turn its route still relays would charge the
+    // reservation over what the turn really cost
+    const { functions } = JSON.parse(
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
+      readFileSync(new URL("../../../../vercel.json", import.meta.url), "utf8")
+    );
+    assert.ok(STALE_TURN_AGE >= 2 * functions["api/agent.mjs"].maxDuration);
+  });
+
   it("counts the seconds to the next 00:00 UTC", () => {
     assert.equal(secondsToReset(new Date("2026-10-29T23:59:00Z")), 60);
     assert.equal(secondsToReset(new Date("2026-10-29T00:00:00Z")), 86400);
@@ -514,5 +527,88 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
 
   it("throws for a user with no row, so the route fails closed", async () => {
     await assert.rejects(take("test-user-ledger-missing", 1), /no user row/);
+  });
+
+  /** Moves the reserve of the turn `turnId` names `age` into the past */
+  const backdate = (turnId, age) =>
+    query(
+      `update agent_turn set at = now() - $2::interval where id = $1::bigint`,
+      [turnId, age]
+    );
+
+  /** How each of `userId`'s turns ended, oldest first */
+  const endings = async (userId) =>
+    (await turns(userId)).map(({ day, outcome, charged, settled }) => ({
+      day,
+      outcome,
+      charged,
+      settled,
+    }));
+
+  // The sweep ends every stale turn in the database, not only the test
+  // users', so these cases assert on the test users' rows and read the count
+  // it returns as a lower bound: a dev server killed mid-turn leaves a stale
+  // row of its own in the local database.
+
+  it("ends turns started over an hour ago as unfinished at their reservation", async () => {
+    // HOO-2996: a settle that could not connect left the turn started and its
+    // reservation held. Two on one day, since one update cannot apply two
+    // turns to one `agent_spend` row
+    const first = await take(NEW, 300);
+    const second = await take(NEW, 200);
+    await take(NEW, 50);
+    await backdate(first.turnId, "61 minutes");
+    await backdate(second.turnId, "2 hours");
+
+    assert.ok((await settleStaleTurns(query)) >= 2);
+    assert.deepEqual(await endings(NEW), [
+      { day: DAY, outcome: "unfinished", charged: 300, settled: true },
+      { day: DAY, outcome: "unfinished", charged: 200, settled: true },
+      { day: DAY, outcome: "started", charged: 50, settled: false },
+    ]);
+    assert.deepEqual(await row(NEW), { reserved: 50, spent: 500 });
+  });
+
+  it("moves each day's reservations into that day's spend, per user", async () => {
+    // A sweep every 6 hours crosses midnight: one user's stale turns on two
+    // days, another user's on one, and a third user's fresh turn
+    const NEXT = "2026-10-30";
+    const stale = [
+      await take(NEW, 300),
+      await take(NEW, 200),
+      await take(NEW, 70, NEXT),
+      await take(OLD, 40),
+    ];
+    await take(NEW, 5, NEXT);
+    await take(OTHER, 9);
+    for (const { turnId } of stale) await backdate(turnId, "2 hours");
+
+    assert.ok((await settleStaleTurns(query)) >= 4);
+    assert.deepEqual(await row(NEW), { reserved: 0, spent: 500 });
+    assert.deepEqual(await row(NEW, NEXT), { reserved: 5, spent: 70 });
+    assert.deepEqual(await row(OLD), { reserved: 0, spent: 40 });
+    assert.deepEqual(await row(OTHER), { reserved: 9, spent: 0 });
+    assert.deepEqual(await endings(OTHER), [
+      { day: DAY, outcome: "started", charged: 9, settled: false },
+    ]);
+  });
+
+  it("leaves a turn started within the hour to its route", async () => {
+    const { turnId } = await take(NEW, 300);
+    await backdate(turnId, "59 minutes");
+    await settleStaleTurns(query);
+    assert.deepEqual(await endings(NEW), [
+      { day: DAY, outcome: "started", charged: 300, settled: false },
+    ]);
+    assert.deepEqual(await row(NEW), { reserved: 300, spent: 0 });
+  });
+
+  it("charges a swept turn once, whatever settles it after", async () => {
+    const { turnId } = await take(NEW, 300);
+    await backdate(turnId, "2 hours");
+    await settleStaleTurns(query);
+    assert.equal(await close({ turnId, charge: 10 }), false);
+    await settleStaleTurns(query);
+    assert.deepEqual(await row(NEW), { reserved: 0, spent: 300 });
   });
 });

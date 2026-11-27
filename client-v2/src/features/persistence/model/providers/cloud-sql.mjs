@@ -128,6 +128,18 @@ const LINK_STALE_AGE_MS = 55 * 60 * 1000;
  */
 const RENEWAL_WAIT_MS = 2000;
 
+/**
+ * How long a connection stays open unused: the `maxDuration` of
+ * `api/agent.mjs` in `vercel.json`, so the connection a turn's reserve used is
+ * still open for its settle. A new connection through the connector can take
+ * longer than `connectionTimeoutMillis`, and a settle that cannot connect
+ * leaves the turn's reservation held (HOO-2996). Each connection stays open
+ * this long after it was last released, so the database sees more of them
+ * open at once than with `POOL_LIMITS`' default. `cloud-sql.test.mjs` fails
+ * when `maxDuration` outgrows it.
+ */
+const IDLE_TIMEOUT_MS = 300_000;
+
 const log = createServerLogger("persistence:cloud-sql");
 
 /**
@@ -262,26 +274,82 @@ const linksFor = async (env) => {
     return socket;
   };
 
-  return { stream, renew };
+  return { stream, renew, linkAgeMs: () => Date.now() - current.openedAt };
 };
+
+/**
+ * @typedef {{
+ *   idle: number;
+ *   total: number;
+ *   waiting: number;
+ *   linkAgeMs: number;
+ *   renewMs: number;
+ *   connectMs: number;
+ * }} ConnectContext
+ * What a failed `connect` found and how long it took, as `error.connect`:
+ * the pool's idle and open clients and its queued requests as it began, the connector's age,
+ * the time spent waiting for a renewal, and the time `pg` spent after it.
+ * `connectionTimeoutMillis` bounds `connectMs` only.
+ */
 
 /**
  * A `pg` pool that awaits `renew` before each `connect`. `pg-pool`'s `query`
  * goes through `connect` too, with a callback, so both forms wait. One pool
  * for the life of the instance: Better Auth keeps the pool it was given.
  *
- * @param {() => Promise<void>} renew
+ * A failed `connect` carries a `ConnectContext` as `error.connect`, which
+ * reaches the route through `query`: the timeout `pg` raises says neither
+ * whether a client was idle nor where the time went.
+ *
+ * @param {{ renew: () => Promise<void>; linkAgeMs: () => number }} links
  */
 const renewingPoolWith =
-  (renew) =>
+  ({ renew, linkAgeMs }) =>
   /** @param {import("pg").PoolConfig} config */
   (config) =>
     new (class extends pg.Pool {
       /** @param {(error: Error | undefined, client?: import("pg").PoolClient, done?: (release?: unknown) => void) => void} [callback] */
       connect(callback) {
-        if (!callback) return renew().then(() => super.connect());
+        const began = Date.now();
+        const found = {
+          idle: this.idleCount,
+          total: this.totalCount,
+          waiting: this.waitingCount,
+          linkAgeMs: linkAgeMs(),
+        };
+        /** @type {number | undefined} */
+        let renewed;
+        /** @param {Error | undefined} error */
+        const withContext = (error) => {
+          if (error && typeof error === "object") {
+            const now = Date.now();
+            /** @type {ConnectContext} */
+            const context = {
+              ...found,
+              renewMs: (renewed ?? now) - began,
+              connectMs: renewed === undefined ? 0 : now - renewed,
+            };
+            Object.assign(error, { connect: context });
+          }
+          return error;
+        };
         // `renew` never rejects: it logs a failed renewal and keeps the old connector
-        void renew().then(() => super.connect(callback));
+        const ready = renew().then(() => {
+          renewed = Date.now();
+        });
+        if (!callback) {
+          return ready
+            .then(() => super.connect())
+            .catch((error) => {
+              throw withContext(error);
+            });
+        }
+        void ready.then(() =>
+          // eslint-disable-next-line max-params -- `pg-pool`'s connect callback defines this signature
+          super.connect((error, client, done) =>
+            callback(withContext(error), client, done)
+          )
+        );
         return undefined;
       }
     })(config);
@@ -306,11 +374,12 @@ export const createPool = async (env) => {
     throw new Error(refusal);
   }
 
-  const { stream, renew } = await linksFor(env);
-  return renewingPoolWith(renew)({
+  const { stream, renew, linkAgeMs } = await linksFor(env);
+  return renewingPoolWith({ renew, linkAgeMs })({
     stream,
     user: env.CLOUD_SQL_USER,
     database: env.CLOUD_SQL_DATABASE,
     ...POOL_LIMITS,
+    idleTimeoutMillis: IDLE_TIMEOUT_MS,
   });
 };
