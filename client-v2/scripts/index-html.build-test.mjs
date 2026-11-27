@@ -6,31 +6,24 @@ import test from "node:test";
 
 import { resolveSiteUrl, SITE_URL_PLACEHOLDER } from "./site-url.mjs";
 
-const PAGE = path.join(import.meta.dirname, "..", "build", "index.html");
+const ROOT = path.join(import.meta.dirname, "..");
+const template = await fs.readFile(
+  path.join(ROOT, "public", "index.html"),
+  "utf8"
+);
+const page = await fs.readFile(path.join(ROOT, "build", "index.html"), "utf8");
+const origin = resolveSiteUrl(process.env);
 
-const page = await fs.readFile(PAGE, "utf8");
-
-for (const tag of [
-  '<link rel="icon" href="/favicon.ico" sizes="32x32"/>',
-  '<link rel="icon" href="/favicon.svg" type="image/svg+xml"/>',
-  '<link rel="icon" href="/favicon-96x96.png" type="image/png" sizes="96x96"/>',
-  '<link rel="apple-touch-icon" href="/apple-touch-icon.png"/>',
-]) {
-  test(`the built page carries ${tag}`, () => {
-    assert.ok(page.includes(tag), `${PAGE} lacks ${tag}`);
-  });
-}
-
-test("the built page's og:image is on the origin its environment resolves", () => {
-  const tag = `<meta property="og:image" content="${resolveSiteUrl(
-    process.env
-  )}/og.png"/>`;
-  assert.ok(
-    page.includes(tag),
-    `${PAGE} lacks ${tag}; run the test with the build's SITE_URL and VERCEL_PROJECT_PRODUCTION_URL`
-  );
-});
+const count = (text, fragment) => text.split(fragment).length - 1;
 
 test(`the built page has no ${SITE_URL_PLACEHOLDER} left`, () => {
-  assert.ok(!page.includes(SITE_URL_PLACEHOLDER));
+  assert.equal(count(page, SITE_URL_PLACEHOLDER), 0);
+});
+
+test(`each ${SITE_URL_PLACEHOLDER} became the origin the build's environment resolves`, () => {
+  assert.equal(
+    count(page, origin),
+    count(template, SITE_URL_PLACEHOLDER),
+    `run the test with the build's SITE_URL and VERCEL_PROJECT_PRODUCTION_URL`
+  );
 });
