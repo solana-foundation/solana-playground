@@ -216,11 +216,8 @@ Asked to build something in the client, look in `openspec/changes/` first.
   under Vercel's `wasm_source_key`, and the other jobs download them.
 - **`client-v2/public/` is tracked files**, edited in place: the brand
   icons, `manifest.json`, `og.png`, and the curated program gallery
-  (`programs/programs.json`). `index.html` stays upstream's file;
-  `craco.config.js` adds the brand icons and share card to its head when
-  webpack writes the page (`scripts/brand-head.mjs`), with the card's domain
-  from the optional `SITE_URL`, else `VERCEL_PROJECT_PRODUCTION_URL`, else
-  the production site (`PRODUCTION_HOST` in `scripts/robots.mjs`). The rest
+  (`programs/programs.json`), and `index.html`, whose `%SITE_URL%`
+  `craco.config.js` fills from `resolveSiteUrl` (`scripts/site-url.mjs`). The rest
   is the part of upstream's assets
   repository that `client-v2/scripts/assets-import.txt` lists, at the commit
   in `client-v2/scripts/assets-commit.txt`; upstream's `tutorials/` is left

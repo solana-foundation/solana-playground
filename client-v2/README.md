@@ -122,9 +122,8 @@ a variable already set). Sentry stays out of a build without `VERCEL_ENV`
 
 ## Static assets
 
-`public/` is tracked files, served as they are; edit them in place, except
-`index.html`, which stays upstream's (see "Brand icons"). Every file there is
-served, a README included, so notes about them live here. The
+`public/` is tracked files, served as they are; edit them in place. Every
+file there is served, a README included, so notes about them live here. The
 `generate` scripts add `public/crates`, `public/packages`, and each Markdown
 tutorial's `content.json`, which stay gitignored.
 
@@ -181,15 +180,9 @@ sets `theme-color`, and carries the share card (Open Graph and Twitter tags,
 with `og.png`), so a browser, a crawler, a link preview or a home screen reads
 them from the markup without running the bundle.
 
-`public/index.html` itself is upstream's file, copied as is. `craco.config.js`
-passes it through `brandHeadFor` (`scripts/brand-head.mjs`) when webpack
-writes the page, in `yarn dev` and in the production build alike, and a page
-whose head the rewrite cannot place fails the build. An edit to
-`public/index.html` reaches `yarn dev` after a restart. The card's absolute
-URLs name the optional `SITE_URL` when it is set, else
-`https://$VERCEL_PROJECT_PRODUCTION_URL`, which Vercel sets on every build,
-else the production site, `https://playground.solana.com`
-(`resolveSiteUrl`); a value that is not an `http(s)` origin fails the build.
+`public/index.html` holds these tags; `craco.config.js` replaces its
+`%SITE_URL%` with `resolveSiteUrl` (`scripts/site-url.mjs`), and an edit to the
+page reaches `yarn dev` after a restart.
 
 | File | Used for |
 | --- | --- |

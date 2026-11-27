@@ -18,7 +18,10 @@ if (!fs.existsSync(path.join(__dirname, "public", "index.html"))) {
 const {
   missingObservabilityIds,
 } = require("./src/features/api/server/observability.mjs");
-const { brandHeadFor, resolveSiteUrl } = require("./scripts/brand-head.mjs");
+const {
+  resolveSiteUrl,
+  SITE_URL_PLACEHOLDER,
+} = require("./scripts/site-url.mjs");
 const { isRobotsDisallowed, robotsTxt } = require("./scripts/robots.mjs");
 
 // The build succeeds without these, so say in the build log what it ships without
@@ -675,16 +678,26 @@ module.exports = {
         preset: ["default", { calc: false }],
       };
 
-      // The page stays upstream's file; the brand head goes in as webpack writes it
+      // Crawlers read the share card's URLs without resolving them, so the page names the deployment's origin
       const htmlPlugin = webpackConfig.plugins.find(
         (plugin) => plugin.constructor.name === "HtmlWebpackPlugin"
       );
       if (!htmlPlugin) {
         throw new Error("craco: expected CRA's HtmlWebpackPlugin");
       }
-      htmlPlugin.userOptions.templateContent = brandHeadFor(
+      const htmlTemplate = fs.readFileSync(
+        htmlPlugin.userOptions.template,
+        "utf8"
+      );
+      if (!htmlTemplate.includes(SITE_URL_PLACEHOLDER)) {
+        throw new Error(
+          `craco: ${htmlPlugin.userOptions.template} has no ${SITE_URL_PLACEHOLDER} for the share card's origin`
+        );
+      }
+      htmlPlugin.userOptions.templateContent = htmlTemplate.replaceAll(
+        SITE_URL_PLACEHOLDER,
         resolveSiteUrl(process.env)
-      )(fs.readFileSync(htmlPlugin.userOptions.template, "utf8"));
+      );
 
       // The environment decides the file, so a preview or a staging project keeps crawlers out
       webpackConfig.plugins.push(new RobotsTxtPlugin(robotsTxt(process.env)));
