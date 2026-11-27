@@ -117,3 +117,78 @@ describe("GET /api/agent", () => {
     assert.equal(typeof body.model, "string");
   });
 });
+
+describe("settleOrReportWith", () => {
+  const TURN = {
+    turnId: "41",
+    charge: 6477,
+    end: { kind: "unfinished" },
+    tier: "newcomer",
+    day: "2026-11-24",
+    reserved: 11793,
+  };
+
+  /** A logger that keeps what it was asked to report */
+  const recording = () => {
+    /** @type {{ error: unknown; entry: any }[]} */
+    const reports = [];
+    return {
+      reports,
+      log: { error: (error, entry) => reports.push({ error, entry }) },
+    };
+  };
+
+  it("returns what the settle returns, and reports nothing", async () => {
+    const { reports, log } = recording();
+    const { settleOrReportWith } = await load();
+
+    const ended = await settleOrReportWith({
+      settle: async () => true,
+      log,
+    })(TURN);
+
+    assert.equal(ended, true);
+    assert.deepEqual(reports, []);
+  });
+
+  it("reports a settle that could not connect with the pool's state, and returns undefined", async () => {
+    // HOO-2996: SOLANA-PLAYGROUND-K said only "Connection terminated due to
+    // connection timeout"
+    const { reports, log } = recording();
+    const connect = {
+      idle: 0,
+      total: 1,
+      waiting: 0,
+      linkAgeMs: 120000,
+      renewMs: 3,
+      connectMs: 5001,
+    };
+    const failure = Object.assign(
+      new Error("Connection terminated due to connection timeout"),
+      { connect }
+    );
+    const { settleOrReportWith } = await load();
+
+    const ended = await settleOrReportWith({
+      settle: async () => {
+        throw failure;
+      },
+      log,
+    })(TURN);
+
+    assert.equal(ended, undefined);
+    assert.equal(reports.length, 1);
+    assert.equal(reports[0].error, failure);
+    assert.equal(reports[0].entry.report, true);
+    assert.deepEqual(reports[0].entry.context, {
+      code: undefined,
+      turnId: "41",
+      end: "unfinished",
+      tier: "newcomer",
+      day: "2026-11-24",
+      reserved: 11793,
+      charge: 6477,
+      connect,
+    });
+  });
+});

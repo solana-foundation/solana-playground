@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import { readFileSync } from "node:fs";
 import { Duplex } from "node:stream";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
+import pg from "pg";
 
 import {
   initServerLogger,
@@ -249,10 +251,65 @@ describe("persistence/model/providers/cloud-sql", () => {
 
   it("keeps a connection open unused for as long as a turn may run", async () => {
     // HOO-2996: a settle 29 s after its reserve found the connection closed
-    // and could not open a new one in time
+    // and could not open a new one in time. The agent route's `maxDuration`
+    // is the longest a turn runs.
+    const { functions } = JSON.parse(
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
+      readFileSync(
+        new URL("../../../../../vercel.json", import.meta.url),
+        "utf8"
+      )
+    );
     openReturning([fakeLink(1)]);
     const pool = await createPool(ENV);
-    assert.equal(pool.options.idleTimeoutMillis, 300_000);
+    assert.ok(
+      pool.options.idleTimeoutMillis >=
+        functions["api/agent.mjs"].maxDuration * 1000
+    );
+  });
+
+  it("hands the client and its release to the callback form of connect", async () => {
+    // `pg-pool`'s `query` draws every client through this form
+    const client = { name: "client" };
+    const done = () => {};
+    mock.method(pg.Pool.prototype, "connect", (callback) =>
+      callback ? callback(undefined, client, done) : Promise.resolve(client)
+    );
+    openReturning([fakeLink(1)]);
+    const pool = await createPool(ENV);
+
+    const handed = await new Promise((resolve) => {
+      // eslint-disable-next-line max-params -- `pg-pool`'s connect callback defines this signature
+      pool.connect((error, given, release) =>
+        resolve({ error, given, release })
+      );
+    });
+
+    assert.deepEqual(handed, {
+      error: undefined,
+      given: client,
+      release: done,
+    });
+    assert.equal(await pool.connect(), client);
+    assert.equal("connect" in client, false);
+  });
+
+  it("puts the connect's context on a failed query", async () => {
+    // The route sees a failed connect through `query`, then `run`
+    openReturning([fakeLink(1)]);
+    const pool = await createPool(ENV);
+    const error = await pool.query("select 1").then(
+      () => assert.fail("the fake socket refuses every connect"),
+      (e) => e
+    );
+    assert.deepEqual(error.connect, {
+      idle: 0,
+      total: 0,
+      waiting: 0,
+      linkAgeMs: 0,
+      renewMs: 0,
+      connectMs: 0,
+    });
   });
 
   it("puts the pool's state and the connect's timings on a failed connect", async () => {

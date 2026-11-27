@@ -74,6 +74,61 @@ import { createServerLogger } from "../src/shared/lib/logger/server.mjs";
 const log = createServerLogger("api:agent");
 
 /**
+ * Settle an admitted turn, or report why it could not be settled. Returns
+ * what `settle` returns, or `undefined` when it threw: nothing is left to
+ * tell, since the response has ended.
+ *
+ * A settle that throws leaves the reservation spent for the day and the
+ * turn's row `started`, until `settleStaleTurns` (`api/stale-turns.mjs`) ends
+ * it: an overcharge, never an undercharge. The report carries the pool's
+ * state and timings when the failure was a connect (`ConnectContext`, on the
+ * Cloud SQL provider only), for HOO-2996.
+ *
+ * @param {{
+ *   settle: (turn: { turnId: string; charge: number; end: import("../src/features/agent/server/ledger.mjs").TurnEnd }) => Promise<boolean>;
+ *   log: Pick<ReturnType<typeof createServerLogger>, "error">;
+ * }} deps
+ */
+export const settleOrReportWith =
+  ({ settle: settleTurn, log: report }) =>
+  /**
+   * @param {{
+   *   turnId: string;
+   *   charge: number;
+   *   end: import("../src/features/agent/server/ledger.mjs").TurnEnd;
+   *   tier: string;
+   *   day: string;
+   *   reserved: number;
+   * }} turn
+   */
+  (turn) =>
+    settleTurn({
+      turnId: turn.turnId,
+      charge: turn.charge,
+      end: turn.end,
+    }).catch((e) => {
+      report.error(e, {
+        report: true,
+        context: {
+          code: e?.code,
+          turnId: turn.turnId,
+          end: turn.end.kind,
+          tier: turn.tier,
+          day: turn.day,
+          reserved: turn.reserved,
+          charge: turn.charge,
+          connect: e?.connect,
+        },
+      });
+      return undefined;
+    });
+
+const settleOrReport = settleOrReportWith({
+  settle: (turn) => settle(query, turn),
+  log,
+});
+
+/**
  * Request fields forwarded upstream; everything else is the server's to
  * decide, the output limit and `providerOptions` included
  */
@@ -390,30 +445,13 @@ async function handler(req, res) {
     // this delays an answer. None of these steps throws: there is nobody left
     // to tell.
     if (gate.admitted) {
-      const charge = chargeFor(end, turn.amount, configured.prices);
-      const ended = await settle(query, {
+      const ended = await settleOrReport({
         turnId: gate.turnId,
-        charge,
+        charge: chargeFor(end, turn.amount, configured.prices),
         end,
-      }).catch((e) => {
-        // The reservation stays spent for the day, and the turn's row stays
-        // `started`: an overcharge, never an undercharge
-        log.error(e, {
-          report: true,
-          context: {
-            code: e?.code,
-            turnId: gate.turnId,
-            end: end.kind,
-            tier: gate.tier,
-            day: turn.day,
-            reserved: turn.amount,
-            charge,
-            // The pool's state and timings when the failure was a connect
-            // (`ConnectContext`, Cloud SQL only), for HOO-2996
-            connect: e?.connect,
-          },
-        });
-        return undefined;
+        tier: gate.tier,
+        day: turn.day,
+        reserved: turn.amount,
       });
       // The route settles a turn once, so its row is gone: the user was
       // deleted mid-turn, which is harmless, or something removed the row,

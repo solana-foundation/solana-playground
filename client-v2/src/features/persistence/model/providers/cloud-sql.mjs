@@ -133,9 +133,10 @@ const RENEWAL_WAIT_MS = 2000;
  * `api/agent.mjs` in `vercel.json`, so the connection a turn's reserve used is
  * still open for its settle. A new connection through the connector can take
  * longer than `connectionTimeoutMillis`, and a settle that cannot connect
- * leaves the turn's reservation held for the day (HOO-2996). Each instance
- * holds its connections this long after its last query, so the database
- * sees more of them open at once than with `POOL_LIMITS`' default.
+ * leaves the turn's reservation held (HOO-2996). Each connection stays open
+ * this long after it was last released, so the database sees more of them
+ * open at once than with `POOL_LIMITS`' default. `cloud-sql.test.mjs` fails
+ * when `maxDuration` outgrows it.
  */
 const IDLE_TIMEOUT_MS = 300_000;
 
@@ -286,7 +287,7 @@ const linksFor = async (env) => {
  *   connectMs: number;
  * }} ConnectContext
  * What a failed `connect` found and how long it took, as `error.connect`:
- * the pool's idle, open and queued clients as it began, the connector's age,
+ * the pool's idle and open clients and its queued requests as it began, the connector's age,
  * the time spent waiting for a renewal, and the time `pg` spent after it.
  * `connectionTimeoutMillis` bounds `connectMs` only.
  */

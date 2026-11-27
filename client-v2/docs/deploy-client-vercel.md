@@ -53,7 +53,7 @@ as soon as the Root Directory points at `client-v2`.
      which pulls a Sensitive variable as empty, stops at the install; deploy
      production from Vercel's own build.
    - `CRON_SECRET`: generated for production; without it the daily
-     retention job answers `503`
+     retention job and the 6-hourly stale-turn sweep answer `503`
      ([Conversation and project sync](#conversation-and-project-sync)).
    - `SENTRY_AUTH_TOKEN`: a production build fails without it
      (`scripts/upload-sourcemaps.mjs`). A local `vercel build` pulls a
@@ -682,7 +682,7 @@ before this existed.
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | The OAuth app. Its callback URL must match `AUTH_BASE_URL`; previews carry the host's pair |
 | `AUTH_OAUTH_PROXY_URL` | Previews only: the origin of the host, the deployment whose callback is on the GitHub app |
 | `AUTH_OAUTH_PROXY_SECRET` | The OAuth proxy's encryption key. The same value on the host and every preview, never `AUTH_SECRET`'s. Unset, the proxy is off |
-| `CRON_SECRET` | Production only. Vercel Cron sends it as `Authorization: Bearer` to `/api/retention`, the daily job that deletes expired sessions and old `build_audit` rows and clears deleted projects' names. Unset, the route answers `503` and nothing is removed. Vercel runs crons on production deployments only |
+| `CRON_SECRET` | Production only. Vercel Cron sends it as `Authorization: Bearer` to `/api/retention`, the daily job that deletes expired sessions and old `build_audit` rows and clears deleted projects' names, and to `/api/stale-turns`, which every 6 hours ends assistant turns that never settled. `refuseCronFor` (`src/features/api/server/cron.mjs`) checks it for both. Unset, both routes answer `503` and neither job runs. Vercel runs crons on production deployments only |
 
 ### GitHub tokens at rest
 

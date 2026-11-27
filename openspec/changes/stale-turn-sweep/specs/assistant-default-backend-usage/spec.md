@@ -18,9 +18,11 @@ usage holds such a count is charged its whole reservation, as one that
 reported no usage. A turn refused before the ledger (signed out,
 cross-origin, malformed, too large, ledger down) writes nothing. A settle that
 fails is reported as an error carrying the turn's id and leaves the row
-`started`; when the failure was a database connection that did not open, the
-report also carries the pool's idle, open and waiting clients as the connect
-began, and the time spent before the driver's connect and inside it. A settle
+`started` until the stale-turn sweep ends it; on the Cloud SQL provider, when
+the failure was a database connection that did not open, the report also
+carries the pool's idle and open clients and its queued requests as the
+connect began, and the time spent before the driver's connect and inside it.
+A settle
 that finds no `started` row changes nothing, charges nothing, and is reported
 as the warning `settle found no started turn`.
 
@@ -42,11 +44,11 @@ as the warning `settle found no started turn`.
 
 #### Scenario: A settle that cannot connect (manual)
 
-- **WHEN** the settle fails because a new database connection did not open
-  within the pool's connection timeout
-- **THEN** the reported error carries the turn's id and the pool's idle, open
-  and waiting clients as the connect began, with the time spent before the
-  driver's connect and inside it
+- **WHEN** on the Cloud SQL provider, the settle fails because a new database
+  connection did not open within the pool's connection timeout
+- **THEN** the reported error carries the turn's id and the pool's idle and
+  open clients and queued requests as the connect began, with the time spent
+  before the driver's connect and inside it
 
 #### Scenario: A turn settled twice (manual)
 

@@ -173,7 +173,7 @@ const isPriceable = (usage) =>
  * The turn row is written only when the reserve was admitted, charged the
  * reservation until {@link settle} replaces it, and names `model`. Writing it
  * here rather than at settle keeps a turn whose function is killed before it
- * settles: its row stays `started`.
+ * settles: its row stays `started` until {@link settleStaleTurns} ends it.
  *
  * The tier is returned for a refused turn too, because the refusal carries it.
  *
@@ -306,11 +306,12 @@ export const settle = async (query, turn) => {
 };
 
 /**
- * How long after its reserve a `started` turn is taken to have never settled:
- * well past the `maxDuration` of `api/agent.mjs` in `vercel.json`, so no
- * route can still be relaying it.
+ * How long after its reserve, in seconds, a `started` turn is taken to have
+ * never settled: well past the `maxDuration` of `api/agent.mjs` in
+ * `vercel.json`, so no route can still be relaying it. `ledger.test.mjs`
+ * fails when `maxDuration` catches up with it.
  */
-export const STALE_TURN_AGE = "1 hour";
+export const STALE_TURN_AGE = 60 * 60;
 
 /**
  * End every turn still `started` {@link STALE_TURN_AGE} after its reserve as
@@ -325,7 +326,7 @@ export const STALE_TURN_AGE = "1 hour";
  * bookkeeping, and gives no budget back. `unfinished`, not `abandoned`, which
  * is a turn that sent nothing and is charged nothing.
  *
- * The reservations are summed per day first: an `update ... from` that
+ * The reservations are summed per user and day first: an `update ... from` that
  * matches one `agent_spend` row to several turns applies only one of them. A
  * {@link settle} that runs at the same moment waits on the turn's row lock
  * and then finds it no longer `started`, so a turn is charged once.
@@ -339,7 +340,7 @@ export const settleStaleTurns = async (query) => {
        update agent_turn
           set outcome = 'unfinished',
               settled_at = now()
-        where outcome = 'started' and at < now() - $1::interval
+        where outcome = 'started' and at < now() - make_interval(secs => $1)
        returning user_id, day, charged
      ),
      held as (

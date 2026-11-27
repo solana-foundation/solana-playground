@@ -361,7 +361,8 @@ export const authEnv = () => ({
 
 /**
  * The secret Vercel Cron sends as `Authorization: Bearer <secret>` to the
- * routes it calls (`api/retention.mjs`). Unset, the route refuses to run.
+ * routes it calls (`api/retention.mjs`, `api/stale-turns.mjs`), read by
+ * `refuseCronFor`. Unset, both routes refuse to run.
  */
 export const cronEnv = () => ({
   CRON_SECRET: read("CRON_SECRET"),
