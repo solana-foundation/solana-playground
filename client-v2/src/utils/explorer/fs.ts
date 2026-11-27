@@ -5,6 +5,7 @@ import { createLogger } from "@/shared/lib/logger";
 import { PgCommon } from "../common";
 import type { Disposable } from "../types";
 import { PgExplorer } from "./explorer";
+import { idbBackend } from "./idb-backend";
 
 const log = createLogger("explorer:fs");
 
@@ -52,7 +53,14 @@ export class PgFs {
   }
 
   /** Async `indexedDB` based file system instance */
-  private static _fs = new FS("solana-playground").promises;
+  private static _fs = new FS("solana-playground", {
+    // lightning-fs's defaults for this name, so existing files carry over.
+    // Its `index.d.ts` types `db` wrongly, see `IdbBackend`.
+    db: idbBackend(
+      "solana-playground",
+      "solana-playground_files"
+    ) as unknown as FS.IDB,
+  }).promises;
 
   /**
    * Write a file.

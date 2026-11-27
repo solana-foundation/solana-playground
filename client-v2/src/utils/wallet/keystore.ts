@@ -134,26 +134,51 @@ export const indexedDbStoreFor = (name: string): WalletStore => {
     return opened;
   };
 
+  /**
+   * Run `task` on the connection, and once more on a fresh one when it fails.
+   * The browser can close a connection with no `close` event, or abort its
+   * transactions when site data is cleared under it ("Database deleted by
+   * request of the user"); the failed request is the only sign. Every task
+   * is a whole read or a whole write, so running it twice is safe. A failed
+   * open is not retried: it already waited for the timeout.
+   */
+  const withDb = async <T>(task: (db: IDBDatabase) => Promise<T>) => {
+    const connection = open();
+    const db = await connection;
+    try {
+      return await task(db);
+    } catch {
+      // The retry's failure, if any, is the one the caller reports
+      db.close();
+      if (opened === connection) opened = undefined;
+      return task(await open());
+    }
+  };
+
   const lockName = `${name}:${STORE_NAME}`;
   /** Whether a refused lock was reported: once a page, not once a save */
   let hasReportedRefusal = false;
 
   /** Rewrite the set-aside record in one transaction */
-  const updateAside = async (update: (items: unknown[]) => unknown[]) => {
-    const db = await open();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, "readwrite");
-      const store = tx.objectStore(STORE_NAME);
-      const kept = store.get(SET_ASIDE_KEY);
-      kept.onsuccess = () => {
-        const before: unknown[] = Array.isArray(kept.result) ? kept.result : [];
-        store.put(update(before), SET_ASIDE_KEY);
-      };
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error ?? kept.error);
-      tx.onabort = () => reject(tx.error ?? new Error("Transaction aborted"));
-    });
-  };
+  const updateAside = (update: (items: unknown[]) => unknown[]) =>
+    withDb(
+      (db) =>
+        new Promise<void>((resolve, reject) => {
+          const tx = db.transaction(STORE_NAME, "readwrite");
+          const store = tx.objectStore(STORE_NAME);
+          const kept = store.get(SET_ASIDE_KEY);
+          kept.onsuccess = () => {
+            const before: unknown[] = Array.isArray(kept.result)
+              ? kept.result
+              : [];
+            store.put(update(before), SET_ASIDE_KEY);
+          };
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error ?? kept.error);
+          tx.onabort = () =>
+            reject(tx.error ?? new Error("Transaction aborted"));
+        })
+    );
 
   return {
     async exclusive(task) {
@@ -182,17 +207,16 @@ export const indexedDbStoreFor = (name: string): WalletStore => {
         return task();
       }
     },
-    async read() {
-      const db = await open();
-      const value = await requestWith(db)("readonly")<
-        SerializedWalletState | undefined
-      >((store) => store.get(RECORD_KEY));
-      return value;
+    read() {
+      return withDb((db) =>
+        requestWith(db)("readonly")<SerializedWalletState | undefined>(
+          (store) => store.get(RECORD_KEY)
+        )
+      );
     },
     async write(state) {
-      const db = await open();
-      await requestWith(db)("readwrite")((store) =>
-        store.put(state, RECORD_KEY)
+      await withDb((db) =>
+        requestWith(db)("readwrite")((store) => store.put(state, RECORD_KEY))
       );
     },
     setAside(accounts) {
@@ -207,9 +231,10 @@ export const indexedDbStoreFor = (name: string): WalletStore => {
       });
     },
     async readAside() {
-      const db = await open();
-      const value = await requestWith(db)("readonly")<unknown>((store) =>
-        store.get(SET_ASIDE_KEY)
+      const value = await withDb((db) =>
+        requestWith(db)("readonly")<unknown>((store) =>
+          store.get(SET_ASIDE_KEY)
+        )
       );
       return Array.isArray(value) ? value : [];
     },
@@ -230,13 +255,17 @@ if (import.meta.vitest) {
     type Fake = typeof import("fake-indexeddb");
     let FakeFactory: Fake["IDBFactory"];
     let FakeObjectStore: Fake["IDBObjectStore"];
+    let FakeDatabase: Fake["IDBDatabase"];
 
     beforeAll(async () => {
       ({ initLogger, memoryProvider, resetLogger } = await import(
         "../../shared/lib/logger"
       ));
-      ({ IDBFactory: FakeFactory, IDBObjectStore: FakeObjectStore } =
-        await import("fake-indexeddb"));
+      ({
+        IDBFactory: FakeFactory,
+        IDBObjectStore: FakeObjectStore,
+        IDBDatabase: FakeDatabase,
+      } = await import("fake-indexeddb"));
     });
 
     beforeEach(() => {
@@ -420,6 +449,53 @@ if (import.meta.vitest) {
         "refused"
       );
       put.mockRestore();
+    });
+
+    /** Every connection `open` makes from now on, oldest first */
+    const recordConnections = () => {
+      const connections: IDBDatabase[] = [];
+      const factory = new FakeFactory();
+      const open = factory.open.bind(factory);
+      vi.spyOn(factory, "open").mockImplementation((name, version) => {
+        const request = open(name, version);
+        request.addEventListener("success", () =>
+          connections.push(request.result)
+        );
+        return request;
+      });
+      vi.stubGlobal("indexedDB", factory);
+      return connections;
+    };
+
+    it("writes after the connection closes without a `close` event", async () => {
+      const connections = recordConnections();
+      const store = indexedDbStoreFor("pg-wallet");
+      await store.write(walletOf("Wallet 1"));
+      // `close()` fires no `close` event, so only the failed write tells
+      connections.at(-1)?.close();
+
+      await store.write(walletOf("Wallet 2"));
+
+      expect((await store.read())?.accounts[0].name).toBe("Wallet 2");
+    });
+
+    it("writes when the browser aborts the first attempt", async () => {
+      const store = indexedDbStoreFor("pg-wallet");
+      await store.read();
+      // Safari aborts with "Database deleted by request of the user" when
+      // site data is cleared under an open connection
+      const transaction = FakeDatabase.prototype.transaction;
+      vi.spyOn(FakeDatabase.prototype, "transaction").mockImplementationOnce(
+        function (this: IDBDatabase, ...args) {
+          const started = transaction.apply(this, args);
+          queueMicrotask(() => started.abort());
+          return started;
+        }
+      );
+
+      await store.write(walletOf("Wallet 1"));
+
+      expect((await store.read())?.accounts[0].name).toBe("Wallet 1");
     });
 
     it("rejects an open that does not answer within 5 seconds", async () => {
