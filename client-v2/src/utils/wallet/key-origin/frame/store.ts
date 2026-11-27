@@ -33,11 +33,20 @@ export const KEY_DB_NAME = "pg-wallet-keys";
  */
 const keptDbNameOf = (name: string) => `${name}-unreadable`;
 
-/** Resolves on commit, so a write the browser aborts is a failure */
+/**
+ * Resolves on commit, so a write the browser aborts is a failure. A failed
+ * request's `error` event reaches `onerror` before the transaction aborts, so
+ * `tx.error` is still null there and the request's error is the one to keep.
+ */
 const settled = (tx: IDBTransaction) =>
   new Promise<void>((resolve, reject) => {
     tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
+    tx.onerror = (event) =>
+      reject(
+        tx.error ??
+          (event.target as IDBRequest).error ??
+          new Error("Transaction failed")
+      );
     tx.onabort = () => reject(tx.error ?? new Error("Transaction aborted"));
   });
 
@@ -268,6 +277,20 @@ if (import.meta.vitest) {
         request.onerror = () => reject(request.error);
       });
       expect(version).toBe(1);
+    });
+
+    it("rejects a failed request's transaction with the request's error, not null", async () => {
+      const db = await openerFor(STORE_NAME)("failing")();
+      const tx = db.transaction(STORE_NAME, "readwrite");
+      const store = tx.objectStore(STORE_NAME);
+      store.add(Array.from(secret(1)), "a");
+      // A second `add` under the same key fails the request, then the
+      // transaction; `tx.error` is still null while `onerror` runs
+      store.add(Array.from(secret(2)), "a");
+
+      await expect(settled(tx)).rejects.toMatchObject({
+        name: "ConstraintError",
+      });
     });
 
     it("asks the browser to keep the storage, where it can be asked", async () => {

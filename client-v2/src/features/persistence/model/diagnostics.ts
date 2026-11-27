@@ -55,7 +55,11 @@ export const report = (what: string, error: unknown) => {
     persistenceTelemetry.track("sync_request_dropped", { op: opOf(what) });
     return;
   }
-  log.error(error, { report: true, context });
+  // A failure with no error object, such as an HTTP answer, is named by what
+  // failed: logged bare, it reached Sentry as "Error: null"
+  const reported =
+    error === null || error === undefined ? new Error(what) : error;
+  log.error(reported, { report: true, context });
 };
 
 /** Shared with entities that read the same filesystem (`useTutorialProgress`) */
@@ -131,6 +135,24 @@ if (import.meta.vitest) {
         }),
       ]);
     });
+
+    // `report(what, null)` is a failure with no error object, such as an HTTP
+    // answer (Sentry SOLANA-PLAYGROUND-15, -16 and -1D got "Error: null")
+    // eslint-disable-next-line unicorn/no-null -- what `report`'s callers pass for no error object
+    it.each([null, undefined])(
+      "should report a failure that came with %s as an Error named by what failed",
+      (value) => {
+        report("fetch project p1: HTTP 404", value);
+
+        const [{ error }] = logged.entries;
+        expect(error).toBeInstanceOf(Error);
+        expect(error?.message).toBe("fetch project p1: HTTP 404");
+        expect(getLastFailure()).toMatchObject({
+          what: "fetch project p1: HTTP 404",
+          error: value,
+        });
+      }
+    );
 
     it.each([
       // Safari's and Chrome's dropped connection (Sentry SOLANA-PLAYGROUND-E)
