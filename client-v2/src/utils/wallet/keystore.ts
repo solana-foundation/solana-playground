@@ -1,3 +1,8 @@
+import {
+  isConnectionLost,
+  namedError,
+  withCause,
+} from "../../shared/lib/indexeddb-retry";
 import { createLogger } from "../../shared/lib/logger";
 import type { SerializedWalletState } from "./types";
 
@@ -57,6 +62,13 @@ const OPEN_TIMEOUT_MS = 5000;
 const RECORD_KEY = "wallet";
 const SET_ASIDE_KEY = "set-aside";
 
+/**
+ * What an abort rejects with when the browser gives no error, as WebKit does
+ * on a lost connection: named `AbortError`, so `withDb` retries it
+ */
+const abortedWithNoError = () =>
+  namedError("AbortError", "Transaction aborted with no error");
+
 /** Run one request in its own transaction and resolve with its result */
 const requestWith =
   (db: IDBDatabase) =>
@@ -69,7 +81,7 @@ const requestWith =
       // browser later aborts (quota) is reported as a failure
       tx.oncomplete = () => resolve(request.result);
       tx.onerror = () => reject(tx.error ?? request.error);
-      tx.onabort = () => reject(tx.error ?? new Error("Transaction aborted"));
+      tx.onabort = () => reject(tx.error ?? abortedWithNoError());
     });
 
 /**
@@ -78,8 +90,9 @@ const requestWith =
  * The database is the wallet's alone: project files live in lightning-fs's
  * database, which project sync reads and uploads, and a keypair must never
  * sit where an upload can reach it. The database opens on first use, and
- * again after the browser closes the connection; `read` and `write` reject
- * when IndexedDB is missing or refuses to open.
+ * again after the browser closes the connection; a request that fails for a
+ * lost connection runs once more on a fresh one (`withDb`). Every method but
+ * `exclusive` rejects when IndexedDB is missing or refuses to open.
  *
  * @param name database name
  */
@@ -134,26 +147,79 @@ export const indexedDbStoreFor = (name: string): WalletStore => {
     return opened;
   };
 
+  /**
+   * Run `task` on the connection, and once more on a fresh one when it
+   * failed for a lost connection. The browser can close a connection with no
+   * `close` event, or abort its transactions when site data is cleared under
+   * it ("Database deleted by request of the user"); the failed request is
+   * the only sign. Every task runs in one transaction, which commits whole or
+   * not at all, and a retry re-reads what it rewrites, so running it twice
+   * is safe; `updateAside`'s `update` may run twice, so it must have no side
+   * effects.
+   *
+   * Not retried: a request's own failure (quota, a value that cannot be
+   * stored), which would fail on any connection, and a failed open, whose
+   * error is the caller's: IndexedDB missing or the open blocked would fail
+   * again at once, and a timed-out open has already waited. The next call
+   * opens afresh either way.
+   */
+  const withDb = async <T>(task: (db: IDBDatabase) => Promise<T>) => {
+    /** Run `task` once, dropping the connection when it was lost */
+    const attempt = async () => {
+      const connection = open();
+      const db = await connection;
+      try {
+        return await task(db);
+      } catch (error) {
+        if (isConnectionLost(error)) {
+          db.close();
+          if (opened === connection) opened = undefined;
+        }
+        throw error;
+      }
+    };
+    try {
+      return await attempt();
+    } catch (first) {
+      if (!isConnectionLost(first)) throw first;
+      // Logged, not reported: a retry that saves the wallet is not a failure
+      log.warn("retrying on a new connection to the wallet's store", {
+        context: {
+          name: (first as { name?: unknown }).name,
+          message: (first as { message?: unknown }).message,
+        },
+      });
+      try {
+        return await attempt();
+      } catch (second) {
+        throw withCause(second, first);
+      }
+    }
+  };
+
   const lockName = `${name}:${STORE_NAME}`;
   /** Whether a refused lock was reported: once a page, not once a save */
   let hasReportedRefusal = false;
 
   /** Rewrite the set-aside record in one transaction */
-  const updateAside = async (update: (items: unknown[]) => unknown[]) => {
-    const db = await open();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, "readwrite");
-      const store = tx.objectStore(STORE_NAME);
-      const kept = store.get(SET_ASIDE_KEY);
-      kept.onsuccess = () => {
-        const before: unknown[] = Array.isArray(kept.result) ? kept.result : [];
-        store.put(update(before), SET_ASIDE_KEY);
-      };
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error ?? kept.error);
-      tx.onabort = () => reject(tx.error ?? new Error("Transaction aborted"));
-    });
-  };
+  const updateAside = (update: (items: unknown[]) => unknown[]) =>
+    withDb(
+      (db) =>
+        new Promise<void>((resolve, reject) => {
+          const tx = db.transaction(STORE_NAME, "readwrite");
+          const store = tx.objectStore(STORE_NAME);
+          const kept = store.get(SET_ASIDE_KEY);
+          kept.onsuccess = () => {
+            const before: unknown[] = Array.isArray(kept.result)
+              ? kept.result
+              : [];
+            store.put(update(before), SET_ASIDE_KEY);
+          };
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error ?? kept.error);
+          tx.onabort = () => reject(tx.error ?? abortedWithNoError());
+        })
+    );
 
   return {
     async exclusive(task) {
@@ -182,17 +248,16 @@ export const indexedDbStoreFor = (name: string): WalletStore => {
         return task();
       }
     },
-    async read() {
-      const db = await open();
-      const value = await requestWith(db)("readonly")<
-        SerializedWalletState | undefined
-      >((store) => store.get(RECORD_KEY));
-      return value;
+    read() {
+      return withDb((db) =>
+        requestWith(db)("readonly")<SerializedWalletState | undefined>(
+          (store) => store.get(RECORD_KEY)
+        )
+      );
     },
     async write(state) {
-      const db = await open();
-      await requestWith(db)("readwrite")((store) =>
-        store.put(state, RECORD_KEY)
+      await withDb((db) =>
+        requestWith(db)("readwrite")((store) => store.put(state, RECORD_KEY))
       );
     },
     setAside(accounts) {
@@ -207,9 +272,10 @@ export const indexedDbStoreFor = (name: string): WalletStore => {
       });
     },
     async readAside() {
-      const db = await open();
-      const value = await requestWith(db)("readonly")<unknown>((store) =>
-        store.get(SET_ASIDE_KEY)
+      const value = await withDb((db) =>
+        requestWith(db)("readonly")<unknown>((store) =>
+          store.get(SET_ASIDE_KEY)
+        )
       );
       return Array.isArray(value) ? value : [];
     },
@@ -230,13 +296,17 @@ if (import.meta.vitest) {
     type Fake = typeof import("fake-indexeddb");
     let FakeFactory: Fake["IDBFactory"];
     let FakeObjectStore: Fake["IDBObjectStore"];
+    let FakeDatabase: Fake["IDBDatabase"];
 
     beforeAll(async () => {
       ({ initLogger, memoryProvider, resetLogger } = await import(
         "../../shared/lib/logger"
       ));
-      ({ IDBFactory: FakeFactory, IDBObjectStore: FakeObjectStore } =
-        await import("fake-indexeddb"));
+      ({
+        IDBFactory: FakeFactory,
+        IDBObjectStore: FakeObjectStore,
+        IDBDatabase: FakeDatabase,
+      } = await import("fake-indexeddb"));
     });
 
     beforeEach(() => {
@@ -248,6 +318,7 @@ if (import.meta.vitest) {
 
     afterEach(() => {
       resetLogger();
+      vi.restoreAllMocks();
       vi.unstubAllGlobals();
       vi.useRealTimers();
     });
@@ -419,7 +490,132 @@ if (import.meta.vitest) {
       await expect(store.write(walletOf("Wallet 1"))).rejects.toThrow(
         "refused"
       );
+      // A quota error would fail on any connection, so it is not retried
+      expect(put).toHaveBeenCalledTimes(1);
       put.mockRestore();
+    });
+
+    /** Every connection `open` makes from now on, oldest first */
+    const recordConnections = () => {
+      const connections: IDBDatabase[] = [];
+      const factory = new FakeFactory();
+      const open = factory.open.bind(factory);
+      vi.spyOn(factory, "open").mockImplementation((name, version) => {
+        const request = open(name, version);
+        request.addEventListener("success", () =>
+          connections.push(request.result)
+        );
+        return request;
+      });
+      vi.stubGlobal("indexedDB", factory);
+      return connections;
+    };
+
+    it("writes after the connection closes without a `close` event", async () => {
+      const connections = recordConnections();
+      const store = indexedDbStoreFor("pg-wallet");
+      await store.write(walletOf("Wallet 1"));
+      // `close()` fires no `close` event, so only the failed write tells
+      connections.at(-1)?.close();
+
+      await store.write(walletOf("Wallet 2"));
+
+      expect((await store.read())?.accounts[0].name).toBe("Wallet 2");
+    });
+
+    it("writes when the browser aborts the first attempt", async () => {
+      const store = indexedDbStoreFor("pg-wallet");
+      await store.read();
+      // Safari aborts with "Database deleted by request of the user" when
+      // site data is cleared under an open connection
+      const transaction = FakeDatabase.prototype.transaction;
+      vi.spyOn(FakeDatabase.prototype, "transaction").mockImplementationOnce(
+        function (this: IDBDatabase, ...args) {
+          const started = transaction.apply(this, args);
+          queueMicrotask(() => started.abort());
+          return started;
+        }
+      );
+
+      await store.write(walletOf("Wallet 1"));
+
+      expect((await store.read())?.accounts[0].name).toBe("Wallet 1");
+      // The lost attempt is logged, not reported: the retry saved the wallet
+      expect(logged.entries).toMatchObject([
+        {
+          level: "warn",
+          ns: "wallet:storage",
+          context: { name: "AbortError" },
+        },
+      ]);
+      expect(logged.entries[0].report).toBeFalsy();
+    });
+
+    /**
+     * Abort the next transaction once its `put` has succeeded, so neither the
+     * transaction nor the request carries an error: WebKit's lost connection
+     */
+    const abortNextAfterPut = () => {
+      const put = FakeObjectStore.prototype.put;
+      vi.spyOn(FakeObjectStore.prototype, "put").mockImplementationOnce(
+        function (this: IDBObjectStore, ...args) {
+          const request = put.apply(this, args);
+          request.addEventListener("success", () => this.transaction.abort());
+          return request;
+        }
+      );
+    };
+
+    it("writes when the browser aborts the first attempt with no error", async () => {
+      const store = indexedDbStoreFor("pg-wallet");
+      await store.read();
+      abortNextAfterPut();
+
+      await store.write(walletOf("Wallet 1"));
+
+      expect((await store.read())?.accounts[0].name).toBe("Wallet 1");
+    });
+
+    it("sets accounts aside when the browser aborts the first attempt with no error", async () => {
+      const store = indexedDbStoreFor("pg-wallet");
+      await store.read();
+      abortNextAfterPut();
+
+      await store.setAside([{ kp: [1, 2], name: "A" }]);
+
+      expect(await store.readAside()).toEqual([{ kp: [1, 2], name: "A" }]);
+    });
+
+    it("sets accounts aside after the connection closes without a `close` event", async () => {
+      const connections = recordConnections();
+      const store = indexedDbStoreFor("pg-wallet");
+      await store.read();
+      connections.at(-1)?.close();
+
+      await store.setAside([{ kp: [1, 2], name: "A" }]);
+
+      expect(await store.readAside()).toEqual([{ kp: [1, 2], name: "A" }]);
+    });
+
+    it("rejects with the retry's failure, carrying the first one as its cause", async () => {
+      const store = indexedDbStoreFor("pg-wallet");
+      await store.read();
+      const transaction = FakeDatabase.prototype.transaction;
+      vi.spyOn(FakeDatabase.prototype, "transaction").mockImplementation(
+        function (this: IDBDatabase, ...args) {
+          const started = transaction.apply(this, args);
+          queueMicrotask(() => started.abort());
+          return started;
+        }
+      );
+
+      const rejection = await store.write(walletOf("Wallet 1")).then(
+        () => "resolved",
+        (e: unknown) => e
+      );
+
+      expect(rejection).toHaveProperty("name", "AbortError");
+      expect(rejection).toHaveProperty("cause.name", "AbortError");
     });
 
     it("rejects an open that does not answer within 5 seconds", async () => {
