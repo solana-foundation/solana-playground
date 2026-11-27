@@ -6,6 +6,7 @@
  */
 import {
   refuseCronFor,
+  sendJsonFor,
   warnAboutMissingObservabilityIds,
   withObservability,
 } from "../src/features/api/server.mjs";
@@ -20,13 +21,6 @@ import { createServerLogger } from "../src/shared/lib/logger/server.mjs";
 const log = createServerLogger("api:retention");
 
 const refuse = refuseCronFor("retention");
-
-const sendJson = (res, status, body) => {
-  res.statusCode = status;
-  res.setHeader("content-type", "application/json");
-  res.setHeader("cache-control", "no-store");
-  res.end(JSON.stringify(body));
-};
 
 /**
  * The route, with the three steps passed in; the default export wires the
@@ -58,7 +52,7 @@ export const handleWith = (deps) => async (req, res) => {
     }
   }
   log.info("retention ran", { context: { ...counts, failed: hasFailed } });
-  return sendJson(res, hasFailed ? 500 : 200, counts);
+  return sendJsonFor(res)(hasFailed ? 500 : 200, counts);
 };
 
 export default withObservability("retention", (req, res) => {

@@ -9,6 +9,7 @@
 import { settleStaleTurns } from "../src/features/agent/server.mjs";
 import {
   refuseCronFor,
+  sendJsonFor,
   warnAboutMissingObservabilityIds,
   withObservability,
 } from "../src/features/api/server.mjs";
@@ -18,13 +19,6 @@ import { createServerLogger } from "../src/shared/lib/logger/server.mjs";
 const log = createServerLogger("api:stale-turns");
 
 const refuse = refuseCronFor("stale-turns");
-
-const sendJson = (res, status, body) => {
-  res.statusCode = status;
-  res.setHeader("content-type", "application/json");
-  res.setHeader("cache-control", "no-store");
-  res.end(JSON.stringify(body));
-};
 
 /**
  * The route, with the sweep passed in; the default export wires the real
@@ -37,12 +31,12 @@ export const handleWith = (deps) => async (req, res) => {
   try {
     const staleTurns = await deps.sweep();
     log.info("stale-turns ran", { context: { staleTurns } });
-    return sendJson(res, 200, { staleTurns });
+    return sendJsonFor(res)(200, { staleTurns });
   } catch (e) {
     log.error(new Error("stale-turns sweep failed", { cause: e }), {
       report: true,
     });
-    return sendJson(res, 500, { error: "The sweep failed" });
+    return sendJsonFor(res)(500, { error: "The sweep failed" });
   }
 };
 

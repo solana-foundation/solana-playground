@@ -7,14 +7,7 @@ import { timingSafeEqual } from "node:crypto";
 
 import { cronEnv } from "../../../shared/config/server-env.mjs";
 import { createServerLogger } from "../../../shared/lib/logger/server.mjs";
-
-/** @param {import("node:http").ServerResponse} res */
-const sendJsonFor = (res) => (status, body) => {
-  res.statusCode = status;
-  res.setHeader("content-type", "application/json");
-  res.setHeader("cache-control", "no-store");
-  res.end(JSON.stringify(body));
-};
+import { sendJsonFor } from "./send-json.mjs";
 
 /**
  * Whether the header is `Bearer <secret>`, compared in constant time.
