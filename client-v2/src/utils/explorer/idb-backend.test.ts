@@ -245,6 +245,26 @@ describe("utils/explorer/idb-backend", () => {
     ).toHaveProperty("name", "DatabaseReplacedError");
   });
 
+  it("reads existing files when full storage leaves no room for the marker, and refuses writes after a reopen", async () => {
+    const old = new Store(DB_NAME, STORE_NAME);
+    await set(1, Uint8Array.of(7), old);
+    // Storage is full: every put fails, the marker's included
+    vi.spyOn(IDBObjectStore.prototype, "put").mockImplementation(() => {
+      throw new DOMException("full", "QuotaExceededError");
+    });
+    const backend = idbBackend(DB_NAME, STORE_NAME);
+
+    expect(await bytesOf(backend.readFile(1))).toEqual([7]);
+
+    // A reopen cannot tell this database from one another tab recreated
+    closeLastConnection();
+    expect(await bytesOf(backend.readFile(1))).toEqual([7]);
+    vi.restoreAllMocks();
+    expect(
+      await settled(backend.writeFile(2, Uint8Array.of(2)))
+    ).toHaveProperty("name", "DatabaseUnverifiedError");
+  });
+
   it("keeps a newer write when an older one to the same file is retried", async () => {
     const backend = idbBackend(DB_NAME, STORE_NAME);
     await backend.writeFile(1, Uint8Array.of(0));

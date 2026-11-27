@@ -45,6 +45,15 @@ const SUPERBLOCK_KEY = "!root";
  */
 const MARKER_KEY = "!pg-database-id";
 
+/** Read the marker, `undefined` when there is none */
+const readMarker: MakeRequest<unknown> = (store) => store.get(MARKER_KEY);
+
+/** An open connection, and whether this backend may write through it */
+interface Connection {
+  db: IDBDatabase;
+  canWrite: boolean;
+}
+
 /** Read the marker, writing `candidate` in the same transaction when there is none */
 const claimMarker =
   (candidate: string): MakeRequest<unknown> =>
@@ -169,12 +178,13 @@ interface Step<T> {
  * failing until a reload.
  */
 class ReopeningIdbBackend implements IdbBackend {
-  private _connection?: Promise<IDBDatabase>;
+  private _connection?: Promise<Connection>;
   /**
-   * The database's identity marker, read on the first open. Once it is set,
-   * no open may create the database, and a reopen must find the same marker.
+   * What the first open learned: the database's identity marker, `undefined`
+   * when there was none and no room to write one. Once it is set, no open
+   * may create the database, and a reopen must find the same marker.
    */
-  private _marker?: unknown;
+  private _identity?: { marker?: unknown };
   /** The last request of each key, which the next request for it waits for */
   private readonly _tails = new Map<IDBValidKey, Promise<unknown>>();
 
@@ -211,10 +221,18 @@ class ReopeningIdbBackend implements IdbBackend {
    * anything.
    */
   async wipe() {
+    const marker = this._identity?.marker;
+    if (marker === undefined) {
+      await this._run({
+        makeRequest: (store) => store.clear(),
+        mode: "readwrite",
+      });
+      return;
+    }
     await this._run({
       makeRequest: (store) => {
         store.clear();
-        return store.put(this._marker, MARKER_KEY);
+        return store.put(marker, MARKER_KEY);
       },
       mode: "readwrite",
     });
@@ -226,7 +244,7 @@ class ReopeningIdbBackend implements IdbBackend {
     if (!connection) return;
     try {
       // Closing a connection the browser already closed does nothing
-      (await connection).close();
+      (await connection).db.close();
     } catch (error) {
       // A failed open leaves nothing to close; its error already reached the
       // request that started it. Rejecting here would fail lightning-fs's
@@ -292,7 +310,13 @@ class ReopeningIdbBackend implements IdbBackend {
 
   private async _attempt<T>({ makeRequest, mode }: Step<T>) {
     const connection = this._connect();
-    const db = await connection;
+    const { db, canWrite } = await connection;
+    if (mode === "readwrite" && !canWrite) {
+      throw namedError(
+        "DatabaseUnverifiedError",
+        `${this._dbName} was reopened with no marker to tell it from a recreated one, so it is not written`
+      );
+    }
     try {
       return await transactWith(makeRequest, mode)(db, this._storeName);
     } catch (error) {
@@ -309,35 +333,61 @@ class ReopeningIdbBackend implements IdbBackend {
   /**
    * Open the database and check it is the one this backend first opened.
    * The first open records the marker, writing one into a database that has
-   * none; a reopen refuses a database whose marker differs or is missing,
-   * which is a database another tab recreated after a deletion.
+   * none; a reopen refuses a database whose marker differs, which is one
+   * another tab recreated after a deletion. When the first open had no room
+   * for a marker (storage full), a reopen cannot tell, so it may read but
+   * not write.
    */
-  private async _open() {
-    const isFirst = this._marker === undefined;
-    const onMissing = isFirst ? createStore(this._storeName) : refuseDeleted;
+  private async _open(): Promise<Connection> {
+    const identity = this._identity;
+    const onMissing = identity ? refuseDeleted : createStore(this._storeName);
     const db = await openDatabaseWith(onMissing)(this._dbName);
     try {
-      const candidate = uuid();
-      const found = await transactWith(
-        isFirst
-          ? claimMarker(candidate)
-          : (store: IDBObjectStore) => store.get(MARKER_KEY),
-        isFirst ? "readwrite" : "readonly"
-      )(db, this._storeName);
-      if (isFirst) {
-        this._marker = found ?? candidate;
-        return db;
+      if (!identity) {
+        // The database the page loaded with is this backend's own, marked or not
+        this._identity = { marker: await this._claimMarker(db) };
+        return { db, canWrite: true };
       }
-      if (found !== this._marker) {
+      const found = await transactWith(readMarker, "readonly")(
+        db,
+        this._storeName
+      );
+      if (identity.marker === undefined) return { db, canWrite: false };
+      if (found !== identity.marker) {
         throw namedError(
           "DatabaseReplacedError",
           `${this._dbName} was deleted and recreated while the page had it open`
         );
       }
-      return db;
+      return { db, canWrite: true };
     } catch (error) {
       db.close();
       throw error;
+    }
+  }
+
+  /**
+   * The database's marker, written first when there is none. Full storage
+   * must not cost the reads of what is already saved, so a marker that
+   * cannot be written is logged and the marker read instead, `undefined`
+   * when there is none.
+   */
+  private async _claimMarker(db: IDBDatabase) {
+    const candidate = uuid();
+    try {
+      const found = await transactWith(claimMarker(candidate), "readwrite")(
+        db,
+        this._storeName
+      );
+      return found ?? candidate;
+    } catch (error) {
+      log.warn(`no marker written to ${this._dbName}; reading without one`, {
+        context: {
+          name: (error as { name?: unknown }).name,
+          message: (error as { message?: unknown }).message,
+        },
+      });
+      return transactWith(readMarker, "readonly")(db, this._storeName);
     }
   }
 
@@ -347,7 +397,7 @@ class ReopeningIdbBackend implements IdbBackend {
     const connection = this._open();
     this._connection = connection;
     connection.then(
-      (db) => {
+      ({ db }) => {
         db.addEventListener("close", () => this._forget(connection));
         // Let a deletion or an upgrade elsewhere through instead of blocking it
         db.addEventListener("versionchange", () => {
@@ -360,7 +410,7 @@ class ReopeningIdbBackend implements IdbBackend {
     return connection;
   }
 
-  private _forget(connection: Promise<IDBDatabase>) {
+  private _forget(connection: Promise<Connection>) {
     if (this._connection === connection) this._connection = undefined;
   }
 }
