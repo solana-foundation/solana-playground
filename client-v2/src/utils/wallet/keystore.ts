@@ -1,3 +1,4 @@
+import { isConnectionLost, withCause } from "../../shared/lib/indexeddb-retry";
 import { createLogger } from "../../shared/lib/logger";
 import type { SerializedWalletState } from "./types";
 
@@ -78,8 +79,9 @@ const requestWith =
  * The database is the wallet's alone: project files live in lightning-fs's
  * database, which project sync reads and uploads, and a keypair must never
  * sit where an upload can reach it. The database opens on first use, and
- * again after the browser closes the connection; `read` and `write` reject
- * when IndexedDB is missing or refuses to open.
+ * again after the browser closes the connection; a request that fails for a
+ * lost connection runs once more on a fresh one (`withDb`). Every method but
+ * `exclusive` rejects when IndexedDB is missing or refuses to open.
  *
  * @param name database name
  */
@@ -135,23 +137,52 @@ export const indexedDbStoreFor = (name: string): WalletStore => {
   };
 
   /**
-   * Run `task` on the connection, and once more on a fresh one when it fails.
-   * The browser can close a connection with no `close` event, or abort its
-   * transactions when site data is cleared under it ("Database deleted by
-   * request of the user"); the failed request is the only sign. Every task
-   * is a whole read or a whole write, so running it twice is safe. A failed
-   * open is not retried: it already waited for the timeout.
+   * Run `task` on the connection, and once more on a fresh one when it
+   * failed for a lost connection. The browser can close a connection with no
+   * `close` event, or abort its transactions when site data is cleared under
+   * it ("Database deleted by request of the user"); the failed request is
+   * the only sign. Every task runs in one transaction, which commits whole or
+   * not at all, and a retry re-reads what it rewrites, so running it twice
+   * is safe; `updateAside`'s `update` may run twice, so it must have no side
+   * effects.
+   *
+   * Not retried: a request's own failure (quota, a value that cannot be
+   * stored), which would fail on any connection, and a failed open, whose
+   * error is the caller's: IndexedDB missing or the open blocked would fail
+   * again at once, and a timed-out open has already waited. The next call
+   * opens afresh either way.
    */
   const withDb = async <T>(task: (db: IDBDatabase) => Promise<T>) => {
-    const connection = open();
-    const db = await connection;
+    /** Run `task` once, dropping the connection when it was lost */
+    const attempt = async () => {
+      const connection = open();
+      const db = await connection;
+      try {
+        return await task(db);
+      } catch (error) {
+        if (isConnectionLost(error)) {
+          db.close();
+          if (opened === connection) opened = undefined;
+        }
+        throw error;
+      }
+    };
     try {
-      return await task(db);
-    } catch {
-      // The retry's failure, if any, is the one the caller reports
-      db.close();
-      if (opened === connection) opened = undefined;
-      return task(await open());
+      return await attempt();
+    } catch (first) {
+      if (!isConnectionLost(first)) throw first;
+      // Logged, not reported: a retry that saves the wallet is not a failure
+      log.warn("retrying on a new connection to the wallet's store", {
+        context: {
+          name: (first as { name?: unknown }).name,
+          message: (first as { message?: unknown }).message,
+        },
+      });
+      try {
+        return await attempt();
+      } catch (second) {
+        throw withCause(second, first);
+      }
     }
   };
 
@@ -277,6 +308,7 @@ if (import.meta.vitest) {
 
     afterEach(() => {
       resetLogger();
+      vi.restoreAllMocks();
       vi.unstubAllGlobals();
       vi.useRealTimers();
     });
@@ -448,6 +480,8 @@ if (import.meta.vitest) {
       await expect(store.write(walletOf("Wallet 1"))).rejects.toThrow(
         "refused"
       );
+      // A quota error would fail on any connection, so it is not retried
+      expect(put).toHaveBeenCalledTimes(1);
       put.mockRestore();
     });
 
@@ -496,6 +530,47 @@ if (import.meta.vitest) {
       await store.write(walletOf("Wallet 1"));
 
       expect((await store.read())?.accounts[0].name).toBe("Wallet 1");
+      // The lost attempt is logged, not reported: the retry saved the wallet
+      expect(logged.entries).toMatchObject([
+        {
+          level: "warn",
+          ns: "wallet:storage",
+          context: { name: "AbortError" },
+        },
+      ]);
+      expect(logged.entries[0].report).toBeFalsy();
+    });
+
+    it("sets accounts aside after the connection closes without a `close` event", async () => {
+      const connections = recordConnections();
+      const store = indexedDbStoreFor("pg-wallet");
+      await store.read();
+      connections.at(-1)?.close();
+
+      await store.setAside([{ kp: [1, 2], name: "A" }]);
+
+      expect(await store.readAside()).toEqual([{ kp: [1, 2], name: "A" }]);
+    });
+
+    it("rejects with the retry's failure, carrying the first one as its cause", async () => {
+      const store = indexedDbStoreFor("pg-wallet");
+      await store.read();
+      const transaction = FakeDatabase.prototype.transaction;
+      vi.spyOn(FakeDatabase.prototype, "transaction").mockImplementation(
+        function (this: IDBDatabase, ...args) {
+          const started = transaction.apply(this, args);
+          queueMicrotask(() => started.abort());
+          return started;
+        }
+      );
+
+      const rejection = await store.write(walletOf("Wallet 1")).then(
+        () => "resolved",
+        (e: unknown) => e
+      );
+
+      expect(rejection).toHaveProperty("name", "AbortError");
+      expect(rejection).toHaveProperty("cause.name", "AbortError");
     });
 
     it("rejects an open that does not answer within 5 seconds", async () => {
