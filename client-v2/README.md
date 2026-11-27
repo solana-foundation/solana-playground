@@ -216,7 +216,9 @@ A program is listed only when all of these hold:
 1. **It builds on the default build server.** Open the card in Playground and
    press Build with the default server (Solana Foundation): the output ends in
    `Finished release` with no `could not compile`. The server compiles against
-   its own fixed crate list, ignores the program's `Cargo.toml`, and refuses
+   its own fixed crate list,
+   [`server/programs/Cargo.toml`](../server/programs/Cargo.toml), ignores the
+   program's `Cargo.toml`, and refuses
    more than 64 source files, so most large protocols fail.
 2. **It is Solana-native or notable.** A program from Solana itself (SPL,
    Anza, Solana Foundation) or a protocol people recognise and would want to
@@ -244,14 +246,11 @@ crates (most Anchor protocols and SPL programs), more than 64 source files
 (mpl-token-metadata, openbook-v2), or a 502 from the server (drift-v2,
 mango-v4, marginfi, whirlpool).
 
-Anchor protocols mostly fail on the crate list, not on their size. The server
-compiles Anchor 0.29 against `solana-program` 1.16 and lacks crates common in
-protocol code (`solana-security-txt`, `uint`, `spl-memo`, `mpl-core`,
-`fixed`), so code written for Anchor 0.28 (`ctx.bumps.get`) or 0.30+ fails as
-well. Tried and refused on 3 Nov: raydium-cp-swap, raydium-clmm, squads-v4,
-jito tip-payment and tip-distribution, mpl-hybrid, mpl-candy-machine-core,
-mpl-candy-guard, mpl-inscription, marinade validator-bonds, tensor
-marketplace and whitelist.
+Anchor protocols mostly fail on the crate list, not on their size. Tried and
+refused on 3 Nov, against the server of that date: raydium-cp-swap,
+raydium-clmm, squads-v4, jito tip-payment and tip-distribution, mpl-hybrid,
+mpl-candy-machine-core, mpl-candy-guard, mpl-inscription, marinade
+validator-bonds, tensor marketplace and whitelist.
 
 ## Docker
 
