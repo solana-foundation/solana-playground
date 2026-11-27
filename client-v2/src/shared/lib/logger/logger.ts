@@ -30,7 +30,7 @@ export const toError = (value: unknown): Error =>
  * global handler did
  * @returns for the value logged, its `Error`
  */
-const loggedErrorFrom =
+const toErrorFor =
   (from: Namespace | "unhandled") =>
   (value: unknown): Error => {
     if (value !== null && value !== undefined) return toError(value);
@@ -153,11 +153,11 @@ export const createLogger = (ns: Namespace): Log => {
   return {
     panic: (error, options) => {
       const from = options?.unhandled ? "unhandled" : options?.ns ?? ns;
-      send(entry("panic", options, { error: loggedErrorFrom(from)(error) }));
+      send(entry("panic", options, { error: toErrorFor(from)(error) }));
     },
     error: (error, options) => {
       const from = options?.ns ?? ns;
-      send(entry("error", options, { error: loggedErrorFrom(from)(error) }));
+      send(entry("error", options, { error: toErrorFor(from)(error) }));
     },
     warn: (message, options) => send(entry("warn", options, { message })),
     info: (message, options) => send(entry("info", options, { message })),
