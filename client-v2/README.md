@@ -122,9 +122,8 @@ a variable already set). Sentry stays out of a build without `VERCEL_ENV`
 
 ## Static assets
 
-`public/` is tracked files, served as they are; edit them in place, except
-`index.html`, which stays upstream's (see "Brand icons"). Every file there is
-served, a README included, so notes about them live here. The
+`public/` is tracked files, served as they are; edit them in place. Every
+file there is served, a README included, so notes about them live here. The
 `generate` scripts add `public/crates`, `public/packages`, and each Markdown
 tutorial's `content.json`, which stay gitignored.
 
@@ -181,15 +180,9 @@ sets `theme-color`, and carries the share card (Open Graph and Twitter tags,
 with `og.png`), so a browser, a crawler, a link preview or a home screen reads
 them from the markup without running the bundle.
 
-`public/index.html` itself is upstream's file, copied as is. `craco.config.js`
-passes it through `brandHeadFor` (`scripts/brand-head.mjs`) when webpack
-writes the page, in `yarn dev` and in the production build alike, and a page
-whose head the rewrite cannot place fails the build. An edit to
-`public/index.html` reaches `yarn dev` after a restart. The card's absolute
-URLs name the optional `SITE_URL` when it is set, else
-`https://$VERCEL_PROJECT_PRODUCTION_URL`, which Vercel sets on every build,
-else the production site, `https://playground.solana.com`
-(`resolveSiteUrl`); a value that is not an `http(s)` origin fails the build.
+`public/index.html` holds these tags; `craco.config.js` replaces its
+`%SITE_URL%` with `resolveSiteUrl` (`scripts/site-url.mjs`), and an edit to the
+page reaches `yarn dev` after a restart.
 
 | File | Used for |
 | --- | --- |
@@ -223,7 +216,9 @@ A program is listed only when all of these hold:
 1. **It builds on the default build server.** Open the card in Playground and
    press Build with the default server (Solana Foundation): the output ends in
    `Finished release` with no `could not compile`. The server compiles against
-   its own fixed crate list, ignores the program's `Cargo.toml`, and refuses
+   its own fixed crate list,
+   [`server/programs/Cargo.toml`](../server/programs/Cargo.toml), ignores the
+   program's `Cargo.toml`, and refuses
    more than 64 source files, so most large protocols fail.
 2. **It is Solana-native or notable.** A program from Solana itself (SPL,
    Anza, Solana Foundation) or a protocol people recognise and would want to
@@ -250,15 +245,6 @@ spl-name-service, spl-noop and spl-stake-pool): the rest hit missing
 crates (most Anchor protocols and SPL programs), more than 64 source files
 (mpl-token-metadata, openbook-v2), or a 502 from the server (drift-v2,
 mango-v4, marginfi, whirlpool).
-
-Anchor protocols mostly fail on the crate list, not on their size. The server
-compiles Anchor 0.29 against `solana-program` 1.16 and lacks crates common in
-protocol code (`solana-security-txt`, `uint`, `spl-memo`, `mpl-core`,
-`fixed`), so code written for Anchor 0.28 (`ctx.bumps.get`) or 0.30+ fails as
-well. Tried and refused on 3 Nov: raydium-cp-swap, raydium-clmm, squads-v4,
-jito tip-payment and tip-distribution, mpl-hybrid, mpl-candy-machine-core,
-mpl-candy-guard, mpl-inscription, marinade validator-bonds, tensor
-marketplace and whitelist.
 
 ## Docker
 

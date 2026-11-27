@@ -60,6 +60,7 @@ export const FORK_OWNED = [
   /^favicon[^/]*$/,
   /^apple-touch-icon\.png$/,
   /^icon-[^/]*\.png$/,
+  /^index\.html$/,
   /^manifest\.json$/,
   /^og\.png$/,
   /^programs\/programs\.json$/,

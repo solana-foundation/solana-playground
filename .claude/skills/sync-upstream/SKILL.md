@@ -86,8 +86,7 @@ every listed tutorial has its `data.json`. It clones the assets repository into
 any other file as it is, because the fork keeps its images optimised:
 
 - a path the import list does not cover is reported as not imported, and nothing is written;
-- a fork-owned path (`FORK_OWNED`: the brand files `favicon*`, `apple-touch-icon.png`, `icon-*.png`,
-  `manifest.json`, `og.png`, and `programs/programs.json`) is reported, never written;
+- a fork-owned path (`FORK_OWNED`) is reported, never written;
 - a path whose copy in `client-v2/public/` differs from `<old>`'s optimised blob is reported as changed by the
   fork, never written;
 - a path whose copy already equals `<new>`'s optimised blob is counted as current;
@@ -100,8 +99,7 @@ upstream lacks is reported. `data.json` is written last, so an import that stops
 next run.
 
 The optimiser's output is the same only for the svgo and sharp versions `client-v2/package.json` pins. A change
-that bumps either one runs `node scripts/optimise-image.mjs` over every image in `client-v2/public/`,
-`client-v2/src/tutorials/`, and `client-v2/src/frameworks/` in the same change; otherwise this command reports every image as changed by the
+that bumps either one runs `node scripts/optimise-image.mjs` over every image in its `OPTIMISED_FOLDERS` in the same change; otherwise this command reports every image as changed by the
 fork.
 
 It reports each tutorial folder upstream added with a `data.json` (names starting with `_` excluded) and
@@ -109,9 +107,8 @@ upstream's date, without importing it, writes `<new>` to `assets-commit.txt`, pr
 nothing. Then decide with the user:
 
 1. For each fork-owned path and each path the fork changed, show the fork's version and upstream's
-   (`git -C <clone> show <new8>:<path>`) and ask which changes to take. `index.html` is not fork-owned: it stays
-   upstream's, and the build adds the brand head (`client-v2/scripts/brand-head.mjs`). A build that fails in
-   `brandHeadFor` after the copy means upstream restructured the head; update `isBrandTag` there.
+   (`git -C <clone> show <new8>:<path>`) and ask which changes to take. A change taken into `index.html` keeps
+   the fork's brand head and `%SITE_URL%`.
 2. For each new tutorial, ask whether to enable it. On a yes, add `"<name>": { "added": <the reported date> }`
    to `markdown-tutorials.json` in alphabetical order (the build keeps the file's order), and run `S assets`
    again with the same arguments: it imports the folder whole.

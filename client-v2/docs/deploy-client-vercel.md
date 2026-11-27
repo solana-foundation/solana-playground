@@ -41,7 +41,7 @@ as soon as the Root Directory points at `client-v2`.
      `og:image` name. Unset, the build takes Vercel's
      `VERCEL_PROJECT_PRODUCTION_URL`, the project's production domain, which
      Vercel sets on every build, previews included (`resolveSiteUrl` in
-     `scripts/brand-head.mjs`); a build outside Vercel takes
+     `scripts/site-url.mjs`); a build outside Vercel takes
      `https://playground.solana.com`. Set it only when the card must name
      another origin, such as a Preview environment with a domain of its own.
    - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — see step 3.

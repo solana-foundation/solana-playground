@@ -7,7 +7,11 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 
-import { isOptimisable, optimiseImage } from "./optimise-image.mjs";
+import {
+  isOptimisable,
+  OPTIMISED_FOLDERS,
+  optimiseImage,
+} from "./optimise-image.mjs";
 
 const CLIENT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -55,7 +59,7 @@ test("keeps an image whose re-encode is not smaller", async () => {
   assert.equal(await optimiseImage("a.png", bytes), bytes);
 });
 
-test("every image in public/, src/tutorials/, and src/frameworks/ is already optimised", async () => {
+test("every image in OPTIMISED_FOLDERS is already optimised", async () => {
   const files = execFileSync(
     "git",
     [
@@ -66,9 +70,7 @@ test("every image in public/, src/tutorials/, and src/frameworks/ is already opt
       "--others",
       "--exclude-standard",
       "--",
-      "public",
-      "src/tutorials",
-      "src/frameworks",
+      ...OPTIMISED_FOLDERS,
     ],
     { encoding: "utf8" }
   )
