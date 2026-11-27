@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, it } from "node:test";
 
 import {
+  blobAt,
   dataJsonLast,
   GUARDS,
   isForkOwned,
@@ -13,20 +16,25 @@ import {
   message,
   parseImportList,
   parseSyncedTo,
+  REPO_VARS,
+  repoEnv,
+  topLevel,
   wholeImportReport,
 } from "./sync-upstream.mjs";
 
+// Found without the code under test, so a regression fails its own case instead of the whole file
 const repo = execFileSync(
   "git",
   ["-C", import.meta.dirname, "rev-parse", "--show-toplevel"],
-  { encoding: "utf8" }
+  { encoding: "utf8", env: repoEnv() }
 ).trim();
 
 const MERGED = "a7a8a1f9ed2e9a2cebafd4b59427fe61ab99702a";
 
 const hasCommit = (rev) =>
-  spawnSync("git", ["-C", repo, "cat-file", "-e", `${rev}^{commit}`])
-    .status === 0;
+  spawnSync("git", ["-C", repo, "cat-file", "-e", `${rev}^{commit}`], {
+    env: repoEnv(),
+  }).status === 0;
 
 // `message` exits the process on a commit it cannot read, so these cases skip where the commits are absent
 const withoutHistory = ["86460da5", "6ec9b806", MERGED].every(hasCommit)
@@ -34,6 +42,79 @@ const withoutHistory = ["86460da5", "6ec9b806", MERGED].every(hasCommit)
   : "needs upstream's commits, which a shallow checkout or a clone without solpg lacks";
 
 describe("sync-upstream", () => {
+  // A git hook (pre-push runs this suite) exports GIT_DIR, which outranks `git -C`
+  describe("inside a git hook", () => {
+    const script = pathToFileURL(
+      path.join(import.meta.dirname, "sync-upstream.mjs")
+    ).href;
+    // Runs `call` in a child whose environment points git at an empty repository
+    const underHook = (call) => {
+      const other = mkdtempSync(path.join(os.tmpdir(), "sync-upstream-hook-"));
+      try {
+        execFileSync("git", ["init", "--quiet", other], { env: repoEnv() });
+        const result = spawnSync(
+          process.execPath,
+          [
+            "--input-type=module",
+            "-e",
+            `const m = await import(${JSON.stringify(script)});
+             console.log(JSON.stringify(${call}));`,
+          ],
+          {
+            encoding: "utf8",
+            env: {
+              ...process.env,
+              GIT_DIR: path.join(other, ".git"),
+              GIT_WORK_TREE: other,
+              GIT_INDEX_FILE: path.join(other, ".git", "index"),
+            },
+          }
+        );
+        assert.equal(result.status, 0, result.stderr);
+        return JSON.parse(result.stdout);
+      } finally {
+        rmSync(other, { recursive: true, force: true });
+      }
+    };
+
+    it("finds the repository it is given", () => {
+      assert.equal(
+        underHook(`m.topLevel(${JSON.stringify(import.meta.dirname)})`),
+        repo
+      );
+    });
+
+    it("reads a blob from the repository it is given", () => {
+      const file = path.relative(repo, import.meta.filename);
+      assert.equal(
+        underHook(
+          `m.blobAt(${JSON.stringify(repo)}, "HEAD", ${JSON.stringify(
+            file
+          )})?.toString("utf8").length`
+        ),
+        execFileSync("git", ["-C", repo, "show", `HEAD:${file}`], {
+          encoding: "utf8",
+          env: repoEnv(),
+        }).length
+      );
+    });
+  });
+
+  it("strips every variable that pins git to a repository, and nothing else", () => {
+    const saved = { ...process.env };
+    try {
+      for (const name of REPO_VARS) process.env[name] = "x";
+      const childEnv = repoEnv();
+      for (const name of REPO_VARS) assert.equal(childEnv[name], undefined);
+      assert.equal(childEnv.PATH, saved.PATH);
+      assert.equal(process.env.GIT_DIR, "x");
+    } finally {
+      for (const name of REPO_VARS)
+        if (name in saved) process.env[name] = saved[name];
+        else delete process.env[name];
+    }
+  });
+
   it("writes the merge subject", { skip: withoutHistory }, () => {
     assert.equal(
       message(repo, "86460da5", "6ec9b806").split("\n")[0],
@@ -48,7 +129,7 @@ describe("sync-upstream", () => {
       const merged = execFileSync(
         "git",
         ["-C", repo, "log", "-1", "--format=%B", MERGED],
-        { encoding: "utf8" }
+        { encoding: "utf8", env: repoEnv() }
       );
       const body = (text) =>
         text.split("\n").slice(1).join("\n").replace(/\n+$/, "");
@@ -185,7 +266,7 @@ describe("sync-upstream", () => {
         "--",
         "client-v2/public",
       ],
-      { encoding: "utf8" }
+      { encoding: "utf8", env: repoEnv() }
     )
       .split("\n")
       .filter((file) => file && existsSync(path.join(repo, file)))

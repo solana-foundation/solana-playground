@@ -112,9 +112,39 @@ const die = (text) => {
   process.exit(1);
 };
 
+// What git itself clears before it works in another repository (`git rev-parse --local-env-vars`).
+// A git hook exports some of them, GIT_DIR above all, and they outrank `git -C`: with GIT_DIR set
+// and GIT_WORK_TREE unset, `git -C <dir> rev-parse --show-toplevel` answers <dir>. No child here
+// should see the hook's repository: git calls name theirs with -C, `git clone` makes its own, and
+// gh finds its own from the working directory.
+export const REPO_VARS = [
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_CONFIG",
+  "GIT_CONFIG_PARAMETERS",
+  "GIT_CONFIG_COUNT",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_IMPLICIT_WORK_TREE",
+  "GIT_GRAFT_FILE",
+  "GIT_INDEX_FILE",
+  "GIT_NO_REPLACE_OBJECTS",
+  "GIT_REPLACE_REF_BASE",
+  "GIT_PREFIX",
+  "GIT_SHALLOW_FILE",
+  "GIT_COMMON_DIR",
+];
+
+/** The environment for a child process, without the variables that pin git to one repository. */
+export const repoEnv = () =>
+  Object.fromEntries(
+    Object.entries(env).filter(([name]) => !REPO_VARS.includes(name))
+  );
+
 const spawn = (cmd, args, stdio) => {
   const result = spawnSync(cmd, args, {
     encoding: "utf8",
+    env: repoEnv(),
     maxBuffer: 256 * 1024 * 1024,
     stdio,
   });
@@ -144,6 +174,9 @@ const tryRead = (cmd, args) => {
 };
 
 const git = (cwd, ...args) => run("git", ["-C", cwd, ...args]);
+
+/** The top of the working tree that holds `dir`. */
+export const topLevel = (dir) => git(dir, "rev-parse", "--show-toplevel");
 
 const short = (repo, rev) => git(repo, "rev-parse", "--short=8", rev);
 
@@ -556,11 +589,12 @@ const publish = (repo, wt) => {
 };
 
 /** A blob's bytes at `rev`, or `undefined` when the path is absent there. */
-const blobAt = (repo, rev, file) => {
+export const blobAt = (repo, rev, file) => {
   const result = spawnSync(
     "git",
     ["-C", repo, "cat-file", "blob", `${rev}:${file}`],
     {
+      env: repoEnv(),
       maxBuffer: 256 * 1024 * 1024,
       stdio: ["ignore", "pipe", "ignore"],
     }
@@ -776,12 +810,11 @@ const assets = async (wt, toArg) => {
   console.log(`\n${ASSETS_COMMIT}: ${next}; nothing is committed`);
 };
 
-const worktreeArg = (arg) =>
-  git(arg || process.cwd(), "rev-parse", "--show-toplevel");
+const worktreeArg = (arg) => topLevel(arg || process.cwd());
 
 const main = async (args) => {
   const usage = `usage: ${self()} message <from> <to> | synced-to <subject> | prepare | commit [<worktree>] | publish [<worktree>] | assets <worktree> [<upstream commit>]`;
-  const repo = () => git(process.cwd(), "rev-parse", "--show-toplevel");
+  const repo = () => topLevel(process.cwd());
   switch (args[0]) {
     case "message":
       if (args.length !== 3) die(`usage: ${self()} message <from> <to>`);
