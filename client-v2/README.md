@@ -246,12 +246,6 @@ crates (most Anchor protocols and SPL programs), more than 64 source files
 (mpl-token-metadata, openbook-v2), or a 502 from the server (drift-v2,
 mango-v4, marginfi, whirlpool).
 
-Anchor protocols mostly fail on the crate list, not on their size. Tried and
-refused on 3 Nov, against the server of that date: raydium-cp-swap,
-raydium-clmm, squads-v4, jito tip-payment and tip-distribution, mpl-hybrid,
-mpl-candy-machine-core, mpl-candy-guard, mpl-inscription, marinade
-validator-bonds, tensor marketplace and whitelist.
-
 ## Docker
 
 Run client-v2 with everything it talks to via [Docker Compose](https://github.com/docker/compose).
