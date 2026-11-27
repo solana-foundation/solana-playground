@@ -209,7 +209,7 @@
     "lint": "eslint --max-warnings 2113 src api e2e scripts eslint-plugin-layers",
     "lint:layers": "eslint --quiet src/app src/widgets src/features src/entities src/shared api",
     "spec:validate": "openspec validate --all --strict --no-interactive",
-    "spec:coverage": "node scripts/spec-coverage.mjs",
+    "spec:coverage": "node ../.claude/skills/quality-spec-coverage/scripts/spec-coverage.mjs",
     "tutorial:check": "tsx scripts/tutorial-check.ts",
     "tutorial:idl": "node scripts/tutorial-idl/generate.mjs",
     "tutorial:skill": "node scripts/tutorial-skill.mjs",

@@ -1,0 +1,12 @@
+# Quality tools: each keeps its code in .claude/skills/quality-<name>/; only the coverage gate is also a yarn script.
+
+.PHONY: quality-spec-coverage quality-spec-coverage-update quality-lint-gates
+
+quality-spec-coverage: ## Gate spec scenarios on tests and the exclude list; pass ARGS="--base <ref>" or ARGS=--strict
+	yarn --cwd client-v2 spec:coverage $(ARGS)
+
+quality-spec-coverage-update: ## Rewrite the exclude list from the scenarios without a test
+	node .claude/skills/quality-spec-coverage/scripts/spec-coverage.mjs --update-excluded
+
+quality-lint-gates: ## Lint the weighted gates under .agents/gates
+	node .claude/skills/quality-gates/scripts/lint-gates.mjs .agents/gates

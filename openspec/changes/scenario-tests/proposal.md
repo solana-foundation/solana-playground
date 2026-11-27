@@ -24,8 +24,8 @@ plan", lives only in `client-v2/CLAUDE.md`, so no spec states it and no requirem
   the error toast"), a rule this change introduces: the clause is the test's step title verbatim, and its subject is
   the system under test, which the scenario already names. `client-v2/CLAUDE.md` ("A test title says what the code
   does") accepts "should" or a verb and sets nothing for a clause. GIVEN, WHEN, and an AND after them keep a subject.
-  The rule applies to new scenarios, through the `config.yaml` line, and to strict capabilities: a capability's
-  assertion clauses are rewritten when it joins the strict list. Other existing specs stay as they are.
+  The rule applies to new scenarios, through the `config.yaml` line, and to every scenario not on the exclude list:
+  a scenario's assertion clauses are rewritten when its line leaves the list. Other existing specs stay as they are.
 - `spec:coverage` reads the vitest files `vitest.config.ts` collects and the `node --test` files `yarn test-api`
   runs, as well as `e2e/`, and reports per scenario: its tests, their level, missing clauses, and scenarios more than
   one test cites. A flat `it` or `test` titled with a scenario cites it with every clause missing, and a `(manual)`
@@ -34,17 +34,21 @@ plan", lives only in `client-v2/CLAUDE.md`, so no spec states it and no requirem
 - Each capability under `openspec/specs/` gets a generated, committed `tests.md`: one row per clause naming the test
   file, test title, and level, "missing" for a clause the test has no step for, "manual", or "none". CI and `yarn run check`
   fail when a committed `tests.md` differs from the generator's output.
-- A committed list of strict capabilities: CI fails on an uncovered scenario, a missing clause, or an assertion
-  clause whose first word is on a closed list of non-verbs in a listed capability, and on a PR that drops a
-  capability its base branch lists. The other capabilities stay report-only. `scenario-tests` joins the list when
-  the change is archived.
+- A committed exclude list, `.claude/skills/quality-spec-coverage/excluded.txt`, names the scenarios of
+  `openspec/specs/` not yet up to standard. CI fails on any other scenario that is uncovered, misses a clause, or has
+  an assertion clause whose first word is on a closed list of non-verbs; on a listed scenario that meets the standard
+  or no longer exists; and on a PR that adds a line its base branch lacks, so the list only shrinks. A new scenario
+  needs a test or the `(manual)` mark from the PR that adds it.
+- The quality tools share the `quality-` prefix and live in skill folders under `.claude/skills/`: the checker moves
+  to `quality-spec-coverage`, and a `quality-spec-tests` skill writes the test of a listed scenario from its clauses
+  and removes its line. A root `Makefile.quality` lists them in `make help`; only the gate stays a yarn script.
 - `client-v2/CLAUDE.md` points at the spec instead of restating the rule, and so do the two places that cite the
   rule by title. `openspec/config.yaml` gains a `rules.specs` line on the clause format and the verb-first assertion
   clause, so every `/opsx:*` command writes new scenarios in it, and its archive guidance runs `yarn spec:tests`.
   `jest/valid-title` stops warning on "unit", "integration", or "e2e" in a clause `describe` or a scenario
   `describe`.
 - Two pilots rewrite a capability's assertion clauses to start with a verb, convert its tests to clause steps, and
-  put the capability on the strict list: `client-v2-custom-rpcs` for Playwright steps, and
+  remove the capability's lines from the exclude list: `client-v2-custom-rpcs` for Playwright steps, and
   `client-v2-build-server-endpoint` for a THEN nested in its WHEN `describe`, where scenarios marked `(manual)` gain
   an integration test, the two flat `node --test` cases of `scripts/server-url-gate.test.mjs` take the clause form,
   and the scenario comments leave the in-source unit blocks.
@@ -52,15 +56,16 @@ plan", lives only in `client-v2/CLAUDE.md`, so no spec states it and no requirem
   event, and touches no funnel step's code.
 
 User-visible consequence: none in the product. A contributor sees which clause of a scenario has no step, which
-tests check a capability in its `tests.md`, and a failed check when a strict capability's test falls behind its
-spec.
+tests check a capability in its `tests.md`, and a failed check when the test of a scenario not on the exclude list
+falls behind its spec.
 
 ## Capabilities
 
 ### New Capabilities
 
 - `scenario-tests`: how a spec scenario maps to a test, the test levels, the clause-to-step format, the verb-first
-  assertion clause, the coverage report, the generated `tests.md`, and the per-capability strict gate.
+  assertion clause, the coverage report, the generated `tests.md`, the exclude list gate, and the
+  `quality-spec-tests` skill.
 
 ### Modified Capabilities
 
@@ -68,12 +73,15 @@ None by delta. `client-v2-unit-tests` keeps its requirements, and a unit test ci
 
 The pilots edit two capabilities directly in `openspec/specs/`, for clause wording and `(manual)` marks only, with no
 change of behaviour: `client-v2-custom-rpcs` (task 5.1) and `client-v2-build-server-endpoint` (task 5.3). A delta
-would put the rewritten scenarios under the name-only exemption until archive (design.md, decisions 10 and 12).
+would leave the old clauses in `openspec/specs/`, which the gate reads, until archive (design.md, decisions 10 and
+12).
 
 ## Impact
 
-- Code: `client-v2/scripts/spec-coverage.mjs` and its tests, a `tests.md` generator under `client-v2/scripts/`,
-  the strict list `client-v2/scripts/spec-coverage-strict.txt`, `client-v2/package.json` scripts, the `jest/valid-title` rule in `client-v2/eslint.config.mjs`, the `checks` job of
+- Code: `.claude/skills/quality-spec-coverage/` (the checker `scripts/spec-coverage.mjs`, its tests, the exclude list
+  `excluded.txt`, and `SKILL.md`), `.claude/skills/quality-spec-tests/SKILL.md`, the root `Makefile` and
+  `Makefile.quality`, a `tests.md` generator under `client-v2/scripts/`, `client-v2/package.json` scripts, the
+  `jest/valid-title` rule in `client-v2/eslint.config.mjs`, the `checks` job of
   `.github/workflows/reusable-client-v2.yml`, the tests of
   `client-v2-custom-rpcs` in `client-v2/e2e/client-v2-custom-rpcs.e2e.spec.ts`, the assertion clauses of
   `openspec/specs/client-v2-custom-rpcs/spec.md`; for `client-v2-build-server-endpoint`, a new
@@ -85,6 +93,6 @@ would put the rewritten scenarios under the name-only exemption until archive (d
 - Order: this proposal lands as a docs-only PR first; the checker, the generator, the gate, and the pilots follow in
   PRs of their own.
 - Out of scope: mutation testing (Stryker), until its support for vitest 5 is checked; a Gherkin runner; rewriting
-  existing tests into clause steps beyond the two pilot capabilities; rewriting the assertion clauses of a capability that
-  is not on the strict list; a `tests.md` for a change's delta spec, which is a
+  existing tests into clause steps beyond the two pilot capabilities and the tests `quality-spec-tests` writes;
+  rewriting the assertion clauses of a scenario on the exclude list; a `tests.md` for a change's delta spec, which is a
   proposal until it is archived; any change to how unit tests are written.

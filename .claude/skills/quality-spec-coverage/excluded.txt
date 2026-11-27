@@ -1,0 +1,116 @@
+# Scenarios of openspec/specs/ not yet up to standard, one `<capability>: <scenario>` per line.
+# The list only shrinks: a new scenario needs a test or the `(manual)` mark, not a line here.
+# Remove a line once its scenario has a test; `make quality-spec-coverage-update` rewrites the list.
+client-v2-auth: A blocked popup
+client-v2-auth: A completed sign-in
+client-v2-auth: The sign-in request does not reach the server
+client-v2-layout: The editor on a desk
+client-v2-layout: The editor on a phone
+client-v2-lessons: How the step is checked
+client-v2-lessons: One row at 1440
+client-v2-lessons: One row at 834
+client-v2-lessons: Starting a tutorial lands on the code
+client-v2-lessons: Statuses on entry
+client-v2-lessons: The band and the bar on a phone
+client-v2-lessons: The page has no footer
+client-v2-logging: A Sentry import in another logger provider
+client-v2-logging: A bound logger
+client-v2-logging: A component throws while rendering
+client-v2-logging: A console call in a feature
+client-v2-logging: A console call in a route
+client-v2-logging: A driver error in a route
+client-v2-logging: A module-level logger and a later initLogger
+client-v2-logging: A per-call namespace
+client-v2-logging: A reported error
+client-v2-logging: A reported server error with Sentry on
+client-v2-logging: A request's body, cookies and headers
+client-v2-logging: A string is thrown
+client-v2-logging: An error during start-up
+client-v2-logging: An error from production
+client-v2-logging: An error not marked for reporting
+client-v2-logging: An unhandled rejection
+client-v2-logging: Console output
+client-v2-logging: No DSN
+client-v2-logging: Output of the user's code
+client-v2-logging: Production threshold
+client-v2-logging: Requesting a source map
+client-v2-logging: The app's configuration
+client-v2-logging: The default namespace
+client-v2-observability: A child throws while rendering
+client-v2-observability: A child's first render
+client-v2-observability: A deployment without ids
+client-v2-observability: No ids
+client-v2-observability: StrictMode renders twice
+client-v2-observability: The app starts
+client-v2-overlays: A long toast at the bottom left
+client-v2-stages: A failed deploy
+client-v2-stages: An instruction that takes nothing
+client-v2-stages: An instruction with one argument and two accounts
+client-v2-stages: Copy appears with a value
+client-v2-stages: Deploy before a build
+client-v2-telemetry: A change adds an event
+client-v2-telemetry: A change touches a slice without changing its events
+client-v2-telemetry: A failure is tracked
+client-v2-telemetry: A map with a wide key type
+client-v2-telemetry: A measurement id is set
+client-v2-telemetry: A misspelt name or wrong parameter at a call site
+client-v2-telemetry: A name at the limit
+client-v2-telemetry: A name over the GA4 limit
+client-v2-telemetry: A slice with server code only
+client-v2-telemetry: A slice without a telemetry file
+client-v2-telemetry: An event before gtag.js loads
+client-v2-telemetry: An event before initialisation
+client-v2-telemetry: An event from a dialog inside a widget
+client-v2-telemetry: An event from code outside React
+client-v2-telemetry: An event without a doc comment
+client-v2-telemetry: An object is passed as a parameter
+client-v2-telemetry: An unregistered prefix
+client-v2-telemetry: No measurement id
+client-v2-telemetry: Rendering on the server or in a test without initialisation
+client-v2-telemetry: Two slices register the same prefix
+client-v2-themes: A sheet's edge in the dark theme
+client-v2-tutorials: A card on a phone
+client-v2-tutorials: A first visit
+client-v2-tutorials: A search with no match
+client-v2-tutorials: A started tutorial's card
+client-v2-tutorials: Everything done
+client-v2-tutorials: Filtering by framework
+client-v2-tutorials: Hello Anchor half done
+client-v2-tutorials: Measuring the filter
+client-v2-tutorials: New project lists the same cards
+client-v2-tutorials: Opening a tutorial from its card
+client-v2-tutorials: Show all
+client-v2-tutorials: The banner gives way to a search
+client-v2-tutorials: The banner moves on
+client-v2-tutorials: The start lists the three v2 lessons
+client-v2-tutorials: The word over a card's name
+project-conflict-resolution: The banner on a phone
+wallet-signing: A build with a key origin uses the key-origin provider
+wallet-signing: A frame on another origin is ignored
+wallet-signing: A message that is a transaction
+wallet-signing: An account the provider holds no key for
+wallet-signing: Import a file that is not a key
+wallet-signing: No reply carries the key
+wallet-signing: Setup makes the first account
+wallet-signing: The dialog stays open while the panel works
+wallet-signing: The first account cannot be made
+wallet-signing: The key bytes handed out are a copy
+wallet-signing: The key page refuses another app origin
+wallet-signing: The local provider signs for an account
+wallet-signing: The page's wallet signs through the key page
+wallet-signing: The user closes Add without adding
+wallet-signing: The wallet and Deploy share the first account
+wallet-signing: solana balance with the built-in wallet
+wallet-storage: A new wallet under the key-origin provider
+wallet-storage: Remove stores the record, then forgets the key
+wallet-storage: The key cannot be forgotten
+wallet-storage: The key origin setting is dropped after the move
+wallet-storage: The key page does not confirm one key
+wallet-storage: The page's record names a key the key page lacks
+wallet-storage: The record lands only in localStorage while the store lists the account
+wallet-storage: The record without the account cannot be stored
+wallet-storage: The store refuses a localStorage wallet
+wallet-storage: The store refuses the record without keys
+wallet-storage: The store refuses the set-aside write
+wallet-storage: The stored record is not a wallet
+wallet-storage: The stored record is not a wallet, and localStorage holds one

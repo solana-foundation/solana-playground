@@ -21,6 +21,11 @@ on:
       firefox:
         type: boolean
         default: false
+      # `false` skips the browser suite (`e2e`, `e2e-key-origin`, `e2e-report`) on a draft pull request; `gate` then
+      # expects those three skipped.
+      e2e:
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -288,10 +293,15 @@ jobs:
       - name: Validate specs
         run: yarn spec:validate
 
-      # Report only: which scenarios have neither a browser test nor a
-      # `(manual)` mark. `--strict` is for when the list is empty.
+      # Fails on a scenario gap outside excluded.txt and, on a pull request, on a line the base branch's list lacks
       - name: Scenario coverage
-        run: yarn spec:coverage
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin "$GITHUB_BASE_REF"
+            yarn spec:coverage --base FETCH_HEAD
+          else
+            yarn spec:coverage
+          fi
 
       - name: Unit tests
         run: yarn test-unit
@@ -419,7 +429,7 @@ jobs:
   e2e:
     name: e2e (${{ matrix.browser }}, ${{ matrix.shard }})
     needs: wasm
-    if: ${{ !cancelled() && (needs.wasm.result == 'success' || needs.wasm.result == 'skipped') }}
+    if: ${{ inputs.e2e && !cancelled() && (needs.wasm.result == 'success' || needs.wasm.result == 'skipped') }}
     runs-on: ubuntu-26.04
     # Measured on run 40369790881 (2026-10-26, 278 tests): about 4 minutes
     # from checkout to the first test (install, browser, dev-server compile),
@@ -587,7 +597,7 @@ jobs:
   e2e-key-origin:
     name: e2e (key origin)
     needs: wasm
-    if: ${{ !cancelled() && (needs.wasm.result == 'success' || needs.wasm.result == 'skipped') }}
+    if: ${{ inputs.e2e && !cancelled() && (needs.wasm.result == 'success' || needs.wasm.result == 'skipped') }}
     runs-on: ubuntu-latest
     # A shard's setup (about 4 minutes, more on a slow apt mirror) and one
     # spec of five serial tests.
@@ -682,7 +692,7 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     needs: [e2e, e2e-key-origin]
-    if: always()
+    if: ${{ always() && inputs.e2e }}
 
     defaults:
       run:
@@ -749,7 +759,8 @@ jobs:
 
   # A called workflow whose jobs were skipped still concludes `success`, and
   # the caller sees only that conclusion. This job fails the workflow unless
-  # every job ran and succeeded, `wasm` alone being skipped on the stubs.
+  # every job ran and succeeded, `wasm` alone being skipped on the stubs and
+  # the three browser-suite jobs alone when `e2e` is `false`.
   # A job added above joins `needs` and the list below.
   gate:
     name: gate
@@ -761,13 +772,20 @@ jobs:
       - name: Every job ran and succeeded
         env:
           STUBS: ${{ inputs.use-wasm-stubs }}
+          E2E: ${{ inputs.e2e }}
           WASM: ${{ needs.wasm.result }}
-          OTHERS: ${{ needs.checks.result }} ${{ needs.build.result }} ${{ needs.e2e.result }} ${{ needs.e2e-key-origin.result }} ${{ needs.e2e-report.result }}
+          OTHERS: ${{ needs.checks.result }} ${{ needs.build.result }}
+          BROWSER: ${{ needs.e2e.result }} ${{ needs.e2e-key-origin.result }} ${{ needs.e2e-report.result }}
         run: |
-          echo "wasm: $WASM; checks, build, e2e, e2e-key-origin, e2e-report: $OTHERS"
+          echo "wasm: $WASM; checks, build: $OTHERS; e2e, e2e-key-origin, e2e-report: $BROWSER"
           expected=success
           [ "$STUBS" = true ] && expected=skipped
           [ "$WASM" = "$expected" ] || exit 1
           for result in $OTHERS; do
             [ "$result" = success ] || exit 1
+          done
+          expected=success
+          [ "$E2E" = false ] && expected=skipped
+          for result in $BROWSER; do
+            [ "$result" = "$expected" ] || exit 1
           done

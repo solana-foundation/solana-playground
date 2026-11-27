@@ -9,7 +9,9 @@ name: Client v2
 on:
   push:
     branches: ["master"]
+  # `ready_for_review` runs the browser suite a draft skipped, on the same commit
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
 
   workflow_dispatch:
     inputs:
@@ -80,6 +82,7 @@ jobs:
     with:
       use-wasm-stubs: false
       firefox: ${{ inputs.firefox || needs.changes.outputs.ui == 'true' }}
+      e2e: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
 
   # After a push to `master`, fails unless that commit's production
   # deployment answers `{ "enabled": true, "db": "ok" }` on `GET /api/sync`:
