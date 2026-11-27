@@ -273,6 +273,8 @@ the `client-v2.yml` workflow on pushes to `master` and on every pull request.
 That workflow SHALL fail when a job it requires was skipped, so a skipped wasm
 build cannot pass as success. Neither `anchor-cli` nor `sugar-cli` SHALL be one of
 the packages.
+The browser suite on a draft pull request is the one exception to the
+skipped-job rule: it runs when the pull request is marked ready for review.
 
 #### Scenario: Setting up a checkout (manual)
 

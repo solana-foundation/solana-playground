@@ -619,7 +619,8 @@ reason.
   steps can stay unrecorded.
 - **The browser suite runs in CI** (`yarn test-e2e`, the `e2e` matrix of
   `reusable-client-v2.yml`, one shard per matrix entry; `client-v2.yml` runs
-  that workflow on the real wasm packages) on every PR (GitHub reads the
+  that workflow on the real wasm packages) on every PR that is not a draft,
+  and when a draft is marked ready for review (GitHub reads the
   workflow from the PR's merge commit; see the root `CLAUDE.md`, "This is a
   fork"), and a red spec fails the PR's checks. The `@real-wasm` specs run
   the CLIs; the manual `client-v2-with-stubs.yml` runs the suite on the stubs
