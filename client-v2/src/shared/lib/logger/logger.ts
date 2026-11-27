@@ -19,6 +19,28 @@ let dropped: { count: number; firstNs: Namespace } | undefined;
 export const toError = (value: unknown): Error =>
   value instanceof Error ? value : new Error(String(value), { cause: value });
 
+/**
+ * The `Error` a logged value becomes. `null` and `undefined` carry no message
+ * and no stack, and `toError` turned them into "Error: null" with nothing to
+ * say who logged them (Sentry SOLANA-PLAYGROUND-19, -1F, -1G); this message
+ * names the namespace that logged one, or says that nothing caught it, and
+ * the stack is taken here, at the log call.
+ *
+ * @param from the namespace that logged the value, or `unhandled` when the
+ * global handler did
+ * @returns for the value logged, its `Error`
+ */
+const loggedErrorFrom =
+  (from: Namespace | "unhandled") =>
+  (value: unknown): Error => {
+    if (value !== null && value !== undefined) return toError(value);
+    const message =
+      from === "unhandled"
+        ? `a promise rejected with ${String(value)} and nothing caught it`
+        : `${from} logged ${String(value)} instead of an Error`;
+    return new Error(message, { cause: value });
+  };
+
 const deliver = (entry: LogEntry, to: LogProvider[]) => {
   for (const provider of to) {
     try {
@@ -129,10 +151,14 @@ export const createLogger = (ns: Namespace): Log => {
   });
 
   return {
-    panic: (error, options) =>
-      send(entry("panic", options, { error: toError(error) })),
-    error: (error, options) =>
-      send(entry("error", options, { error: toError(error) })),
+    panic: (error, options) => {
+      const from = options?.unhandled ? "unhandled" : options?.ns ?? ns;
+      send(entry("panic", options, { error: loggedErrorFrom(from)(error) }));
+    },
+    error: (error, options) => {
+      const from = options?.ns ?? ns;
+      send(entry("error", options, { error: loggedErrorFrom(from)(error) }));
+    },
     warn: (message, options) => send(entry("warn", options, { message })),
     info: (message, options) => send(entry("info", options, { message })),
     debug: (message, options) => send(entry("debug", options, { message })),
@@ -195,6 +221,40 @@ if (import.meta.vitest) {
       early.error(new Error("push rejected"));
 
       expect(logged.entries).toHaveLength(1);
+    });
+
+    describe("an error that is null or undefined", () => {
+      // eslint-disable-next-line unicorn/no-null -- the value a failed IndexedDB request rejects with
+      it.each([null, undefined])(
+        "should name the namespace that logged %s",
+        (value) => {
+          createLogger("editor:editor").error(value);
+
+          const [{ error }] = logged.entries;
+          expect(error?.message).toBe(
+            `editor:editor logged ${String(value)} instead of an Error`
+          );
+          expect(error?.cause).toBe(value);
+          expect(error?.stack).toContain(error?.message);
+        }
+      );
+
+      it("should name the namespace a call passes", () => {
+        Logger.error(undefined, { ns: "wallet:connect" });
+
+        expect(logged.entries[0].error?.message).toBe(
+          "wallet:connect logged undefined instead of an Error"
+        );
+      });
+
+      it("should say that nothing caught an unhandled rejection with null", () => {
+        // eslint-disable-next-line unicorn/no-null -- the value a failed IndexedDB request rejects with
+        createLogger("logger:global").panic(null, { unhandled: true });
+
+        expect(logged.entries[0].error?.message).toBe(
+          "a promise rejected with null and nothing caught it"
+        );
+      });
     });
 
     describe("before initLogger", () => {
