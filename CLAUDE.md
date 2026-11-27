@@ -251,3 +251,5 @@ Asked to build something in the client, look in `openspec/changes/` first.
 - Building against the public server (`https://api.solpg.io`) works from
   `localhost:3000` — CORS allows it. No Docker or Rust toolchain needed to run
   the client.
+
+@AGENTS.md

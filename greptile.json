@@ -28,6 +28,18 @@
         "scope": ["client-v2/**"]
       },
       {
+        "path": "AGENTS.md",
+        "description": "Repository agent rules: the project reviewers, blast radius rows and modules, and the writing contract"
+      },
+      {
+        "path": ".agents/gates/README.md",
+        "description": "Weighted gates: file format, the weight scale, and what a 1.0 gate requires"
+      },
+      {
+        "path": ".agents/gates/INDEX.md",
+        "description": "Every weighted gate, generated from .agents/gates/: id, weight, test, and rule"
+      },
+      {
         "path": "openspec/config.yaml",
         "description": "OpenSpec project constraints every change proposal follows",
         "scope": ["client-v2/**", "openspec/**"]
