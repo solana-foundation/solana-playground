@@ -5,10 +5,10 @@
 See [proposal.md](proposal.md), "Why". The facts below were read at `de036c4a6`, and checked again at the head of the
 pull request that adds this change.
 
-- `client-v2/scripts/spec-coverage.mjs` reads scenarios from `openspec/specs/` and from active changes, reads test
-  titles from `e2e/` with a regular expression (`TEST_TITLE`, the first double-quoted argument of `test(` or
-  `test.only(`), and reports. `--strict` exits with an error on any uncovered scenario; the `checks` job of
-  `.github/workflows/reusable-client-v2.yml` runs it without `--strict`.
+- `.claude/skills/quality-spec-coverage/scripts/spec-coverage.mjs` (task 4.1 moved it from `client-v2/scripts/`)
+  reads scenarios from `openspec/specs/` and from active changes, reads literal double-quoted test titles with a
+  regular expression, and gates them on the exclude list (decision 8). `--strict` exits with an error on any
+  uncovered scenario; the `checks` job of `.github/workflows/reusable-client-v2.yml` runs it without `--strict`.
 - The `checks` job checks out with `fetch-depth: 0`, so a pull request's base branch is available to `git show`.
 - Only `e2e/client-v2-layout.e2e.spec.ts` uses `test.step`.
 - `openspec validate --all --strict` (pinned CLI 1.14.0) passes with a `tests.md` beside a `spec.md` under
@@ -38,7 +38,7 @@ pull request that adds this change.
 
 **Goals:**
 
-- One parser of test sources, shared by the coverage report, the `tests.md` generator, and the strict gate, so the
+- One parser of test sources, shared by the coverage report, the `tests.md` generator, and the exclude list gate, so the
   three never disagree on which test checks which clause.
 - A test file's shape that a reader of the spec and a reader of the test failure both recognise: the failure's full
   name reads as the scenario's clauses.
@@ -49,7 +49,8 @@ pull request that adds this change.
 - Checking that a scenario's body follows the clause format, beyond the first word of an assertion clause
   (decision 12). `openspec/config.yaml` asks for it when a spec is written, and review checks it; a scenario with no
   clause keyword has no clause to miss.
-- Rewriting the assertion clauses of every existing spec. A capability is rewritten when it joins the strict list.
+- Rewriting the assertion clauses of every existing spec. A scenario's clauses are rewritten when its line leaves the
+  exclude list.
 
 ## Decisions
 
@@ -82,8 +83,8 @@ The same shape applies to `node --test` files, whose `describe`, `it`, `before`,
 `node:test`.
 
 A flat `it` or `test` titled `<capability>: <scenario>`, with no clause `describe`, cites its scenario but holds no
-clause step, so every clause is missing for it: the report names them off the strict list, and a listed capability
-fails (decision 8). Counting such a test as covered would hide the drift this change exists to report, and not
+clause step, so every clause is missing for it: the report names them for a scenario on the exclude list, and a
+scenario not on the list fails (decision 8). Counting such a test as covered would hide the drift this change exists to report, and not
 counting it would show a scenario with a passing test as uncovered. Context names the files that hold such tests.
 
 ### 2. Playwright: one `test.step` per clause; a GIVEN may be an enclosing `test.describe`
@@ -145,9 +146,9 @@ checker reports it at the integration level, and review judges whether the level
 In-source blocks are never read: `includeSource` is not a source, so a scenario title in a unit block leaves the
 scenario uncovered.
 
-Why a `node --test` row: the checker and the generator of this change are `.mjs` scripts tested with `node --test`
-under `client-v2/scripts/`, so without that row this capability's own scenarios could never be covered, and neither
-could the scenarios of `api/` modules.
+Why a `node --test` row: the checker and the generator of this change are `.mjs` scripts tested with `node --test`,
+under `.claude/skills/quality-spec-coverage/scripts/` and `client-v2/scripts/`, so without that row this capability's
+own scenarios could never be covered, and neither could the scenarios of `api/` modules.
 
 ### 5. A clause matches a step by normalised text, in order
 
@@ -172,8 +173,9 @@ Keeping backticks avoids a second rule for what counts as formatting.
 missing clauses; then the candidate duplicates (a scenario more than one test cites, at any level); then the totals
 line, extended with the integration and end-to-end counts. Duplicates never change the exit code.
 
-A scenario marked `(manual)` that a test cites is reported as a conflict, and fails in a strict capability: the mark
-says the scenario needs no test, the test says it has one, and only the author knows which is right.
+A scenario marked `(manual)` that a test cites is reported as a conflict, and fails the run: the mark says the
+scenario needs no test, the test says it has one, and only the author knows which is right. The exclude list cannot
+name a `(manual)` scenario, so no line exempts the conflict.
 
 ### 7. `tests.md`: one per capability, generated, checked in the `checks` job
 
@@ -200,40 +202,50 @@ file shows the same gap the coverage report names. A manual scenario has one row
 other cells are empty; an uncovered one, one row whose Level reads `none`. A `|` in a cell is escaped. Scenarios are `##` headings, never `#### Scenario:`, so no
 reader of spec headings mistakes the file for a spec. File paths are relative to the repository root.
 
-Why every capability, not only strict ones: the file answers "which tests check this capability" for any reader, and
+Why every capability, not only those without a line in the exclude list: the file answers "which tests check this capability" for any reader, and
 generating it for some capabilities would add a second list to keep. Why the `checks` job: the check reads only
 source text, so it needs no build, unlike `scripts/bundle-info.build-test.mjs`.
 
-### 8. The strict list is a plain text file beside the checker
+### 8. The exclude list is a plain text file beside the checker
 
-`client-v2/scripts/spec-coverage-strict.txt` names one capability per line; `#` starts a comment, as in
-`client-v2/e2e/known-skips.txt`. `yarn spec:coverage` enforces it on every run, with no flag, so a local run fails
-where CI fails. `--strict` keeps its meaning: any uncovered scenario in any capability fails.
+`.claude/skills/quality-spec-coverage/excluded.txt` names one `<capability>: <scenario>` per line, the key a test is
+titled with; `#` starts a comment line, as in `client-v2/e2e/known-skips.txt`, and blank lines and trailing spaces
+are ignored. It names the scenarios of `openspec/specs/` that are not yet up to standard. Until task 2.2 lands, the
+standard is a test titled with the key; from task 2.2 on, it is also every clause a step and every assertion clause
+starting with a verb, and the scenarios that fall short return to the list in that task's PR.
+
+`yarn spec:coverage` enforces the list on every run, with no flag, so a local run fails where CI fails. It fails on a
+scenario that is neither listed, `(manual)`, nor up to standard; on a listed scenario that is up to standard, so the
+list never keeps a line that no longer exempts anything; on a listed name that is no scenario of `openspec/specs/` or
+is `(manual)`, so a renamed scenario or a manual mark cannot hide behind a line; and on a duplicate line.
+`--strict` keeps its meaning: it ignores the list, and any uncovered scenario fails.
+
+Why a list of scenarios, not of capabilities: a list of strict capabilities left every other capability ungated, so a
+new uncovered scenario anywhere outside the list passed. A list of gaps gates every scenario from the start and
+records each gap by name.
 
 Why outside `openspec/`: the OpenSpec CLI and `/opsx:archive` never read or write the file, and the list governs
 the checker, not a spec.
 
-### 9. The base-branch comparison reads the list with `git show`
+### 9. The list only shrinks; the base-branch comparison reads it with `git show`
 
-`yarn spec:coverage --base <ref>` reads `<ref>:client-v2/scripts/spec-coverage-strict.txt` with `git show`. A
-missing file on the base is an empty list, so the PR that adds the file passes. CI passes
-`--base origin/${{ github.base_ref }}` on `pull_request` runs and nothing on `push` runs. A capability may leave the
-list in the PR that deletes its `spec.md`, because a retired capability has no scenarios to gate and a listed name
-with no spec fails the run.
+`yarn spec:coverage --base <ref>` reads `<ref>:.claude/skills/quality-spec-coverage/excluded.txt` with `git show`
+and fails on every line the base branch's list lacks: a new gap needs a test or the `(manual)` mark, not a line. A
+base branch without the file skips the comparison, so the PR that adds the file passes; treating the missing file as
+an empty list would fail every line. A git failure other than a missing path fails the run. On `pull_request` runs
+CI fetches the base branch and passes `--base FETCH_HEAD`, as `client-v2/scripts/bundle-info-report.sh` fetches its
+base; `push` runs pass nothing. A retired capability's lines leave the list in the PR that deletes its `spec.md`,
+because a listed name that is no scenario fails the run, and removing a line always passes the comparison.
 
-### 10. Active changes: added scenarios are reported, modified ones are matched by name, removed ones are not gated
+### 10. Active changes: only `openspec/specs/` is gated
 
-The gate reads `openspec/specs/` only. A scenario that exists only in an active change's delta is reported. A
-scenario of a requirement listed under `## MODIFIED Requirements` in any active change's delta for that capability is
-gated by its name only: its test must exist, its clauses are not compared. A scenario of `openspec/specs/` that an
-active change's delta removes, under `## REMOVED Requirements`, is reported and not gated, so the task that removes
-the behaviour can remove its test while other tasks keep the change open. When the change is archived, the
-clauses of `openspec/specs/` are compared again, and archiving needs every task ticked, so the test is updated by
-then.
+The gate reads `openspec/specs/` only. A scenario that exists only in an active change's delta is reported and does
+not fail the run. A scenario of `openspec/specs/` that an active change modifies or removes is gated by its text in
+`openspec/specs/` until the change is archived, so the task that removes a behaviour keeps the behaviour's test until
+the archive PR, which removes the scenario and the test together.
 
-These exemptions belong to the strict list only. `--strict` keeps the meaning decision 8 gives it, so it fails on an
-uncovered scenario that only an active change adds, as on any other, and on a scenario a delta removes whose test is
-already gone. `--strict` is a whole-tree check for a developer who asks for it; CI does not pass it.
+`--strict` keeps the meaning decision 8 gives it, so it fails on an uncovered scenario that only an active change
+adds, as on any other. `--strict` is a whole-tree check for a developer who asks for it; CI does not pass it.
 
 ### 11. Order of pull requests
 
@@ -255,22 +267,24 @@ scenario's title and its WHEN already name, so a subject-first THEN repeats it i
 `client-v2/CLAUDE.md` sets it: "A test title says what the code does" accepts "should" or a verb, and the scenario
 format, and sets nothing for a clause's first word (Context).
 
-In a strict capability the checker fails an assertion clause whose first word after the keyword is on the closed
-list the spec requirement "An assertion clause starts with a verb" names. Outside the strict list the report counts
-such clauses per capability. Review catches a non-verb the list misses.
+For a scenario not on the exclude list the checker fails an assertion clause whose first word after the keyword is on
+the closed list the spec requirement "An assertion clause starts with a verb" names. For a scenario on the exclude list
+the report counts such clauses per capability. Review catches a non-verb the closed list misses.
 
 Why a closed list: a verb cannot be detected without a language parser, and a parser would add a dependency and
 still misread words that are both a noun and a verb ("reports", "lists"). The listed words are the subjects specs
 start THEN clauses with (Context), and none of them is a verb, so the list never rejects a correct clause.
 
 Scope: new scenarios follow the rule through the `rules.specs` line of `openspec/config.yaml` (task 1.1). An existing
-capability is rewritten when it joins the strict list (tasks 5.1 and 5.3 for the pilots), and its tests' step
-titles follow the rewritten clauses. Other existing specs keep their wording; the checker reports their clauses only.
+scenario is rewritten when its line leaves the exclude list (tasks 5.1 and 5.3 for the pilots), and its test's step
+titles follow the rewritten clauses. Other listed scenarios keep their wording; the checker reports their clauses
+only.
 
 The pilots edit `openspec/specs/client-v2-custom-rpcs/spec.md` and
 `openspec/specs/client-v2-build-server-endpoint/spec.md` directly, for clause wording and `(manual)` marks only,
-with no change of behaviour. A `## MODIFIED Requirements` delta would put every rewritten scenario under decision
-10's name-only exemption until archive, so the pilot would not prove the clause-by-clause gate it exists to prove.
+with no change of behaviour. A `## MODIFIED Requirements` delta would leave the old clauses in `openspec/specs/`
+until archive, and the gate reads only those (decision 10), so the pilot would not prove the clause-by-clause gate on
+the rewritten clauses it exists to prove.
 
 There are two pilots, and no active change edits either, so the gate is proven without touching other changes.
 `client-v2-custom-rpcs` (task 5.1) proves the Playwright steps; `client-v2-build-server-endpoint` (task 5.3) proves
@@ -280,19 +294,41 @@ have no GIVEN and no AND, so the checker's own tests (task 2.2) cover those `des
 exercises a scenario moving from `(manual)` to tested, a flat test converted to the clause form, and the rule that an
 in-source unit block cites no scenario.
 
+### 13. The quality tools: a `quality-` prefix, a skill folder each, and one yarn script
+
+Each quality tool is a Claude Code skill under `.claude/skills/quality-<name>/`, holding its `SKILL.md` and its code
+under `scripts/`: `quality-spec-coverage` holds the checker, its tests, and the exclude list; `quality-spec-tests`
+writes the missing tests of listed scenarios; `quality-gates` holds the gates linter. A root `Makefile.quality`,
+included by the root `Makefile`, gives each developer flow a target, so `make help` lists the tools together:
+`quality-spec-coverage`, `quality-spec-coverage-update`, which rewrites the list from the unmet scenarios, and
+`quality-lint-gates`.
+
+Only the gate is a yarn script: `yarn spec:coverage` runs the checker, because CI and `yarn run check` call it from
+`client-v2/`. Developer-only flows are Make targets and never yarn scripts, so `package.json` lists only what CI runs.
+The scripts run through `node`, `yarn`, or `make`, with no shebang and no executable bit.
+
+Why skill folders: a skill finds its code and data beside its instructions, and the prefix groups the tools in
+`.claude/skills/` and in `make help`. `yarn test-api` collects `.claude/skills/*/scripts/*.test.mjs`, so the tools'
+tests run with the rest, and the checker reads those files as `node --test` sources (decision 4).
+
 ## Risks / Trade-offs
 
-- [Many existing assertion clauses start with a listed word, so reporting each one off the strict list buries
-  the other findings] → Off the strict list the report prints one count of such clauses per capability; a strict
-  capability's clauses are named one by one.
-- [A capability that joins the strict list while an active change edits it gets subject-first clauses back when
+- [Many existing assertion clauses start with a listed word, so reporting each one for a listed scenario buries
+  the other findings] → For a scenario on the exclude list the report prints one count of such clauses per
+  capability; a scenario not on the list has its clauses named one by one.
+- [Task 2.2 raises the standard, so its PR adds lines to the exclude list and fails the base comparison] → A
+  maintainer merges that PR past the failed check; the check names each added line, so the reason is on record. The
+  same holds for any later PR that raises the standard.
+- [A scenario that leaves the exclude list while an active change edits it gets subject-first clauses back when
   that change is archived] → The gate reads `openspec/specs/` only, so that archive PR fails until it rewrites those
   clauses; the failure names each clause.
+- [An agent's test written by `quality-spec-tests` asserts what the code does rather than what the scenario says] →
+  The skill's brief takes assertions from the THEN clauses only, and the test is reviewed in the PR like any other.
 - [A GIVEN, WHEN, or AND clause containing "unit", "integration", or "e2e", or a scenario `describe` such as
   `client-v2-unit-tests: <scenario>`, becomes a `describe` title that `jest/valid-title` warns on, and the warning
   raises the total `--max-warnings` caps] → Task 2.3 narrows the rule's disallowed words to `describe` titles that
   start with neither a clause keyword nor `<capability>: `.
-- [A strict capability's test quarantined with an unconditional `.fixme` or `test.fixme()` is uncovered, so every
+- [A test of a scenario not on the exclude list quarantined with an unconditional `.fixme` or `test.fixme()` is uncovered, so every
   PR fails until it is fixed] → Intended: the gate makes the quarantine visible. The PR that quarantines it either
   fixes the test or marks the scenario `(manual)` in the spec, and review sees both. The checker does not read
   `e2e/known-skips.txt`; a quarantine reaches the gate only through a skip in the source.
@@ -309,5 +345,5 @@ in-source unit block cites no scenario.
   failure name then reads as the spec.
 - [A test title built in a loop (`it.each`, `it(label, ...)`) cannot cite a scenario] → Such a test checks one
   module's table of cases, which is the unit level; a scenario needs literal titles.
-- [Reverting the strict list in an emergency fails the base comparison] → Removing a capability needs a PR that a
-  maintainer merges past the failed check; the check names the capability, so the reason is on record.
+- [Adding a line in an emergency fails the base comparison] → The PR that adds it is merged past the failed check by
+  a maintainer; the check names the line, so the reason is on record.

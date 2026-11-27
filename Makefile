@@ -9,3 +9,4 @@ help: ## Show this help
 	@sed -nE 's/^([a-zA-Z_%-]+):.*## (.*)$$/  \1: \2/p' $(MAKEFILE_LIST) | LC_ALL=C sort -t: -k1,1
 
 include client-v2/Makefile.vercel
+include Makefile.quality

@@ -293,10 +293,15 @@ jobs:
       - name: Validate specs
         run: yarn spec:validate
 
-      # Report only: which scenarios have neither a browser test nor a
-      # `(manual)` mark. `--strict` is for when the list is empty.
+      # Fails on a scenario gap outside excluded.txt and, on a pull request, on a line the base branch's list lacks
       - name: Scenario coverage
-        run: yarn spec:coverage
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin "$GITHUB_BASE_REF"
+            yarn spec:coverage --base FETCH_HEAD
+          else
+            yarn spec:coverage
+          fi
 
       - name: Unit tests
         run: yarn test-unit

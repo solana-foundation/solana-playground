@@ -285,14 +285,20 @@ an override of their default, and this section is that override:
   it again in `superpowers:finishing-a-development-branch`.
 
 **Scenarios are the test plan.** Every `#### Scenario:` in a spec is
-either a Playwright test in `e2e/` whose title is
-`<capability>: <scenario name>` (for example
-`client-v2-themes: A saved Dracula theme`), or a line in a manual checklist
-marked `(manual)` in the spec. A manual gate (the React 19 walk-through, a
-release check) is the list of scenarios, not a separate document. The
-`spec:coverage` script prints every scenario that has neither. CI runs it as
-a report and never fails on it; `--strict` makes the list an exit code, for
-when it is empty.
+either a test titled `<capability>: <scenario name>` (for example
+`client-v2-themes: A saved Dracula theme`), on a Playwright `test` in `e2e/`
+or on the outer `describe` of a vitest or `node --test` test, or a line in a
+manual checklist marked `(manual)` in the spec. A manual gate (the React 19
+walk-through, a release check) is the list of scenarios, not a separate
+document. The `spec:coverage` script fails on a scenario of
+`openspec/specs/` that has neither, unless the exclude list
+[`.claude/skills/quality-spec-coverage/excluded.txt`](../.claude/skills/quality-spec-coverage/excluded.txt)
+names it; CI and `yarn run check` run it. The list only shrinks: on a pull
+request, a line the base branch's list lacks fails the run, so a new
+scenario needs a test or the mark. `make quality-spec-coverage-update`
+rewrites the list once tests catch up, and `/quality-spec-tests` writes the
+test of a listed scenario. The rules are the
+[`scenario-tests` spec](../openspec/changes/scenario-tests/specs/scenario-tests/spec.md).
 
 ## What review keeps finding
 

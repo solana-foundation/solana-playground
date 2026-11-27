@@ -2,11 +2,11 @@
 
 ## Purpose
 
-**Area:** the spec coverage report, the generated `tests.md` of each capability, and the strict gate, which
-`yarn run check` and the `checks` job of `client-v2` run (CI).
+**Area:** the spec coverage report, the generated `tests.md` of each capability, the exclude list gate, which
+`yarn run check` and the `checks` job of `client-v2` run (CI), and the `quality-spec-tests` skill.
 
 How each OpenSpec scenario of `client-v2` maps to a test, at which level, and clause by clause, and how the coverage
-report, the generated `tests.md` of each capability, and the per-capability strict gate check that mapping.
+report, the generated `tests.md` of each capability, and the exclude list gate check that mapping.
 
 ## ADDED Requirements
 
@@ -20,8 +20,8 @@ with `(manual)`. An unconditionally skipped or unwritten test SHALL NOT count: `
 `true` or a string. A conditionally skipped test SHALL count: an in-body `test.skip(<condition>, …)` or
 `test.fixme(<condition>, …)`, a `skip` or `todo` option holding any other expression, and vitest's `skipIf` and
 `runIf`. A scenario that only a `## REMOVED` section of a delta names SHALL owe no test from the delta. A scenario
-marked `(manual)` that a test cites SHALL be reported as a conflict, and in a strict capability `yarn spec:coverage`
-SHALL exit with an error on it.
+marked `(manual)` that a test cites SHALL be reported as a conflict, and `yarn spec:coverage` SHALL exit with an error
+on it, because the exclude list never names a `(manual)` scenario.
 
 #### Scenario: A scenario with a browser test
 
@@ -59,15 +59,9 @@ SHALL exit with an error on it.
 - **WHEN** a scenario's heading ends with `(manual)`
 - **THEN** counts it as manual and asks for no test
 
-#### Scenario: A manual scenario a test cites off the strict list
-
-- **WHEN** a test is titled with a scenario of a capability off the strict list whose heading ends with `(manual)`
-- **THEN** reports the scenario and the test as a conflict and exits without an error
-
 #### Scenario: A manual scenario a test cites
 
-- **GIVEN** a capability on the strict list
-- **WHEN** a test is titled with one of its scenarios whose heading ends with `(manual)`
+- **WHEN** a test is titled with a scenario whose heading ends with `(manual)`
 - **THEN** exits with an error, naming the scenario and the test as a conflict
 
 #### Scenario: A scenario only a removal names
@@ -222,38 +216,38 @@ match exactly. A clause reworded in the spec SHALL be missing until its step is 
 ### Requirement: An assertion clause starts with a verb
 
 Every THEN clause, and every AND after a THEN, SHALL start with a verb after its keyword, because the clause is the
-test's title verbatim. A GIVEN, a WHEN, and an AND after either SHALL keep their subject. In a strict capability,
-`yarn spec:coverage` SHALL exit with an error on an assertion clause whose first word is on this closed list: the, a,
-an, it, its, no, nothing, that, each, every, both, neither, one; or whose first character is a backtick. Elsewhere it
-SHALL report how many such clauses each capability holds.
+test's title verbatim. A GIVEN, a WHEN, and an AND after either SHALL keep their subject. For a scenario not on the
+exclude list, `yarn spec:coverage` SHALL exit with an error on an assertion clause whose first word is on this closed
+list: the, a, an, it, its, no, nothing, that, each, every, both, neither, one; or whose first character is a backtick.
+For a scenario on the exclude list it SHALL report how many such clauses each capability holds.
 
-#### Scenario: A THEN that starts with an article in a strict capability
+#### Scenario: A THEN that starts with an article in a scenario not on the exclude list
 
-- **GIVEN** a capability on the strict list
-- **WHEN** one of its scenarios has a THEN clause that starts with "the"
+- **GIVEN** a scenario not on the exclude list
+- **WHEN** the scenario has a THEN clause that starts with "the"
 - **THEN** exits with an error, naming the scenario and the clause
 
-#### Scenario: An AND after a THEN that starts with a backtick in a strict capability
+#### Scenario: An AND after a THEN that starts with a backtick in a scenario not on the exclude list
 
-- **GIVEN** a capability on the strict list
-- **WHEN** one of its scenarios has an AND clause after a THEN that starts with a backtick
+- **GIVEN** a scenario not on the exclude list
+- **WHEN** the scenario has an AND clause after a THEN that starts with a backtick
 - **THEN** exits with an error, naming the scenario and the clause
 
-#### Scenario: A THEN that starts with an article off the list
+#### Scenario: A THEN that starts with an article on the exclude list
 
-- **WHEN** a scenario of a capability off the strict list has a THEN clause that starts with "the"
+- **WHEN** a scenario on the exclude list has a THEN clause that starts with "the"
 - **THEN** counts the clause in the capability's report line and exits without an error
 
 #### Scenario: A WHEN and its AND with a subject
 
-- **GIVEN** a capability on the strict list
-- **WHEN** one of its scenarios has a WHEN clause and an AND after it that both start with "the"
+- **GIVEN** a scenario not on the exclude list
+- **WHEN** the scenario has a WHEN clause and an AND after it that both start with "the"
 - **THEN** accepts both clauses
 
 #### Scenario: A first word the list does not name
 
-- **GIVEN** a capability on the strict list
-- **WHEN** one of its scenarios has a THEN clause whose first word is not on the list
+- **GIVEN** a scenario not on the exclude list
+- **WHEN** the scenario has a THEN clause whose first word is not on the closed list
 - **THEN** accepts the clause
 
 ### Requirement: The coverage report lists tests, levels, missing clauses, and duplicates
@@ -329,69 +323,89 @@ from the generator's output or a capability lacks one, naming each file and the 
 - **WHEN** a capability's folder under `openspec/specs/` has a `spec.md` and no `tests.md`
 - **THEN** fails the freshness check, naming the missing file
 
-### Requirement: A listed capability gates its scenarios
+### Requirement: The exclude list gates every scenario
 
-A committed list SHALL name the strict capabilities. For a listed capability, `yarn spec:coverage` SHALL exit with
-an error on a scenario in `openspec/specs/` that is uncovered or whose test misses a clause, and on a listed name
-with no `spec.md` under `openspec/specs/`. A capability the list does not name SHALL be reported only.
+A committed exclude list, `.claude/skills/quality-spec-coverage/excluded.txt`, SHALL name the scenarios of
+`openspec/specs/` that are not yet up to standard, one `<capability>: <scenario>` per line, with `#` starting a
+comment line. A scenario is up to standard when a test cites it, every clause is a step of that test, and every
+assertion clause starts with a verb. `yarn spec:coverage` SHALL exit with an error on a scenario of `openspec/specs/`
+that is not on the list, not `(manual)`, and not up to standard; on a listed scenario that is up to standard; on a
+listed name that is no scenario of `openspec/specs/`, or is a `(manual)` one; and on a line that appears twice. A
+listed scenario that is not up to standard SHALL be reported only.
 
-#### Scenario: An uncovered scenario in a strict capability
+#### Scenario: An uncovered scenario not on the exclude list
 
-- **GIVEN** a capability on the strict list
-- **WHEN** one of its scenarios in `openspec/specs/` has no test and no `(manual)` mark
+- **WHEN** a scenario of `openspec/specs/` has no test, no `(manual)` mark, and no line in the exclude list
 - **THEN** exits with an error, naming the scenario
 
-#### Scenario: A missing clause in a strict capability
+#### Scenario: A listed scenario that now has a test
 
-- **GIVEN** a capability on the strict list
-- **WHEN** a test of one of its scenarios has no step for one clause
+- **WHEN** a scenario on the exclude list is up to standard
+- **THEN** exits with an error, naming the line to remove
+
+#### Scenario: A listed name that is no scenario
+
+- **WHEN** the exclude list names a scenario that `openspec/specs/` does not hold
+- **THEN** exits with an error, naming the line to remove
+
+#### Scenario: A listed manual scenario
+
+- **WHEN** the exclude list names a scenario whose heading ends with `(manual)`
+- **THEN** exits with an error, naming the line to remove
+
+#### Scenario: A duplicate line
+
+- **WHEN** the exclude list holds one line twice
+- **THEN** exits with an error, naming the line
+
+#### Scenario: A missing clause in a scenario not on the exclude list
+
+- **GIVEN** a scenario not on the exclude list
+- **WHEN** a test of the scenario has no step for one clause
 - **THEN** exits with an error, naming the scenario and the clause
 
-#### Scenario: A missing clause in a capability off the list
+#### Scenario: A missing clause in a scenario on the exclude list
 
-- **WHEN** a test of a scenario in a capability off the strict list has no step for one clause
+- **WHEN** a test of a scenario on the exclude list has no step for one clause
 - **THEN** reports the clause and exits without an error
 
-#### Scenario: A listed name with no spec
+### Requirement: The exclude list only shrinks
 
-- **WHEN** the strict list names a capability that has no `spec.md` under `openspec/specs/`
-- **THEN** exits with an error, naming the listed capability
+Given a base branch with `--base <ref>`, `yarn spec:coverage` SHALL exit with an error on each line of the exclude
+list that the base branch's list lacks. A base branch without the file SHALL skip the comparison. Without `--base` it
+SHALL compare nothing.
 
-### Requirement: A pull request cannot drop a strict capability
+#### Scenario: A line added to the list
 
-Given a base branch, `yarn spec:coverage` SHALL exit with an error when a capability on the base branch's strict
-list is absent from the pull request's list, unless the pull request also removes that capability's `spec.md`.
-Without a base branch it SHALL skip the comparison.
+- **GIVEN** a base branch whose exclude list lacks a line
+- **WHEN** `yarn spec:coverage --base <ref>` runs over an exclude list that holds the line
+- **THEN** exits with an error, naming the line
 
-#### Scenario: A capability removed from the list
+#### Scenario: A line removed from the list
 
-- **GIVEN** a base branch whose strict list names a capability
-- **WHEN** the pull request's list does not name it and its `spec.md` stays
-- **THEN** exits with an error, naming the dropped capability
-
-#### Scenario: A retired capability leaves the list
-
-- **GIVEN** a base branch whose strict list names a capability
-- **WHEN** the pull request removes both the capability's `spec.md` and its line in the list
+- **GIVEN** a base branch whose exclude list holds a line
+- **WHEN** `yarn spec:coverage --base <ref>` runs over an exclude list without the line
 - **THEN** passes the comparison
+
+#### Scenario: A base branch without the list
+
+- **WHEN** `yarn spec:coverage --base <ref>` runs and the base branch has no exclude list
+- **THEN** skips the comparison
 
 #### Scenario: A run without a base branch
 
-- **WHEN** `yarn spec:coverage` runs without a base branch
-- **THEN** compares no strict lists
+- **WHEN** `yarn spec:coverage` runs without `--base`
+- **THEN** compares no exclude lists
 
 ### Requirement: An active change does not gate its own scenarios
 
-For a strict capability, a scenario an active change adds SHALL be reported and SHALL NOT fail the run. A scenario
-that sits in a requirement an active change modifies SHALL be checked by its name only, not clause by clause, until
-the change is archived. A scenario of `openspec/specs/` whose requirement an active change removes SHALL be reported
-and SHALL NOT fail the run until the change is archived. These exemptions SHALL apply to the strict list only:
-`yarn spec:coverage --strict` SHALL exit with an error on any uncovered scenario, one an active change adds or
-removes included.
+The gate SHALL read `openspec/specs/` only. A scenario only an active change adds SHALL be reported and SHALL NOT
+fail the run. `yarn spec:coverage --strict` SHALL ignore the exclude list and exit with an error on any uncovered
+scenario, one only an active change adds included.
 
-#### Scenario: A proposal adds a scenario to a strict capability
+#### Scenario: A proposal adds a scenario
 
-- **WHEN** an active change's delta adds a scenario to a strict capability and no test cites it
+- **WHEN** an active change's delta adds a scenario and no test cites it
 - **THEN** reports the scenario as uncovered and exits without an error
 
 #### Scenario: A proposal adds a scenario, with the strict flag
@@ -399,14 +413,30 @@ removes included.
 - **WHEN** `yarn spec:coverage --strict` runs and an active change's delta adds a scenario no test cites
 - **THEN** exits with an error, naming the scenario
 
-#### Scenario: A proposal removes a scenario of a strict capability
+#### Scenario: A listed scenario with the strict flag
 
-- **GIVEN** an active change whose delta removes a requirement of a strict capability
-- **WHEN** a task of that change deletes the test of one of the requirement's scenarios while the change stays open
-- **THEN** reports the scenario as uncovered and exits without an error
+- **WHEN** `yarn spec:coverage --strict` runs and a scenario on the exclude list has no test
+- **THEN** exits with an error, naming the scenario
 
-#### Scenario: A proposal rewords a scenario of a strict capability
+### Requirement: A skill writes the test of a listed scenario
 
-- **GIVEN** an active change that modifies a strict capability's requirement and rewords a clause of its scenario
-- **WHEN** the scenario's test retitles its step to the reworded clause
-- **THEN** checks the scenario by its name only and exits without an error
+The `quality-spec-tests` skill SHALL take a capability or one `<capability>: <scenario>` key from the exclude list,
+write each scenario's test from the scenario's clauses, remove the scenario's line from the list, and run the test and
+`yarn spec:coverage`. It SHALL take assertions from the THEN clauses, never from what the product code does, and
+SHALL NOT edit product code, specs, or other tests. A test that fails SHALL stay as written and be reported to the
+developer with its output.
+
+#### Scenario: A listed scenario gets its test (manual)
+
+- **WHEN** the developer runs `/quality-spec-tests <capability>: <scenario>` on a line of the exclude list
+- **THEN** writes a test titled with the key, removes the line, and reports the test file and its result
+
+#### Scenario: A key not on the list (manual)
+
+- **WHEN** the developer runs `/quality-spec-tests` with a key the exclude list does not hold
+- **THEN** stops with "not on the exclude list" and writes nothing
+
+#### Scenario: A test that fails against the product (manual)
+
+- **WHEN** the written test fails
+- **THEN** reports the failing output to the developer and leaves the product code unchanged
