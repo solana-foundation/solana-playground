@@ -1,4 +1,8 @@
-import { isConnectionLost, withCause } from "../../shared/lib/indexeddb-retry";
+import {
+  isConnectionLost,
+  namedError,
+  withCause,
+} from "../../shared/lib/indexeddb-retry";
 import { createLogger } from "../../shared/lib/logger";
 import type { SerializedWalletState } from "./types";
 
@@ -58,6 +62,13 @@ const OPEN_TIMEOUT_MS = 5000;
 const RECORD_KEY = "wallet";
 const SET_ASIDE_KEY = "set-aside";
 
+/**
+ * What an abort rejects with when the browser gives no error, as WebKit does
+ * on a lost connection: named `AbortError`, so `withDb` retries it
+ */
+const abortedWithNoError = () =>
+  namedError("AbortError", "Transaction aborted with no error");
+
 /** Run one request in its own transaction and resolve with its result */
 const requestWith =
   (db: IDBDatabase) =>
@@ -70,7 +81,7 @@ const requestWith =
       // browser later aborts (quota) is reported as a failure
       tx.oncomplete = () => resolve(request.result);
       tx.onerror = () => reject(tx.error ?? request.error);
-      tx.onabort = () => reject(tx.error ?? new Error("Transaction aborted"));
+      tx.onabort = () => reject(tx.error ?? abortedWithNoError());
     });
 
 /**
@@ -206,8 +217,7 @@ export const indexedDbStoreFor = (name: string): WalletStore => {
           };
           tx.oncomplete = () => resolve();
           tx.onerror = () => reject(tx.error ?? kept.error);
-          tx.onabort = () =>
-            reject(tx.error ?? new Error("Transaction aborted"));
+          tx.onabort = () => reject(tx.error ?? abortedWithNoError());
         })
     );
 
@@ -539,6 +549,41 @@ if (import.meta.vitest) {
         },
       ]);
       expect(logged.entries[0].report).toBeFalsy();
+    });
+
+    /**
+     * Abort the next transaction once its `put` has succeeded, so neither the
+     * transaction nor the request carries an error: WebKit's lost connection
+     */
+    const abortNextAfterPut = () => {
+      const put = FakeObjectStore.prototype.put;
+      vi.spyOn(FakeObjectStore.prototype, "put").mockImplementationOnce(
+        function (this: IDBObjectStore, ...args) {
+          const request = put.apply(this, args);
+          request.addEventListener("success", () => this.transaction.abort());
+          return request;
+        }
+      );
+    };
+
+    it("writes when the browser aborts the first attempt with no error", async () => {
+      const store = indexedDbStoreFor("pg-wallet");
+      await store.read();
+      abortNextAfterPut();
+
+      await store.write(walletOf("Wallet 1"));
+
+      expect((await store.read())?.accounts[0].name).toBe("Wallet 1");
+    });
+
+    it("sets accounts aside when the browser aborts the first attempt with no error", async () => {
+      const store = indexedDbStoreFor("pg-wallet");
+      await store.read();
+      abortNextAfterPut();
+
+      await store.setAside([{ kp: [1, 2], name: "A" }]);
+
+      expect(await store.readAside()).toEqual([{ kp: [1, 2], name: "A" }]);
     });
 
     it("sets accounts aside after the connection closes without a `close` event", async () => {

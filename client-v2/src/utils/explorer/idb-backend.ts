@@ -1,3 +1,4 @@
+import { uuid } from "@/shared/lib/ids";
 import {
   isConnectionLost,
   namedError,
@@ -35,6 +36,25 @@ type MakeRequest<T> = (store: IDBObjectStore) => IDBRequest<T>;
 
 /** The key lightning-fs keeps the superblock under, beside the inodes */
 const SUPERBLOCK_KEY = "!root";
+
+/**
+ * The key of this database's identity marker: a random id the first backend
+ * to open it writes, which lightning-fs never reads. A backend reopening the
+ * database checks the marker is still the one it first saw, since another
+ * tab can recreate a deleted database before this one reconnects.
+ */
+const MARKER_KEY = "!pg-database-id";
+
+/** Read the marker, writing `candidate` in the same transaction when there is none */
+const claimMarker =
+  (candidate: string): MakeRequest<unknown> =>
+  (store) => {
+    const request = store.get(MARKER_KEY);
+    request.addEventListener("success", () => {
+      if (request.result === undefined) store.put(candidate, MARKER_KEY);
+    });
+    return request;
+  };
 
 /**
  * How long an open may take before it fails. An open that never answers (a
@@ -150,8 +170,11 @@ interface Step<T> {
  */
 class ReopeningIdbBackend implements IdbBackend {
   private _connection?: Promise<IDBDatabase>;
-  /** Whether a connection ever opened, after which none may create the database */
-  private _hasOpened = false;
+  /**
+   * The database's identity marker, read on the first open. Once it is set,
+   * no open may create the database, and a reopen must find the same marker.
+   */
+  private _marker?: unknown;
   /** The last request of each key, which the next request for it waits for */
   private readonly _tails = new Map<IDBValidKey, Promise<unknown>>();
 
@@ -182,10 +205,17 @@ class ReopeningIdbBackend implements IdbBackend {
     return this._write(inode, (store) => store.delete(inode));
   }
 
-  /** Not ordered against requests in flight: lightning-fs wipes before it loads anything */
+  /**
+   * Clear the store, keeping the identity marker, which a reopen checks. Not
+   * ordered against requests in flight: lightning-fs wipes before it loads
+   * anything.
+   */
   async wipe() {
     await this._run({
-      makeRequest: (store) => store.clear(),
+      makeRequest: (store) => {
+        store.clear();
+        return store.put(this._marker, MARKER_KEY);
+      },
       mode: "readwrite",
     });
   }
@@ -276,17 +306,48 @@ class ReopeningIdbBackend implements IdbBackend {
     }
   }
 
+  /**
+   * Open the database and check it is the one this backend first opened.
+   * The first open records the marker, writing one into a database that has
+   * none; a reopen refuses a database whose marker differs or is missing,
+   * which is a database another tab recreated after a deletion.
+   */
+  private async _open() {
+    const isFirst = this._marker === undefined;
+    const onMissing = isFirst ? createStore(this._storeName) : refuseDeleted;
+    const db = await openDatabaseWith(onMissing)(this._dbName);
+    try {
+      const candidate = uuid();
+      const found = await transactWith(
+        isFirst
+          ? claimMarker(candidate)
+          : (store: IDBObjectStore) => store.get(MARKER_KEY),
+        isFirst ? "readwrite" : "readonly"
+      )(db, this._storeName);
+      if (isFirst) {
+        this._marker = found ?? candidate;
+        return db;
+      }
+      if (found !== this._marker) {
+        throw namedError(
+          "DatabaseReplacedError",
+          `${this._dbName} was deleted and recreated while the page had it open`
+        );
+      }
+      return db;
+    } catch (error) {
+      db.close();
+      throw error;
+    }
+  }
+
   private _connect() {
     if (this._connection) return this._connection;
 
-    const onMissing = this._hasOpened
-      ? refuseDeleted
-      : createStore(this._storeName);
-    const connection = openDatabaseWith(onMissing)(this._dbName);
+    const connection = this._open();
     this._connection = connection;
     connection.then(
       (db) => {
-        this._hasOpened = true;
         db.addEventListener("close", () => this._forget(connection));
         // Let a deletion or an upgrade elsewhere through instead of blocking it
         db.addEventListener("versionchange", () => {

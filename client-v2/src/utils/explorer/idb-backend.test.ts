@@ -206,6 +206,45 @@ describe("utils/explorer/idb-backend", () => {
     expect(names).toEqual([]);
   });
 
+  it("refuses a database another tab recreated after the deletion, leaving that tab's files", async () => {
+    const backend = idbBackend(DB_NAME, STORE_NAME);
+    await backend.writeFile(1, Uint8Array.of(1));
+    await deleteDatabase(DB_NAME);
+    // A tab loaded after the deletion creates the database afresh
+    const other = idbBackend(DB_NAME, STORE_NAME);
+    await other.writeFile(1, Uint8Array.of(9));
+
+    expect(
+      await settled(backend.writeFile(1, Uint8Array.of(1)))
+    ).toHaveProperty("name", "DatabaseReplacedError");
+    expect(await bytesOf(other.readFile(1))).toEqual([9]);
+  });
+
+  it("refuses a database recreated after the browser closed the connection", async () => {
+    const backend = idbBackend(DB_NAME, STORE_NAME);
+    await backend.writeFile(1, Uint8Array.of(1));
+    closeLastConnection();
+    await deleteDatabase(DB_NAME);
+    await idbBackend(DB_NAME, STORE_NAME).writeFile(1, Uint8Array.of(9));
+
+    expect(await settled(backend.readFile(1))).toHaveProperty(
+      "name",
+      "DatabaseReplacedError"
+    );
+  });
+
+  it("refuses a database a tab on lightning-fs's own backend recreated", async () => {
+    const backend = idbBackend(DB_NAME, STORE_NAME);
+    await backend.writeFile(1, Uint8Array.of(1));
+    await deleteDatabase(DB_NAME);
+    // An open tab still on the previous client writes no marker
+    await set(1, Uint8Array.of(9), new Store(DB_NAME, STORE_NAME));
+
+    expect(
+      await settled(backend.writeFile(1, Uint8Array.of(1)))
+    ).toHaveProperty("name", "DatabaseReplacedError");
+  });
+
   it("keeps a newer write when an older one to the same file is retried", async () => {
     const backend = idbBackend(DB_NAME, STORE_NAME);
     await backend.writeFile(1, Uint8Array.of(0));
