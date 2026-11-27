@@ -295,7 +295,8 @@ document. The `spec:coverage` script fails on a scenario of
 [`.claude/skills/quality-spec-coverage/excluded.txt`](../.claude/skills/quality-spec-coverage/excluded.txt)
 names it; CI and `yarn run check` run it. The list only shrinks: on a pull
 request, a line the base branch's list lacks fails the run, so a new
-scenario needs a test or the mark. `make quality-spec-coverage-update`
+scenario needs a test or the mark. A pull request that drops a scenario's
+`(manual)` mark may add the scenario's line. `make quality-spec-coverage-update`
 rewrites the list once tests catch up, and `/quality-spec-tests` writes the
 test of a listed scenario. The rules are the
 [`scenario-tests` spec](../openspec/changes/scenario-tests/specs/scenario-tests/spec.md).

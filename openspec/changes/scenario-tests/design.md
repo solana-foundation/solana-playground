@@ -230,7 +230,10 @@ the checker, not a spec.
 ### 9. The list only shrinks; the base-branch comparison reads it with `git show`
 
 `yarn spec:coverage --base <ref>` reads `<ref>:.claude/skills/quality-spec-coverage/excluded.txt` with `git show`
-and fails on every line the base branch's list lacks: a new gap needs a test or the `(manual)` mark, not a line. A
+and fails on every line the base branch's list lacks: a new gap needs a test or the `(manual)` mark, not a line. One
+added line passes: a line whose scenario is `(manual)` in the base branch's `openspec/specs/`, read with
+`git ls-tree -r` and `git show` for each `spec.md`. Dropping a wrong `(manual)` mark turns the scenario into a gap;
+without the exception the PR that drops the mark would also have to write the test. A
 base branch without the file skips the comparison, so the PR that adds the file passes; treating the missing file as
 an empty list would fail every line. A git failure other than a missing path fails the run. On `pull_request` runs
 CI fetches the base branch and passes `--base FETCH_HEAD`, as `client-v2/scripts/bundle-info-report.sh` fetches its

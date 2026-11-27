@@ -14,6 +14,7 @@ import {
   gate,
   parseExcluded,
   readBaseExcluded,
+  readBaseManualKeys,
   readScenarios,
   readTestTitles,
 } from "./spec-coverage.mjs";
@@ -196,36 +197,70 @@ describe("spec:coverage exclude list", () => {
   });
 });
 
+const gitRepo = async (name) => {
+  const dir = path.join(await root, name);
+  await fs.mkdir(dir, { recursive: true });
+  const git = (...args) =>
+    promisify(execFile)(
+      "git",
+      [
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@example.invalid",
+        "-c",
+        "commit.gpgsign=false",
+        ...args,
+      ],
+      { cwd: dir }
+    );
+  await git("init", "--quiet");
+  return { dir, git };
+};
+
 describe("spec:coverage base comparison", () => {
+  const manualOnBase = new Set(["fixture-capability: Was manual"]);
   const cases = [
     ["a base branch without the list adds nothing", undefined, ["x"], []],
-    ["a line the base lacks is added", ["x"], ["x", "y"], ["y"]],
+    [
+      "a line the base lacks is added when its scenario was not manual there",
+      ["x"],
+      ["x", "y"],
+      ["y"],
+    ],
+    [
+      "a line for a scenario manual on the base is not added",
+      ["x"],
+      ["x", "fixture-capability: Was manual"],
+      [],
+    ],
     ["a removed line adds nothing", ["x", "y"], ["x"], []],
   ];
   for (const [title, base, head, expected] of cases) {
     it(title, () => {
-      assert.deepEqual(addedLines(base, head), expected);
+      assert.deepEqual(addedLines(manualOnBase)(base, head), expected);
     });
   }
 
+  it("reads the base branch's manual keys, and none on a ref without specs", async () => {
+    const { dir, git } = await gitRepo("manual-repo");
+    await git("commit", "--quiet", "--allow-empty", "-m", "without");
+    await git("tag", "without");
+    await writeUnder(dir)(
+      "openspec/specs/fixture-capability/spec.md",
+      "#### Scenario: Tested\n#### Scenario: By hand (manual)\n"
+    );
+    await git("add", ".");
+    await git("commit", "--quiet", "-m", "with");
+    assert.deepEqual(
+      [...(await readBaseManualKeys(dir, "HEAD"))],
+      ["fixture-capability: By hand"]
+    );
+    assert.equal((await readBaseManualKeys(dir, "without")).size, 0);
+  });
+
   it("reads the base branch's list, and undefined on a ref without it", async () => {
-    const dir = path.join(await root, "repo");
-    await fs.mkdir(dir, { recursive: true });
-    const git = (...args) =>
-      promisify(execFile)(
-        "git",
-        [
-          "-c",
-          "user.name=t",
-          "-c",
-          "user.email=t@example.invalid",
-          "-c",
-          "commit.gpgsign=false",
-          ...args,
-        ],
-        { cwd: dir }
-      );
-    await git("init", "--quiet");
+    const { dir, git } = await gitRepo("repo");
     await git("commit", "--quiet", "--allow-empty", "-m", "without");
     await git("tag", "without");
     await writeUnder(dir)(

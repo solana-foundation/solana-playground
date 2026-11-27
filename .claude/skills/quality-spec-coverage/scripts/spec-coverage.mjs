@@ -161,17 +161,47 @@ export const readTestTitles = async (clientDir) => {
 
 const EXCLUDED_PATH = ".claude/skills/quality-spec-coverage/excluded.txt";
 
-/** Lines of `head` the base branch's list lacks; a base branch without the file adds none */
-export const addedLines = (base, head) => {
+/**
+ * Lines of `head` the base branch's list lacks, except keys `(manual)` on the base branch: dropping a wrong mark makes
+ * a gap its PR must be able to list. A base branch without the file adds none.
+ */
+export const addedLines = (manualOnBase) => (base, head) => {
   if (base === undefined) return [];
   const had = new Set(base);
-  return head.filter((k) => !had.has(k));
+  return head.filter((k) => !had.has(k) && !manualOnBase.has(k));
+};
+
+const gitAt =
+  (repoDir) =>
+  (...args) =>
+    promisify(execFile)("git", args, { cwd: repoDir, maxBuffer: 16 << 20 });
+
+/** Keys of the `(manual)` scenarios of `openspec/specs/` at `ref`; empty when `ref` has no such folder */
+export const readBaseManualKeys = async (repoDir, ref) => {
+  const git = gitAt(repoDir);
+  const { stdout } = await git(
+    "ls-tree",
+    "-r",
+    "--full-tree",
+    "--name-only",
+    ref,
+    "--",
+    "openspec/specs"
+  );
+  const keys = new Set();
+  for (const file of stdout.split("\n").filter((f) => f.endsWith("/spec.md"))) {
+    const { stdout: markdown } = await git("show", `${ref}:${file}`);
+    const capability = path.posix.basename(path.posix.dirname(file));
+    for (const s of extractScenarios(markdown, capability)) {
+      if (s.manual) keys.add(keyOf(s));
+    }
+  }
+  return keys;
 };
 
 /** The exclude list at `ref` in the repository at `repoDir`; `undefined` when `ref` has no such file */
 export const readBaseExcluded = async (repoDir, ref) => {
-  const git = (...args) =>
-    promisify(execFile)("git", args, { cwd: repoDir, maxBuffer: 16 << 20 });
+  const git = gitAt(repoDir);
   // ls-tree prints nothing for a missing path and fails on a bad ref, as bundle-info-report.sh relies on
   const { stdout: listed } = await git(
     "ls-tree",
@@ -256,11 +286,14 @@ const main = async () => {
   }
   const added =
     base && !strict
-      ? addedLines(await readBaseExcluded(root, base), excluded)
+      ? addedLines(await readBaseManualKeys(root, base))(
+          await readBaseExcluded(root, base),
+          excluded
+        )
       : [];
   const lines = [
     ...section(
-      `Lines in excluded.txt that ${base}'s list lacks (a new gap needs a test or the (manual) mark, not a line here):`,
+      `Lines in excluded.txt that ${base}'s list lacks, for scenarios not (manual) there (a new gap needs a test or the (manual) mark, not a line here):`,
       added
     ),
     ...section(

@@ -46,7 +46,8 @@ The last line counts the scenarios: tested, manual, and on the exclude list.
 [`excluded.txt`](excluded.txt) names the scenarios of `openspec/specs/` that are not yet up to standard, one
 `<capability>: <scenario>` per line; `#` starts a comment line. On a pull request, a line the base branch's list
 lacks fails the run, so the list only shrinks. A new scenario needs a test or the `(manual)` mark in the PR that adds
-it, never a line here.
+it, never a line here. A PR that drops a scenario's `(manual)` mark may add the scenario's line, because the scenario
+is `(manual)` on the base branch.
 
 `make quality-spec-coverage-update` rewrites the list from the scenarios that have no test. Run it on a branch whose
 tests caught up, so it only removes lines; a line it adds fails the base comparison on the pull request.

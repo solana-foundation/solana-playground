@@ -372,14 +372,22 @@ listed scenario that is not up to standard SHALL be reported only.
 ### Requirement: The exclude list only shrinks
 
 Given a base branch with `--base <ref>`, `yarn spec:coverage` SHALL exit with an error on each line of the exclude
-list that the base branch's list lacks. A base branch without the file SHALL skip the comparison. Without `--base` it
-SHALL compare nothing.
+list that the base branch's list lacks, unless the line's scenario is marked `(manual)` in `openspec/specs/` on the
+base branch, because the PR that drops a wrong `(manual)` mark turns the scenario into a gap and must be able to list
+it. A base branch without the file SHALL skip the comparison. Without `--base` it SHALL compare nothing.
 
 #### Scenario: A line added to the list
 
 - **GIVEN** a base branch whose exclude list lacks a line
 - **WHEN** `yarn spec:coverage --base <ref>` runs over an exclude list that holds the line
 - **THEN** exits with an error, naming the line
+
+#### Scenario: A line added for a scenario manual on the base branch
+
+- **GIVEN** a base branch whose exclude list lacks a line and whose `openspec/specs/` marks the line's scenario
+  `(manual)`
+- **WHEN** `yarn spec:coverage --base <ref>` runs over an exclude list that holds the line
+- **THEN** passes the comparison
 
 #### Scenario: A line removed from the list
 

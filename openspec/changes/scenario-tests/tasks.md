@@ -81,7 +81,8 @@ the clause shape of design.md, decision 1. The checker is
   exclude list gates every scenario" and "An active change does not gate its own scenarios", and
   `yarn spec:coverage` exiting 0
 - [x] 4.2 Add `--base <ref>`, reading the base branch's list with `git show` (a base branch without the file skips the
-  comparison), fail on a line the base branch's list lacks, and on `pull_request` runs fetch the base branch and pass
+  comparison), fail on a line the base branch's list lacks unless its scenario is `(manual)` in the base branch's
+  `openspec/specs/` (read with `git ls-tree -r` and `git show`), and on `pull_request` runs fetch the base branch and pass
   `--base FETCH_HEAD` from the "Scenario coverage" step of the `checks` job (Task 4 of
   [the plan](plans/4.1-exclude-list.md)); verify with `node --test <checker test>` covering the scenarios of "The
   exclude list only shrinks" against a temporary git repository
