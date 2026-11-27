@@ -44,17 +44,34 @@ const SUPERBLOCK_KEY = "!root";
 const OPEN_TIMEOUT_MS = 5000;
 
 /**
- * Open `dbName`. Only the backend's first open may create the database: a
- * later open that finds it gone means the browser deleted it (site data
- * cleared) under a filesystem whose tree is still in memory, and recreating
- * it would let lightning-fs save that whole tree over files whose content
- * is gone. Such an open is refused, so writes fail and the next page load
- * starts from what the account holds.
+ * What an open does when it finds no database: creates what it needs, or
+ * returns the error to refuse the open with
  */
-const openDatabase = (
-  dbName: string,
-  { storeName, mayCreate }: { storeName: string; mayCreate: boolean }
-) =>
+type OnMissing = (request: IDBOpenDBRequest) => Error | undefined;
+
+/** Create `storeName` in a database that did not exist: the backend's first open */
+const createStore =
+  (storeName: string): OnMissing =>
+  (request) => {
+    request.result.createObjectStore(storeName);
+    return undefined;
+  };
+
+/**
+ * Refuse a database that is gone after the backend opened it once: the
+ * browser deleted it (site data cleared) under a filesystem whose tree is
+ * still in memory, and recreating it would let lightning-fs save that whole
+ * tree over files whose content is gone. Refused, writes fail and the next
+ * page load starts from what the account holds.
+ */
+const refuseDeleted: OnMissing = (request) =>
+  namedError(
+    "DatabaseDeletedError",
+    `${request.result.name} was deleted while the page had it open`
+  );
+
+/** Open `dbName`, doing `onMissing` when it finds no database */
+const openDatabaseWith = (onMissing: OnMissing) => (dbName: string) =>
   new Promise<IDBDatabase>((resolve, reject) => {
     let isSettled = false;
     const fail = (error: unknown) => {
@@ -69,16 +86,9 @@ const openDatabase = (
     );
     const request = indexedDB.open(dbName);
     request.onupgradeneeded = () => {
-      if (mayCreate) {
-        request.result.createObjectStore(storeName);
-        return;
-      }
-      fail(
-        namedError(
-          "DatabaseDeletedError",
-          `${dbName} was deleted while the page had it open`
-        )
-      );
+      const refusal = onMissing(request);
+      if (!refusal) return;
+      fail(refusal);
       request.transaction?.abort();
     };
     request.onsuccess = () => {
@@ -100,7 +110,7 @@ const openDatabase = (
  * the browser gives none: WebKit aborts on a lost connection with `error`
  * null, which reached Sentry as "Error: null".
  */
-const transact =
+const transactWith =
   <T>(makeRequest: MakeRequest<T>, mode: IDBTransactionMode) =>
   (db: IDBDatabase, storeName: string) =>
     new Promise<T>((resolve, reject) => {
@@ -254,7 +264,7 @@ class ReopeningIdbBackend implements IdbBackend {
     const connection = this._connect();
     const db = await connection;
     try {
-      return await transact(makeRequest, mode)(db, this._storeName);
+      return await transactWith(makeRequest, mode)(db, this._storeName);
     } catch (error) {
       // Only a lost connection is dropped: closing it on a request's own
       // failure would fail every other request still about to use it
@@ -269,10 +279,10 @@ class ReopeningIdbBackend implements IdbBackend {
   private _connect() {
     if (this._connection) return this._connection;
 
-    const connection = openDatabase(this._dbName, {
-      storeName: this._storeName,
-      mayCreate: !this._hasOpened,
-    });
+    const onMissing = this._hasOpened
+      ? refuseDeleted
+      : createStore(this._storeName);
+    const connection = openDatabaseWith(onMissing)(this._dbName);
     this._connection = connection;
     connection.then(
       (db) => {
